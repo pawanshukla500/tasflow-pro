@@ -39,6 +39,9 @@ const DepartmentsPage = () => {
   const [formDesc, setFormDesc] = useState("");
   const [formColor, setFormColor] = useState("#6366f1");
   const [formLoading, setFormLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const deptToDelete = deleteId ? departments.find((d) => d.id === deleteId) : null;
 
   const fetchDepts = async () => {
     setLoading(true);
@@ -108,10 +111,24 @@ const DepartmentsPage = () => {
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    await supabase.from("departments").delete().eq("id", deleteId);
-    toast({ title: "Department deleted" });
-    setDeleteId(null);
-    fetchDepts();
+    setDeleteLoading(true);
+    try {
+      const { error } = await supabase.rpc("delete_department" as never, { _dept_id: deleteId } as never);
+      if (error) throw error;
+      toast({
+        title: "Department deleted",
+        description: deptToDelete?.memberCount
+          ? `${deptToDelete.memberCount} member(s) were unassigned from this department.`
+          : undefined,
+      });
+      setDeleteId(null);
+      fetchDepts();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Could not delete department";
+      toast({ title: "Delete failed", description: message, variant: "destructive" });
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   return (
@@ -215,11 +232,24 @@ const DepartmentsPage = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Department?</AlertDialogTitle>
-            <AlertDialogDescription>This action cannot be undone. All members will need to be reassigned.</AlertDialogDescription>
+            <AlertDialogDescription>
+              {deptToDelete
+                ? `"${deptToDelete.name}" will be removed. ${deptToDelete.memberCount} member(s) will be unassigned; ${deptToDelete.openTaskCount} open task(s) will lose their department tag.`
+                : "This action cannot be undone."}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+            <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleteLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteLoading ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
