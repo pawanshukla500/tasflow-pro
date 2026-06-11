@@ -1,0 +1,40 @@
+TaskFlow Pro — Email setup (Resend — NO Google Workspace)
+============================================================
+
+Why Resend?
+  Gmail API needs Google Workspace ($). Resend is free (100/day) and only
+  needs DNS records at your domain registrar for youthnic.shop.
+
+STEP 1 — Sign up (free)
+  https://resend.com/signup
+
+STEP 2 — Verify youthnic.shop (DNS only — at your domain host, NOT Google)
+  Resend → Domains → Add youthnic.shop → copy TXT/MX records
+  Paste in your domain DNS panel (Cloudflare, Namecheap, GoDaddy, etc.)
+  Wait until Resend shows "Verified"
+
+STEP 3 — API key
+  Resend → API Keys → Create → copy (starts with re_)
+
+STEP 4 — Add to .env (do NOT paste API key in chat)
+  RESEND_API_KEY=re_your_key_here
+  EMAIL_FROM=noreply@youthnic.shop
+  EMAIL_FROM_NAME=TaskFlow Pro by VB Exports
+  APP_URL=https://task.youthnic.shop
+
+STEP 5 — Upload + deploy
+  node scripts/upload-email-secrets.mjs
+  node scripts/upload-firebase-secret.mjs
+  .\scripts\setup-email.ps1
+
+QUICK TEST (before domain verified)
+  Set EMAIL_FROM=onboarding@resend.dev in .env
+  Upload secrets — can only send to YOUR email for testing
+  Switch back to noreply@youthnic.shop after domain verified
+
+EMAIL THEME
+  All emails use the same indigo-violet gradient as the TaskFlow login page.
+
+NOTES NOT SAVING?
+  Run scripts/apply-notes-table.sql in Supabase SQL Editor
+  Or: npx supabase db push --include-all

@@ -1,0 +1,50 @@
+project_id = "nekdjoquirhecmejuoba"
+
+[functions]
+  [functions.auth-email-hook]
+    verify_jwt = false
+  # Gateway JWT check off: newer projects inject a non-JWT sb_secret_ key into
+  # functions, which the gateway rejects on function-to-function flush calls.
+  # The function enforces its own auth (exact service key or service_role JWT).
+  [functions.process-email-queue]
+    verify_jwt = false
+  [functions.send-transactional-email]
+    verify_jwt = false
+  [functions.preview-transactional-email]
+    verify_jwt = false
+  [functions.handle-email-unsubscribe]
+    verify_jwt = false
+  [functions.handle-email-suppression]
+    verify_jwt = false
+  [functions.notify-task-assigned]
+    verify_jwt = false
+  [functions.send-due-reminders]
+    verify_jwt = false
+  [functions.send-monthly-report]
+    verify_jwt = false
+  [functions.workflow-escalate]
+    verify_jwt = false
+  [functions.notify-workflow-stage]
+    verify_jwt = false
+  [functions.send-weekly-pending-report]
+    verify_jwt = false
+  [functions.firebase-upload]
+    verify_jwt = true
+  [functions.create-team-member]
+    verify_jwt = true
+  [functions.delete-team-member]
+    verify_jwt = true
+  [functions.firebase-auth]
+    verify_jwt = false
+  [functions.register-organization]
+    verify_jwt = false
+  [functions.send-daily-digest]
+    verify_jwt = false
+  [functions.send-department-daily-summary]
+    verify_jwt = false
+  [functions.complete-password-reset]
+    verify_jwt = false
+  [functions.send-password-reset]
+    verify_jwt = false
+  [functions.polish-note]
+    verify_jwt = true

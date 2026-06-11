@@ -1,0 +1,18 @@
+
+ALTER TABLE public.workflow_template_stages
+  ADD COLUMN IF NOT EXISTS is_decision BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS yes_next_position INTEGER,
+  ADD COLUMN IF NOT EXISTS no_next_position INTEGER,
+  ADD COLUMN IF NOT EXISTS is_terminal BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS outcome_label TEXT;
+
+ALTER TABLE public.workflow_stages
+  ADD COLUMN IF NOT EXISTS is_decision BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS yes_next_position INTEGER,
+  ADD COLUMN IF NOT EXISTS no_next_position INTEGER,
+  ADD COLUMN IF NOT EXISTS is_terminal BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS outcome_label TEXT,
+  ADD COLUMN IF NOT EXISTS decision TEXT;
+
+ALTER TABLE public.workflows
+  ADD COLUMN IF NOT EXISTS outcome_label TEXT;

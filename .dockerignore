@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.env
+.env.*
+secrets
+*.md
+.cursor
+terminals
+mcps
+coverage
+.vite
