@@ -1,5 +1,4 @@
-# TaskFlow Pro — Cloud Run (static SPA + nginx)
-# Build: docker build --build-arg VITE_SUPABASE_URL=... --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=... -t taskflow .
+# TaskFlow Pro — Cloud Run (static SPA + nginx + runtime env injection)
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* bun.lock* ./
@@ -13,6 +12,8 @@ ARG VITE_FIREBASE_PROJECT_ID
 ARG VITE_FIREBASE_STORAGE_BUCKET
 ARG VITE_FIREBASE_MESSAGING_SENDER_ID
 ARG VITE_FIREBASE_APP_ID
+ARG VITE_APP_URL
+ARG VITE_FIREBASE_MEASUREMENT_ID
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY \
     VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY \
@@ -20,11 +21,17 @@ ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID \
     VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET \
     VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID \
-    VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
+    VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID \
+    VITE_APP_URL=$VITE_APP_URL \
+    VITE_FIREBASE_MEASUREMENT_ID=$VITE_FIREBASE_MEASUREMENT_ID
 RUN npm run build
 
 FROM nginx:1.27-alpine
+RUN apk add --no-cache gettext
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker/runtime-env.js.template /etc/runtime-env.js.template
+COPY docker/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 8080
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/docker-entrypoint.sh"]

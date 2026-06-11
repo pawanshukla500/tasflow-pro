@@ -1,8 +1,17 @@
 /**
- * Single source of truth for frontend environment variables.
- * All VITE_* values live in the project root `.env` (see `.env.example`).
+ * Frontend env: Cloud Run runtime (runtime-env.js) → Vite build (.env) fallback.
  */
+declare global {
+  interface Window {
+    __RUNTIME_ENV__?: Record<string, string>;
+  }
+}
+
 function read(key: string): string {
+  if (typeof window !== "undefined") {
+    const runtime = window.__RUNTIME_ENV__?.[key]?.trim();
+    if (runtime) return runtime;
+  }
   return (import.meta.env[key] as string | undefined)?.trim() ?? "";
 }
 
@@ -17,23 +26,21 @@ export function validateEnv(): void {
   const missing = required.filter((k) => !read(k));
   if (missing.length) {
     console.error(
-      `[TaskFlow Pro] Missing required env: ${missing.join(", ")}. See .env.example`,
+      `[TaskFlow Pro] Missing required env: ${missing.join(", ")}. See .env.example or Cloud Run env vars.`,
     );
   }
   const missingFirebase = firebaseKeys.filter((k) => !read(k));
   if (missingFirebase.length) {
     console.warn(
-      `[TaskFlow Pro] Firebase not fully configured (${missingFirebase.join(", ")}). Uploads may fail.`,
+      `[TaskFlow Pro] Firebase not fully configured (${missingFirebase.join(", ")}). Sign-in and uploads may fail.`,
     );
   }
 }
 
 export const env = {
-  /** Supabase project URL — connects React app to PostgreSQL via Supabase API */
   supabaseUrl: read("VITE_SUPABASE_URL"),
   supabaseAnonKey: read("VITE_SUPABASE_PUBLISHABLE_KEY"),
   supabaseProjectId: read("VITE_SUPABASE_PROJECT_ID"),
-  /** Public app URL used in links (emails, unsubscribe) */
   appUrl: read("VITE_APP_URL") || (typeof window !== "undefined" ? window.location.origin : ""),
   firebase: {
     apiKey: read("VITE_FIREBASE_API_KEY"),
