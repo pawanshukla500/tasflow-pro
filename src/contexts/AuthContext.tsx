@@ -219,18 +219,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     domainType: "custom" | "public";
     allowPublicEmail?: boolean;
   }) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) throw new Error("Not signed in");
-
     const idToken = await getFirebaseIdToken(true);
-    if (!idToken) throw new Error("Failed to get Firebase token");
-    await registerOrganizationViaEdge(idToken, params);
+    if (!idToken) throw new Error("Not signed in — sign in with Firebase first");
+    const fbUser = getFirebaseAuth()?.currentUser;
+    if (!fbUser) throw new Error("Not signed in");
 
-    await fetchUserData(session.user.id, session.user.email || "");
+    await registerOrganizationViaEdge(idToken, params);
+    const { userId } = await bridgeFirebaseToSupabase(idToken, {
+      email: fbUser.email,
+      name: fbUser.displayName,
+      firebaseUid: fbUser.uid,
+    });
+    await fetchUserData(userId, fbUser.email || "");
   };
 
   const signOut = async () => {
     setUser(null);
+    setLoading(false);
     try {
       await firebaseSignOutUser();
     } catch (e) {
@@ -244,6 +249,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     Object.keys(localStorage)
       .filter((k) => k.startsWith("sb-") && k.endsWith("-auth-token"))
       .forEach((k) => localStorage.removeItem(k));
+    sessionStorage.clear();
   };
 
   const refetchProfile = async () => {

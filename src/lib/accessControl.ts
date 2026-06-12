@@ -134,6 +134,47 @@ export function filterProfilesInScope<
   );
 }
 
+/** Board view: employees see only their own tasks; leadership uses scope filters. */
+export function filterBoardTasksForUser<
+  T extends {
+    department_id?: string | null;
+    created_by?: string | null;
+    assignees?: { user_id: string }[];
+  },
+>(
+  tasks: T[],
+  scope: AccessScope,
+  userId: string | undefined,
+  teamMemberIds: Set<string>,
+  filterUserId?: string | null,
+  filterDepartmentId?: string | null,
+): T[] {
+  let rows = tasks;
+
+  if (scope.tier === "member" && userId) {
+    rows = rows.filter(
+      (t) =>
+        t.created_by === userId ||
+        t.assignees?.some((a) => a.user_id === userId),
+    );
+  } else {
+    rows = filterTasksInScope(rows, scope, teamMemberIds);
+  }
+
+  if (filterDepartmentId && filterDepartmentId !== "all") {
+    rows = rows.filter((t) => t.department_id === filterDepartmentId);
+  }
+  if (filterUserId && filterUserId !== "all") {
+    rows = rows.filter(
+      (t) =>
+        t.created_by === filterUserId ||
+        t.assignees?.some((a) => a.user_id === filterUserId),
+    );
+  }
+
+  return rows;
+}
+
 export function filterTasksInScope<
   T extends {
     department_id?: string | null;

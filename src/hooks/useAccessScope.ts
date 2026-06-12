@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   resolveAccessScope,
   filterByDepartments,
+  filterBoardTasksForUser,
   filterProfilesInScope,
   filterTasksInScope,
   scopeDescription,
@@ -43,6 +44,30 @@ export function useAccessScope() {
     },
     filterByDeptField: <T extends { department_id?: string | null }>(rows: T[]) =>
       filterByDepartments(rows, scope),
+    filterBoardTasks: <
+      T extends {
+        department_id?: string | null;
+        created_by?: string | null;
+        assignees?: { user_id: string }[];
+      },
+    >(
+      tasks: T[],
+      profiles: { id: string; department_id?: string | null }[],
+      filterUserId?: string | null,
+      filterDepartmentId?: string | null,
+    ) => {
+      const teamIds = new Set(
+        filterProfilesInScope(profiles, scope, user?.id).map((p) => p.id),
+      );
+      return filterBoardTasksForUser(
+        tasks,
+        scope,
+        user?.id,
+        teamIds,
+        filterUserId,
+        filterDepartmentId,
+      );
+    },
   };
 }
 
