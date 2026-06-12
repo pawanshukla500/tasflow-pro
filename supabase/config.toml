@@ -48,3 +48,9 @@ project_id = "nekdjoquirhecmejuoba"
     verify_jwt = false
   [functions.polish-note]
     verify_jwt = true
+  [functions.issue-mcp-token]
+    verify_jwt = true
+  # MCP server authenticates its own Personal Access Token (not a Supabase JWT),
+  # so the gateway JWT check must be off.
+  [functions.mcp-server]
+    verify_jwt = false

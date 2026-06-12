@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
-# TaskFlow Pro — deploy to Cloud Run from Google Cloud Shell
-# Uses RUNTIME env vars + entrypoint (fixes Firebase even when build args were missing).
+# TaskFlow Pro — deploy to Cloud Run from Google Cloud Shell.
+#
+# Uses Cloud Build (gcloud builds submit) instead of a local docker build + push.
+# This is intentional: in Cloud Shell, `docker push` to Artifact Registry can
+# fail intermittently with "connection refused" / "i/o timeout" because the
+# Cloud Shell VM's outbound path to pkg.dev throttles or drops large pushes.
+# Cloud Build runs the same Dockerfile remotely inside Google's network, so the
+# push happens server-side and is dramatically more reliable.
 
 set -euo pipefail
 
@@ -38,11 +44,25 @@ cd "$WORKDIR"
 TAG="$(date +%Y%m%d-%H%M%S)"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${SERVICE}/${SERVICE}:${TAG}"
 
-echo "==> Building image..."
-docker build -t "$IMAGE" .
-
-gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-docker push "$IMAGE"
+echo "==> Building & pushing image via Cloud Build (remote, no local docker push)..."
+# `gcloud builds submit --tag` builds the Dockerfile in Cloud Build and pushes
+# the resulting image to Artifact Registry from inside Google's network. If
+# Cloud Build hits a transient registry blip we retry the whole submission a
+# few times with exponential backoff before giving up.
+BUILD_OK=0
+for attempt in 1 2 3 4; do
+  if gcloud builds submit --tag "$IMAGE" --timeout=1200s --machine-type=e2-highcpu-8 .; then
+    BUILD_OK=1
+    break
+  fi
+  SLEEP=$((2 ** attempt))
+  echo "==> Cloud Build attempt $attempt failed; retrying in ${SLEEP}s..." >&2
+  sleep "$SLEEP"
+done
+if [[ "$BUILD_OK" -ne 1 ]]; then
+  echo "ERROR: Cloud Build failed after 4 attempts. Check 'gcloud builds list --limit=5'." >&2
+  exit 1
+fi
 
 # Runtime env (Cloud Run injects these; entrypoint writes runtime-env.js)
 ENV_FILE="${WORKDIR}/.cloudrun.env.yaml"
