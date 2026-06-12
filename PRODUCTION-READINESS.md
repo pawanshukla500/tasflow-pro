@@ -18,10 +18,13 @@ node scripts/upload-firebase-secret.mjs
 
 | Job | Time (IST) | Recipients |
 |-----|------------|------------|
+| `send-due-reminders-daily` | 08:00 Mon–Sat | Users with overdue / due-today / due-soon tasks |
 | `send-daily-digest` | 08:00 daily | All users + MD/Admin executive snapshot |
 | `send-department-daily-summary` | 08:30 daily | Department managers |
 | `send-weekly-pending-report` | Monday 09:00 | MD / System Admin |
 | `send-monthly-report` | 1st of month 09:00 | MD / System Admin |
+
+All user-level jobs skip recipients with no pending items — no email is sent when a user has nothing overdue / due / pending.
 
 ## Frontend — Google Cloud Run
 

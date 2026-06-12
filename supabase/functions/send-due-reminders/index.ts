@@ -1,10 +1,23 @@
-// Cron-driven: sends a daily consolidated email (Mon–Sat, skips Sunday).
-// - Each user with pending (overdue/due-today/upcoming) tasks gets a personal summary.
-// - Managing Directors and System Admins additionally get an organisation-wide overview
-//   only when the organisation has real pending work.
+// Cron-driven: sends a daily "task due / overdue" reminder Mon–Sat (skips Sunday).
+//
+// What changed (2026-06-12 fix):
+//   • Only includes items actually needing attention: overdue, due today, or due
+//     within the next 3 days. Previously every open task was included, even
+//     tasks due months away — that made the "Tasks coming due" subject line
+//     misleading and noisy.
+//   • Workflow stages are filtered the same way using their TAT-derived due date.
+//   • Users with no overdue/imminent tasks AND no overdue/imminent workflow
+//     stages are skipped entirely — no email is sent. (Was already true for
+//     users with zero open tasks; this strengthens it to "zero imminent items".)
+//   • MD / System Admin org overview is added only when the org has at least
+//     one overdue or due-today item — avoids misleading "0 overdue" digests.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }
+
+// Look-ahead window for "due soon" items, in days. Items due more than this
+// many days out are not surfaced in the due/overdue reminder.
+const DUE_SOON_DAYS = 3
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
@@ -20,8 +33,6 @@ Deno.serve(async (req) => {
       status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
-
-
 
   // Skip Sunday (0 = Sunday in UTC; org is IST but day boundary close enough for a daily summary)
   const now = new Date()
@@ -39,9 +50,13 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey)
 
   const today = istNow.toISOString().slice(0, 10)
+  const dueSoonCutoff = new Date(istNow.getTime() + DUE_SOON_DAYS * 86400000)
+    .toISOString().slice(0, 10)
   const dayKey = today
 
-  // All open tasks (pending = anything not done)
+  // All open tasks (pending = anything not done). We fetch every open task once
+  // and filter per-user below; only items in the overdue / due-today / due-soon
+  // window are surfaced to the user.
   const { data: openTasks } = await supabase
     .from('tasks').select('id, title, due_date, priority, status')
     .neq('status', 'done')
@@ -60,6 +75,15 @@ Deno.serve(async (req) => {
     return new Date(new Date(s.started_at).getTime() + Number(s.tat_hours) * 3600000).toISOString().slice(0, 10)
   }
 
+  // A task / workflow stage counts as "due reminder worthy" when it is overdue,
+  // due today, or due within the next DUE_SOON_DAYS days. Items with no due date
+  // (and workflow stages with no TAT) are intentionally excluded — there is
+  // nothing for the user to be reminded about.
+  const isDueOrOverdue = (dueDate: string | null | undefined) => {
+    if (!dueDate) return false
+    return dueDate <= dueSoonCutoff
+  }
+
   const taskIds = Array.from(tasksById.keys())
   const { data: assignees } = taskIds.length
     ? await supabase.from('task_assignees').select('task_id, user_id').in('task_id', taskIds)
@@ -73,56 +97,76 @@ Deno.serve(async (req) => {
     userTasks.get(a.user_id)!.push(t)
   }
 
-  // Org-wide overview for MDs / System Admins
+  // Org-wide overview for MDs / System Admins — only when there is real urgency.
   const { data: leaders } = await supabase
     .from('user_roles').select('user_id, role')
     .in('role', ['managing_director', 'system_admin'])
   const leaderIds = Array.from(new Set((leaders || []).map((r) => r.user_id)))
 
-  const totalOpen = (openTasks || []).length
   const overdueAll = (openTasks || []).filter((t) => t.due_date && t.due_date < today).length
   const dueTodayAll = (openTasks || []).filter((t) => t.due_date === today).length
-  const totalOpenWorkflows = workflowStages.length
   const overdueWorkflowAll = workflowStages.filter((s: any) => {
     const due = workflowDueDate(s)
     return due && due < today
   }).length
+  const dueTodayWorkflowAll = workflowStages.filter((s: any) => {
+    const due = workflowDueDate(s)
+    return due && due === today
+  }).length
+  // Leaders see the org overview only when there is at least one organisation-wide
+  // overdue or due-today item. Anything else would be noise.
+  const orgHasUrgentWork =
+    overdueAll > 0 || dueTodayAll > 0 || overdueWorkflowAll > 0 || dueTodayWorkflowAll > 0
 
-  // Send to ALL active users (every employee gets a daily summary, Mon–Sat)
+  // Send to ALL active users (every employee gets a daily summary, Mon–Sat).
+  // Users with nothing imminent are skipped without sending email.
   const { data: profiles } = await supabase
     .from('profiles').select('id, name, email, department_id').eq('active', true)
 
   const results: any[] = []
   for (const p of profiles || []) {
+    if (!p.email) {
+      results.push({ user: p.id, skipped: 'no_email' })
+      continue
+    }
     const { data: prefs } = await supabase
       .from('notification_preferences').select('task_due_reminder')
       .eq('user_id', p.id).maybeSingle()
-    if (prefs && prefs.task_due_reminder === false) continue
+    if (prefs && prefs.task_due_reminder === false) {
+      results.push({ user: p.email, skipped: 'pref_off' })
+      continue
+    }
 
-    const myTasks = (userTasks.get(p.id) || []).map((t) => ({
-      title: t.title, dueDate: t.due_date, priority: t.priority,
-    }))
+    // Filter the user's assigned tasks to the overdue / due-today / due-soon window.
+    const myTasks = (userTasks.get(p.id) || [])
+      .filter((t: any) => isDueOrOverdue(t.due_date))
+      .map((t: any) => ({
+        title: t.title, dueDate: t.due_date, priority: t.priority,
+      }))
     const myWorkflows = workflowStages
       .filter((s: any) => s.assignee_user_id === p.id || (s.owner_department_id && s.owner_department_id === p.department_id))
-      .map((s: any) => ({
-        title: `Workflow: ${s.workflows?.title || 'Workflow'} — ${s.name}`,
-        dueDate: workflowDueDate(s),
-        priority: s.status === 'blocked' ? 'blocked' : 'workflow',
+      .map((s: any) => ({ stage: s, dueDate: workflowDueDate(s) }))
+      .filter((x: any) => isDueOrOverdue(x.dueDate))
+      .map((x: any) => ({
+        title: `Workflow: ${x.stage.workflows?.title || 'Workflow'} — ${x.stage.name}`,
+        dueDate: x.dueDate,
+        priority: x.stage.status === 'blocked' ? 'blocked' : 'workflow',
       }))
     const isLeader = leaderIds.includes(p.id)
 
-    // Leaders get an org overview only when there is real organisation pending work.
-    // This prevents misleading emails like "0 open · 0 overdue · 0 due today".
-    const orgSummary = isLeader && (totalOpen > 0 || totalOpenWorkflows > 0)
+    // Leaders get an org overview only when there is real organisation overdue/due-today
+    // work. This prevents misleading emails like "0 open · 0 overdue · 0 due today".
+    const orgSummary = isLeader && orgHasUrgentWork
       ? [{
-          title: `Org overview — ${totalOpen} task${totalOpen === 1 ? '' : 's'} · ${totalOpenWorkflows} workflow stage${totalOpenWorkflows === 1 ? '' : 's'} · ${overdueAll + overdueWorkflowAll} overdue · ${dueTodayAll} due today`,
+          title: `Org overview — ${overdueAll + overdueWorkflowAll} overdue · ${dueTodayAll + dueTodayWorkflowAll} due today`,
           dueDate: null,
           priority: 'summary',
         }]
       : []
 
     const allItems = [...orgSummary, ...myTasks, ...myWorkflows]
-    // Skip users who have nothing to report (no pending tasks and not a leader with org overview)
+    // Skip users who have nothing imminent. No email is sent for users without
+    // any pending overdue / due-today / due-soon task or workflow stage.
     if (allItems.length === 0) {
       results.push({ user: p.email, skipped: 'no_pending_tasks' })
       continue
@@ -155,7 +199,8 @@ Deno.serve(async (req) => {
   }
 
   const sent = results.filter((r) => r.ok === true).length
-  return new Response(JSON.stringify({ ok: true, sent, results }), {
+  const skipped = results.filter((r) => r.skipped).length
+  return new Response(JSON.stringify({ ok: true, date: today, sent, skipped, results }), {
     status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 })

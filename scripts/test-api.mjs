@@ -120,6 +120,7 @@ const edgeFns = [
   "process-email-queue",
   "daily-motivation",
   "send-daily-digest",
+  "send-due-reminders",
   "notify-task-assigned",
 ];
 
