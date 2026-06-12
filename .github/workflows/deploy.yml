@@ -1,0 +1,101 @@
+# Auto-deploy TaskFlow Pro when changes land on main.
+# No manual Cloud Shell pull/merge/deploy needed after secrets are configured once.
+#
+# Required GitHub repo secrets (Settings → Secrets and variables → Actions):
+#   GCP_SA_KEY              — GCP service account JSON with Cloud Build + Cloud Run + Artifact Registry
+#   SUPABASE_ACCESS_TOKEN   — https://supabase.com/dashboard/account/tokens
+#   SUPABASE_DB_PASSWORD    — Supabase project database password (for migrations)
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: robust-solution-425310-t9
+  GCP_REGION: europe-west1
+  CLOUD_RUN_SERVICE: tasflow-pro
+  SUPABASE_PROJECT_REF: nekdjoquirhecmejuoba
+
+jobs:
+  deploy-frontend:
+    name: Cloud Run (frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Enable APIs & Artifact Registry
+        run: |
+          gcloud config set project "$GCP_PROJECT_ID"
+          gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com --quiet
+          gcloud artifacts repositories describe cloud-run-source-deploy --location="$GCP_REGION" 2>/dev/null || \
+            gcloud artifacts repositories create cloud-run-source-deploy \
+              --repository-format=docker --location="$GCP_REGION" --quiet
+
+      - name: Build & deploy via Cloud Build
+        run: |
+          gcloud builds submit --config cloudbuild.yaml \
+            --substitutions="\
+          _REGION=${GCP_REGION},\
+          _SERVICE=${CLOUD_RUN_SERVICE},\
+          _VITE_SUPABASE_URL=https://${SUPABASE_PROJECT_REF}.supabase.co,\
+          _VITE_SUPABASE_PUBLISHABLE_KEY=${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }},\
+          _VITE_APP_URL=https://task.youthnic.shop,\
+          _VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }},\
+          _VITE_FIREBASE_AUTH_DOMAIN=taskflow-pro-by-vb-exports.firebaseapp.com,\
+          _VITE_FIREBASE_PROJECT_ID=taskflow-pro-by-vb-exports,\
+          _VITE_FIREBASE_STORAGE_BUCKET=taskflow-pro-by-vb-exports.firebasestorage.app,\
+          _VITE_FIREBASE_MESSAGING_SENDER_ID=684659983755,\
+          _VITE_FIREBASE_APP_ID=1:684659983755:web:e255b6e5a60506c92a5b8e,\
+          _VITE_FIREBASE_MEASUREMENT_ID=G-YWGNCXGK7M"
+
+      - name: Inject runtime env vars
+        env:
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+        run: |
+          cat > /tmp/cloudrun.env.yaml <<EOF
+          VITE_SUPABASE_URL: "https://nekdjoquirhecmejuoba.supabase.co"
+          VITE_SUPABASE_PUBLISHABLE_KEY: "${VITE_SUPABASE_PUBLISHABLE_KEY}"
+          VITE_APP_URL: "https://task.youthnic.shop"
+          VITE_FIREBASE_API_KEY: "${VITE_FIREBASE_API_KEY}"
+          VITE_FIREBASE_AUTH_DOMAIN: "taskflow-pro-by-vb-exports.firebaseapp.com"
+          VITE_FIREBASE_PROJECT_ID: "taskflow-pro-by-vb-exports"
+          VITE_FIREBASE_STORAGE_BUCKET: "taskflow-pro-by-vb-exports.firebasestorage.app"
+          VITE_FIREBASE_MESSAGING_SENDER_ID: "684659983755"
+          VITE_FIREBASE_APP_ID: "1:684659983755:web:e255b6e5a60506c92a5b8e"
+          VITE_FIREBASE_MEASUREMENT_ID: "G-YWGNCXGK7M"
+          EOF
+          gcloud run services update "$CLOUD_RUN_SERVICE" \
+            --region "$GCP_REGION" \
+            --env-vars-file /tmp/cloudrun.env.yaml
+
+      - name: Print service URL
+        run: |
+          URL=$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --format='value(status.url)')
+          echo "Deployed frontend: $URL"
+
+  deploy-supabase:
+    name: Supabase (backend + MCP)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Deploy migrations & edge functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PROJECT_REF: ${{ env.SUPABASE_PROJECT_REF }}
+        run: bash scripts/deploy-supabase.sh
