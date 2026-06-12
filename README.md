@@ -156,6 +156,30 @@ The token maps to one user; every tool call runs under that user's Supabase RLS 
 only see/do what the user could. Tools cover tasks, subtasks, workflows, departments and people.
 Deploy: `npx supabase db push` then `npx supabase functions deploy mcp-server issue-mcp-token`.
 
+### Automatic deploy (GitHub Actions)
+
+Pushes to `main` auto-deploy **Cloud Run** (frontend) and **Supabase** (migrations + edge functions including MCP).
+One-time setup — add these GitHub repo secrets (`Settings → Secrets → Actions`):
+
+| Secret | Where to get it |
+|--------|-----------------|
+| `GCP_SA_KEY` | GCP service account JSON with Cloud Build + Cloud Run + Artifact Registry roles |
+| `SUPABASE_ACCESS_TOKEN` | [Supabase account tokens](https://supabase.com/dashboard/account/tokens) |
+| `SUPABASE_DB_PASSWORD` | Supabase Dashboard → Project Settings → Database |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase anon key |
+| `VITE_FIREBASE_API_KEY` | Firebase web config |
+
+**Cloud Shell** (manual fallback):
+
+```bash
+export PROJECT_ID=robust-solution-425310-t9
+export SUPABASE_ACCESS_TOKEN='sbp_...'
+export SUPABASE_DB_PASSWORD='...'
+bash scripts/deploy-all-cloudshell.sh
+```
+
+`supabase login` is **not** needed when `SUPABASE_ACCESS_TOKEN` is set.
+
 ---
 
 ## Scripts

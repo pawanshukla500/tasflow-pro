@@ -67,6 +67,14 @@ echo Secrets set.
 REM ── 5. Deploy edge functions (auth-critical first) ───────────────────────────
 echo.
 echo Deploying edge functions...
+REM MCP server (AI connections) — deploy before other functions so Settings → Integrations works
+echo   - mcp-server
+call npx supabase functions deploy mcp-server --project-ref %PROJECT_REF% --no-verify-jwt
+if errorlevel 1 echo     FAILED: mcp-server
+echo   - issue-mcp-token
+call npx supabase functions deploy issue-mcp-token --project-ref %PROJECT_REF%
+if errorlevel 1 echo     FAILED: issue-mcp-token
+
 for %%f in (firebase-auth create-team-member delete-team-member register-organization firebase-upload daily-motivation notify-task-assigned notify-workflow-stage process-email-queue send-daily-digest send-department-daily-summary send-weekly-pending-report send-due-reminders send-transactional-email send-password-reset complete-password-reset polish-note handle-email-unsubscribe) do (
   echo   - %%f
   call npx supabase functions deploy %%f --project-ref %PROJECT_REF% --no-verify-jwt
