@@ -18,6 +18,9 @@ import {
 import { toast } from "sonner";
 import { todayIST, formatDateIST } from "@/lib/time";
 import { supabase } from "@/integrations/supabase/client";
+import { usePerformance } from "@/hooks/usePerformance";
+import { PerformanceBreakdown } from "@/components/PerformanceBreakdown";
+import { Card, CardContent } from "@/components/ui/card";
 
 const priorityColors: Record<string, string> = {
   critical: "hsl(0,72%,51%)", high: "hsl(38,92%,50%)", medium: "hsl(239,84%,67%)", low: "hsl(142,71%,45%)",
@@ -61,6 +64,8 @@ const Board = () => {
   const [filterDeptId, setFilterDeptId] = useState("all");
 
   const isLeadership = accessScope.hasFullAccess || accessScope.isManager || accessScope.isHR;
+  const { metrics: myPerfMetrics } = usePerformance(user?.id ? [user.id] : undefined);
+  const myPerformance = myPerfMetrics[0];
 
   useEffect(() => {
     if (!user) return;
@@ -155,6 +160,14 @@ const Board = () => {
   return (
     <div className="p-4 md:p-6 space-y-4 h-full flex flex-col">
       <ScopeBanner />
+
+      {accessScope.tier === "member" && myPerformance && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="py-3">
+            <PerformanceBreakdown metrics={myPerformance} compact showReasons />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>

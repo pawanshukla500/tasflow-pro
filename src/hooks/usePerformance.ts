@@ -95,6 +95,54 @@ export function usePerformance(userIds?: string[]) {
   return { metrics, loading, refetch: fetchMetrics };
 }
 
+export interface ProductivityTrendPoint {
+  label: string;
+  tasks_completed: number;
+  workflows_completed: number;
+  on_time_pct: number;
+}
+
+/** Weekly productivity trend from task and workflow completion timestamps. */
+export function buildProductivityTrends(
+  tasks: {
+    status: string;
+    completed_at?: string | null;
+    completed_on_time?: boolean | null;
+  }[],
+  workflows: { status: string; completed_at?: string | null }[],
+  weeks = 8,
+): ProductivityTrendPoint[] {
+  const now = new Date();
+  const points: ProductivityTrendPoint[] = [];
+
+  for (let i = weeks - 1; i >= 0; i--) {
+    const weekEnd = new Date(now);
+    weekEnd.setDate(weekEnd.getDate() - i * 7);
+    const weekStart = new Date(weekEnd);
+    weekStart.setDate(weekStart.getDate() - 6);
+
+    const inWeek = (ts: string | null | undefined) => {
+      if (!ts) return false;
+      const d = new Date(ts);
+      return d >= weekStart && d <= weekEnd;
+    };
+
+    const doneTasks = tasks.filter((t) => t.status === "done" && inWeek(t.completed_at));
+    const onTime = doneTasks.filter((t) => t.completed_on_time !== false).length;
+    const doneWf = workflows.filter((w) => w.status === "completed" && inWeek(w.completed_at));
+
+    const label = weekEnd.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+    points.push({
+      label,
+      tasks_completed: doneTasks.length,
+      workflows_completed: doneWf.length,
+      on_time_pct: doneTasks.length ? Math.round((onTime / doneTasks.length) * 100) : 100,
+    });
+  }
+
+  return points;
+}
+
 export function buildDepartmentPerformance(
   departments: { id: string; name: string }[],
   profiles: { id: string; department_id?: string | null; name: string }[],

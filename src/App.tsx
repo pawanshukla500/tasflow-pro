@@ -67,7 +67,7 @@ const AppRoutes = () => (<>
       <Route path="/board" element={<Board />} />
       <Route path="/calendar" element={<CalendarPage />} />
       <Route path="/goals" element={<GoalsPage />} />
-      <Route path="/performance" element={<RoleRoute roles={["manager"]}><PerformancePage /></RoleRoute>} />
+      <Route path="/performance" element={<PerformancePage />} />
       <Route path="/team" element={<RoleRoute roles={["manager"]}><TeamPage /></RoleRoute>} />
       <Route path="/departments" element={<RoleRoute roles={["admin"]}><DepartmentsPage /></RoleRoute>} />
       {/* Workflows is open to all users — RLS scopes employees to workflows they raised or are assigned a stage in */}

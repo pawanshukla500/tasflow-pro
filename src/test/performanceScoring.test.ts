@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildDepartmentPerformance } from "@/hooks/usePerformance";
+import { buildDepartmentPerformance, buildProductivityTrends } from "@/hooks/usePerformance";
 import { filterBoardTasksForUser } from "@/lib/accessControl";
 import { resolveAccessScope } from "@/lib/accessControl";
 import type { AuthUser } from "@/contexts/AuthContext";
@@ -84,5 +84,17 @@ describe("buildDepartmentPerformance", () => {
     expect(result[0].department_name).toBe("Sales");
     expect(result[0].avg_score).toBe(90);
     expect(result[1].avg_score).toBe(60);
+  });
+});
+
+describe("buildProductivityTrends", () => {
+  it("returns 8 weekly data points", () => {
+    const now = new Date().toISOString();
+    const result = buildProductivityTrends(
+      [{ status: "done", completed_at: now, completed_on_time: true }],
+      [{ status: "completed", completed_at: now }],
+    );
+    expect(result).toHaveLength(8);
+    expect(result.some((p) => p.tasks_completed >= 1)).toBe(true);
   });
 });

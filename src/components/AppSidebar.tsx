@@ -32,11 +32,11 @@ const navItems: { group: string | null; items: NavItem[] }[] = [
     { label: "Calendar", icon: Calendar, path: "/calendar" },
     { label: "Workflows", icon: GitBranch, path: "/workflows" },
     { label: "Goals", icon: Target, path: "/goals" },
+    { label: "Performance", icon: TrendingUp, path: "/performance" },
   ]},
   { group: "LEADERSHIP", items: [
     { label: "Team", icon: Users, path: "/team", managerUp: true },
-    { label: "Departments", icon: Building2, path: "/departments", managerUp: true },
-    { label: "Performance", icon: TrendingUp, path: "/performance", managerUp: true },
+    { label: "Departments", icon: Building2, path: "/departments", adminOnly: true },
     { label: "Reports", icon: BarChart3, path: "/reports", managerUp: true },
   ]},
   { group: null, items: [

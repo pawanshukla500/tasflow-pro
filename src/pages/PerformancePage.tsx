@@ -45,7 +45,7 @@ const PerformancePage = () => {
   const { tasks } = useTasks();
   const [scope, setScope] = useState<string>("me");
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
-  const [workflows, setWorkflows] = useState<{ raised_by_department_id?: string | null; status: string }[]>([]);
+  const [workflows, setWorkflows] = useState<{ raised_by_department_id?: string | null; status: string; completed_at?: string | null }[]>([]);
   const [allProfiles, setAllProfiles] = useState<{ id: string; name: string; department_id?: string | null }[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [kras, setKras] = useState<KRA[]>([]);
@@ -85,7 +85,7 @@ const PerformancePage = () => {
       supabase.from("kpis" as any).select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, name, department_id").eq("active", true).order("name"),
       supabase.from("departments").select("id, name").order("name"),
-      supabase.from("workflows").select("raised_by_department_id, status"),
+      supabase.from("workflows").select("raised_by_department_id, status, completed_at"),
     ]);
     setKras((kraRes.data as any) || []);
     setKpis((kpiRes.data as any) || []);
@@ -257,7 +257,7 @@ const PerformancePage = () => {
                   <CardContent>
                     <PerformanceBreakdown
                       metrics={selectedMetrics}
-                      showReasons={accessScope.isManager || accessScope.hasFullAccess}
+                      showReasons={scope === "me" || accessScope.isManager || accessScope.hasFullAccess}
                     />
                   </CardContent>
                 </Card>

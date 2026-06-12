@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import { Building2, TrendingDown, TrendingUp, Users, BarChart3 } from "lucide-react";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
   buildDepartmentPerformance,
+  buildProductivityTrends,
   type UserPerformanceMetrics,
   type DepartmentPerformance,
 } from "@/hooks/usePerformance";
@@ -13,8 +15,14 @@ interface Props {
   departments: { id: string; name: string }[];
   profiles: { id: string; name: string; department_id?: string | null }[];
   metrics: UserPerformanceMetrics[];
-  tasks: { department_id?: string | null; status: string; due_date?: string | null; completed_on_time?: boolean | null }[];
-  workflows: { raised_by_department_id?: string | null; status: string }[];
+  tasks: {
+    department_id?: string | null;
+    status: string;
+    due_date?: string | null;
+    completed_at?: string | null;
+    completed_on_time?: boolean | null;
+  }[];
+  workflows: { raised_by_department_id?: string | null; status: string; completed_at?: string | null }[];
   summaryOnly?: boolean;
 }
 
@@ -31,9 +39,16 @@ export function ExecutiveDashboard({
     [departments, profiles, metrics, tasks, workflows],
   );
 
+  const productivityTrend = useMemo(
+    () => buildProductivityTrends(tasks, workflows),
+    [tasks, workflows],
+  );
+
   const topDepts = deptPerf.slice(0, 3);
   const bottomDepts = [...deptPerf].sort((a, b) => a.avg_score - b.avg_score).slice(0, 3);
   const topUsers = [...metrics].sort((a, b) => b.performance_score - a.performance_score).slice(0, 5);
+  const wfCompleted = workflows.filter((w) => w.status === "completed").length;
+  const wfTotal = workflows.length;
   const orgAvg = metrics.length
     ? Math.round(metrics.reduce((s, m) => s + m.performance_score, 0) / metrics.length)
     : 0;
@@ -67,6 +82,36 @@ export function ExecutiveDashboard({
         <DeptRankCard title="Top performing departments" items={topDepts} variant="top" />
         <DeptRankCard title="Needs attention" items={bottomDepts} variant="bottom" />
       </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold">Productivity trends (8 weeks)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={productivityTrend}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ fontSize: 12 }}
+                  formatter={(value: number, name: string) => [
+                    value,
+                    name === "tasks_completed" ? "Tasks done" : name === "workflows_completed" ? "Workflows done" : "On-time %",
+                  ]}
+                />
+                <Area type="monotone" dataKey="tasks_completed" stackId="1" stroke="hsl(var(--primary))" fill="hsl(var(--primary)/0.3)" />
+                <Area type="monotone" dataKey="workflows_completed" stackId="1" stroke="hsl(142,71%,45%)" fill="hsl(142,71%,45%,0.25)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex gap-4 mt-2 text-[10px] text-muted-foreground">
+            <span>Workflow completion: {wfTotal ? Math.round((wfCompleted / wfTotal) * 100) : 0}% ({wfCompleted}/{wfTotal})</span>
+            <span>Avg on-time (latest week): {productivityTrend.at(-1)?.on_time_pct ?? 100}%</span>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-2">
