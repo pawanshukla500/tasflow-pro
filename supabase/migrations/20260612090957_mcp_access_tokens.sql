@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS public.mcp_access_tokens (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- One active token per hash (revoked tokens may share the slot once cleared).
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_tokens_hash_active
   ON public.mcp_access_tokens (token_hash)
   WHERE revoked_at IS NULL;
@@ -26,9 +25,6 @@ CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user_active
 
 ALTER TABLE public.mcp_access_tokens ENABLE ROW LEVEL SECURITY;
 
--- Users manage only their own tokens. token_hash is never sent to the client on
--- read (the UI selects explicit columns), and is written only by the issuing
--- edge function via the service role (which bypasses RLS).
 DROP POLICY IF EXISTS "Users read own mcp tokens" ON public.mcp_access_tokens;
 CREATE POLICY "Users read own mcp tokens" ON public.mcp_access_tokens
   FOR SELECT TO authenticated
@@ -45,8 +41,6 @@ CREATE POLICY "Users delete own mcp tokens" ON public.mcp_access_tokens
   FOR DELETE TO authenticated
   USING (auth.uid() = user_id);
 
--- Bump last_used_at without exposing the row to the caller. SECURITY DEFINER so
--- the MCP server can call it through a user-scoped client after validating the PAT.
 CREATE OR REPLACE FUNCTION public.mark_mcp_token_used(_token_id UUID)
 RETURNS void
 LANGUAGE sql
