@@ -31,6 +31,8 @@ export interface TaskRow {
   submitted_for_review_at?: string | null;
   reviewed_at?: string | null;
   reviewed_by?: string | null;
+  completed_on_time?: boolean | null;
+  days_late?: number;
 }
 
 export function useTasks() {

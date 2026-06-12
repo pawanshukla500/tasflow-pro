@@ -23,10 +23,23 @@ export async function bridgeFirebaseToSupabase(
   idToken: string,
   profile?: { email?: string | null; name?: string | null; firebaseUid?: string },
 ): Promise<BridgeResult> {
-  // Reuse a still-valid Supabase session instead of re-bridging on every load
+  // Reuse session only when it belongs to the same Firebase account (prevents wrong-user
+  // state after account switch without a full logout).
   const { data: { session: existing } } = await supabase.auth.getSession();
   if (existing?.user) {
-    return { userId: existing.user.id, method: "edge_function" };
+    if (profile?.firebaseUid) {
+      const { data: row } = await supabase
+        .from("profiles")
+        .select("id, firebase_uid")
+        .eq("id", existing.user.id)
+        .maybeSingle();
+      if (row?.firebase_uid === profile.firebaseUid) {
+        return { userId: existing.user.id, method: "edge_function" };
+      }
+      await supabase.auth.signOut({ scope: "local" });
+    } else {
+      return { userId: existing.user.id, method: "edge_function" };
+    }
   }
 
   let res: Response;

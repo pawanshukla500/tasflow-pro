@@ -32,11 +32,11 @@ const navItems: { group: string | null; items: NavItem[] }[] = [
     { label: "Calendar", icon: Calendar, path: "/calendar" },
     { label: "Workflows", icon: GitBranch, path: "/workflows" },
     { label: "Goals", icon: Target, path: "/goals" },
+    { label: "Performance", icon: TrendingUp, path: "/performance" },
   ]},
   { group: "LEADERSHIP", items: [
     { label: "Team", icon: Users, path: "/team", managerUp: true },
-    { label: "Departments", icon: Building2, path: "/departments", managerUp: true },
-    { label: "Performance", icon: TrendingUp, path: "/performance", managerUp: true },
+    { label: "Departments", icon: Building2, path: "/departments", adminOnly: true },
     { label: "Reports", icon: BarChart3, path: "/reports", managerUp: true },
   ]},
   { group: null, items: [
@@ -56,6 +56,12 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut, accessScope, isManagerOrAbove } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/login", { replace: true });
+    onNavigate?.();
+  };
   const { theme, toggleTheme } = useTheme();
 
   const isCollapsed = mobile ? false : collapsed;
@@ -203,7 +209,7 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleTheme} aria-label="Toggle theme">
                   {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={signOut} aria-label="Sign out">
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={handleSignOut} aria-label="Sign out">
                   <LogOut className="h-3.5 w-3.5" />
                 </Button>
               </div>

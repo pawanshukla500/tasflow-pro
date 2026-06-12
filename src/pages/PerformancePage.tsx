@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { Plus, Target, Trash2, TrendingUp, Users as UsersIcon } from "lucide-react";
+import { Plus, Target, Trash2, TrendingUp, Users as UsersIcon, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,11 @@ import { ScopeBanner } from "@/components/ScopeBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { toast } from "sonner";
 import { formatDateIST } from "@/lib/time";
+import { usePerformance } from "@/hooks/usePerformance";
+import { useTasks } from "@/hooks/useTasks";
+import { PerformanceBreakdown } from "@/components/PerformanceBreakdown";
+import { ExecutiveDashboard } from "@/components/ExecutiveDashboard";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface KRA {
   id: string; user_id: string; title: string; description: string | null;
@@ -36,8 +41,12 @@ const statusColors: Record<string, string> = {
 
 const PerformancePage = () => {
   const { user, accessScope } = useAuth();
-  const { filterProfiles } = useAccessScope();
+  const { filterProfiles, filterDepartments } = useAccessScope();
+  const { tasks } = useTasks();
   const [scope, setScope] = useState<string>("me");
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [workflows, setWorkflows] = useState<{ raised_by_department_id?: string | null; status: string; completed_at?: string | null }[]>([]);
+  const [allProfiles, setAllProfiles] = useState<{ id: string; name: string; department_id?: string | null }[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [kras, setKras] = useState<KRA[]>([]);
   const [kpis, setKpis] = useState<KPI[]>([]);
@@ -71,14 +80,20 @@ const PerformancePage = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    const [kraRes, kpiRes, profilesRes] = await Promise.all([
+    const [kraRes, kpiRes, profilesRes, deptRes, wfRes] = await Promise.all([
       supabase.from("kras" as any).select("*").order("created_at", { ascending: false }),
       supabase.from("kpis" as any).select("*").order("created_at", { ascending: false }),
-      supabase.from("profiles").select("id, name").eq("active", true).order("name"),
+      supabase.from("profiles").select("id, name, department_id").eq("active", true).order("name"),
+      supabase.from("departments").select("id, name").order("name"),
+      supabase.from("workflows").select("raised_by_department_id, status, completed_at"),
     ]);
     setKras((kraRes.data as any) || []);
     setKpis((kpiRes.data as any) || []);
-    setMembers((profilesRes.data as any) || []);
+    const profs = (profilesRes.data as any) || [];
+    setMembers(profs);
+    setAllProfiles(profs);
+    setDepartments(filterDepartments((deptRes.data as any) || []));
+    setWorkflows((wfRes.data as any) || []);
     setLoading(false);
   };
 
@@ -163,6 +178,20 @@ const PerformancePage = () => {
 
   const canSeeOthers = accessScope.canViewDeptPerformance;
 
+  const scopedProfileIds = useMemo(() => {
+    if (scope === "me") return user?.id ? [user.id] : [];
+    if (scope === "all") return filterProfiles(allProfiles).map((p) => p.id);
+    return [scope];
+  }, [scope, user?.id, allProfiles, filterProfiles]);
+
+  const { metrics: perfMetrics, loading: perfLoading } = usePerformance(
+    scopedProfileIds.length ? scopedProfileIds : undefined,
+  );
+
+  const selectedMetrics = scope === "me"
+    ? perfMetrics.find((m) => m.user_id === user?.id)
+    : perfMetrics[0];
+
   return (
     <div className="p-6 max-w-6xl space-y-6">
       <PageHeader
@@ -198,11 +227,77 @@ const PerformancePage = () => {
         <ScopeBanner scope={accessScope} />
       )}
 
-      <Tabs defaultValue="kra">
+      <Tabs defaultValue={canSeeOthers ? "analytics" : "kra"}>
         <TabsList>
+          <TabsTrigger value="analytics"><BarChart3 className="h-3.5 w-3.5 mr-1.5" />Score & Analytics</TabsTrigger>
           <TabsTrigger value="kra"><Target className="h-3.5 w-3.5 mr-1.5" />KRAs ({visibleKras.length})</TabsTrigger>
           <TabsTrigger value="kpi"><TrendingUp className="h-3.5 w-3.5 mr-1.5" />KPIs ({visibleKpis.length})</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="analytics" className="space-y-4 mt-4">
+          {accessScope.hasFullAccess && scope === "all" ? (
+            <ExecutiveDashboard
+              departments={departments}
+              profiles={filterProfiles(allProfiles)}
+              metrics={perfMetrics}
+              tasks={tasks}
+              workflows={workflows}
+            />
+          ) : (
+            <div className="grid md:grid-cols-2 gap-4">
+              {perfLoading ? (
+                <p className="text-sm text-muted-foreground col-span-2">Loading performance data…</p>
+              ) : selectedMetrics ? (
+                <Card className="md:col-span-1">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">
+                      {scope === "me" ? "Your performance" : members.find((m) => m.id === scope)?.name || "Employee"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <PerformanceBreakdown
+                      metrics={selectedMetrics}
+                      showReasons={scope === "me" || accessScope.isManager || accessScope.hasFullAccess}
+                    />
+                  </CardContent>
+                </Card>
+              ) : (
+                <p className="text-sm text-muted-foreground col-span-2">No performance data yet — complete tasks to build your score.</p>
+              )}
+              {accessScope.hasFullAccess && scope !== "all" && (
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">MD summary</CardTitle></CardHeader>
+                  <CardContent>
+                    <ExecutiveDashboard
+                      departments={departments}
+                      profiles={filterProfiles(allProfiles)}
+                      metrics={perfMetrics}
+                      tasks={tasks}
+                      workflows={workflows}
+                      summaryOnly
+                    />
+                  </CardContent>
+                </Card>
+              )}
+              {canSeeOthers && scope !== "me" && perfMetrics.length > 1 && (
+                <Card className="md:col-span-2">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Team breakdown</CardTitle></CardHeader>
+                  <CardContent className="grid sm:grid-cols-2 gap-4">
+                    {perfMetrics.map((m) => {
+                      const member = allProfiles.find((p) => p.id === m.user_id);
+                      return (
+                        <div key={m.user_id} className="border rounded-lg p-3">
+                          <p className="text-sm font-medium mb-2">{member?.name || "Unknown"}</p>
+                          <PerformanceBreakdown metrics={m} compact showReasons />
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+        </TabsContent>
 
         <TabsContent value="kra" className="space-y-3 mt-4">
           {loading ? <p className="text-sm text-muted-foreground">Loading…</p>

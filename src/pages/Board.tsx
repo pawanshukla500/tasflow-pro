@@ -1,11 +1,15 @@
-import { useState } from "react";
-import { Plus, MoreHorizontal, Calendar, ArrowRight, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus, MoreHorizontal, Calendar, ArrowRight, Trash2, User, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useTasks, TaskRow } from "@/hooks/useTasks";
 import CreateTaskModal from "@/components/CreateTaskModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAccessScope } from "@/hooks/useAccessScope";
+import { ScopeBanner } from "@/components/ScopeBanner";
 import {
   allowedStatusesForUser,
   canDeleteTask,
@@ -13,6 +17,10 @@ import {
 } from "@/lib/taskPermissions";
 import { toast } from "sonner";
 import { todayIST, formatDateIST } from "@/lib/time";
+import { supabase } from "@/integrations/supabase/client";
+import { usePerformance } from "@/hooks/usePerformance";
+import { PerformanceBreakdown } from "@/components/PerformanceBreakdown";
+import { Card, CardContent } from "@/components/ui/card";
 
 const priorityColors: Record<string, string> = {
   critical: "hsl(0,72%,51%)", high: "hsl(38,92%,50%)", medium: "hsl(239,84%,67%)", low: "hsl(142,71%,45%)",
@@ -39,13 +47,47 @@ const statusColors: Record<string, string> = {
   blocked: "hsl(0,72%,51%)",
 };
 
+type BoardViewMode = "user" | "department";
+
 const Board = () => {
-  const { tasks, loading, fetchTasks, updateTaskStatus, deleteTask } = useTasks();
-  const { user, isAdminOrMD, managedDepartments } = useAuth();
+  const { tasks: allTasks, loading, fetchTasks, updateTaskStatus, deleteTask } = useTasks();
+  const { user, isAdminOrMD, managedDepartments, accessScope } = useAuth();
+  const { filterBoardTasks, filterDepartments, filterProfiles } = useAccessScope();
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<TaskStatus | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [createStatus, setCreateStatus] = useState<string>("todo");
+  const [profiles, setProfiles] = useState<{ id: string; name: string; department_id?: string | null }[]>([]);
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [viewMode, setViewMode] = useState<BoardViewMode>("user");
+  const [filterUserId, setFilterUserId] = useState("all");
+  const [filterDeptId, setFilterDeptId] = useState("all");
+
+  const isLeadership = accessScope.hasFullAccess || accessScope.isManager || accessScope.isHR;
+  const { metrics: myPerfMetrics } = usePerformance(user?.id ? [user.id] : undefined);
+  const myPerformance = myPerfMetrics[0];
+
+  useEffect(() => {
+    if (!user) return;
+    Promise.all([
+      supabase.from("profiles").select("id, name, department_id").eq("active", true).order("name"),
+      supabase.from("departments").select("id, name").order("name"),
+    ]).then(([pRes, dRes]) => {
+      setProfiles(filterProfiles(pRes.data || []));
+      setDepartments(filterDepartments(dRes.data || []));
+    });
+  }, [user, filterProfiles, filterDepartments]);
+
+  const tasks = useMemo(
+    () =>
+      filterBoardTasks(
+        allTasks,
+        profiles,
+        viewMode === "user" && isLeadership ? filterUserId : null,
+        viewMode === "department" && isLeadership ? filterDeptId : null,
+      ),
+    [allTasks, profiles, filterBoardTasks, viewMode, isLeadership, filterUserId, filterDeptId],
+  );
 
   const today = todayIST();
   const getInitials = (name: string) => name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
@@ -60,16 +102,12 @@ const Board = () => {
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", task.id);
     requestAnimationFrame(() => {
-      if (e.currentTarget instanceof HTMLElement) {
-        e.currentTarget.style.opacity = "0.4";
-      }
+      if (e.currentTarget instanceof HTMLElement) e.currentTarget.style.opacity = "0.4";
     });
   };
 
   const handleDragEnd = (e: React.DragEvent) => {
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.style.opacity = "1";
-    }
+    if (e.currentTarget instanceof HTMLElement) e.currentTarget.style.opacity = "1";
     setDraggedTaskId(null);
     setDragOverCol(null);
   };
@@ -85,6 +123,9 @@ const Board = () => {
       toast.error("You are not allowed to move this task to that status");
       return;
     }
+    if (newStatus === "done" && task.due_date && task.due_date < today) {
+      toast.info("Late completion will be recorded and may affect performance score.");
+    }
     const err = await updateTaskStatus(taskId, newStatus);
     if (err) toast.error(err.message || "Failed to move task");
   };
@@ -93,6 +134,9 @@ const Board = () => {
     if (!canMoveToStatus(task, newStatus)) {
       toast.error("You are not allowed to move this task to that status");
       return;
+    }
+    if (newStatus === "done" && task.due_date && task.due_date < today) {
+      toast.info("Late completion recorded — performance score updated.");
     }
     const err = await updateTaskStatus(task.id, newStatus);
     if (err) toast.error(err.message || "Failed to update status");
@@ -115,15 +159,78 @@ const Board = () => {
 
   return (
     <div className="p-4 md:p-6 space-y-4 h-full flex flex-col">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-foreground">Board</h1>
-        <div className="flex items-center gap-2">
+      <ScopeBanner />
+
+      {accessScope.tier === "member" && myPerformance && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="py-3">
+            <PerformanceBreakdown metrics={myPerformance} compact showReasons />
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Board</h1>
+          <p className="text-xs text-muted-foreground">
+            {accessScope.tier === "member"
+              ? "Your tasks only — assigned to you or created by you"
+              : isLeadership
+                ? "Leadership view — filter by user or department"
+                : "Your workspace"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground font-mono-num">{tasks.length} tasks</span>
           <Button size="sm" onClick={() => { setCreateStatus("todo"); setShowCreate(true); }}>
             <Plus className="h-3.5 w-3.5 mr-1" />New Task
           </Button>
         </div>
       </div>
+
+      {isLeadership && accessScope.hasFullAccess && (
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as BoardViewMode)}>
+            <TabsList>
+              <TabsTrigger value="user" className="text-xs gap-1"><User className="h-3.5 w-3.5" />User-wise</TabsTrigger>
+              <TabsTrigger value="department" className="text-xs gap-1"><Building2 className="h-3.5 w-3.5" />Department</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {viewMode === "user" ? (
+            <Select value={filterUserId} onValueChange={setFilterUserId}>
+              <SelectTrigger className="w-48 h-8 text-xs"><SelectValue placeholder="All users" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All users</SelectItem>
+                {profiles.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Select value={filterDeptId} onValueChange={setFilterDeptId}>
+              <SelectTrigger className="w-48 h-8 text-xs"><SelectValue placeholder="All departments" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All departments</SelectItem>
+                {departments.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
+
+      {isLeadership && !accessScope.hasFullAccess && (
+        <Select value={filterUserId} onValueChange={setFilterUserId}>
+          <SelectTrigger className="w-48 h-8 text-xs"><SelectValue placeholder="Team member" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All team members</SelectItem>
+            {profiles.map((p) => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
 
       <div className="flex gap-3 overflow-x-auto pb-4 flex-1 min-h-0">
         {columns.map((col) => {
