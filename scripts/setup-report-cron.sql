@@ -10,6 +10,28 @@ EXCEPTION WHEN OTHERS THEN
   NULL;
 END $$;
 
+-- User task due / overdue reminder — Mon–Sat 08:00 IST (02:30 UTC).
+-- Sends per-user emails listing overdue, due-today and due-soon (next 3 days)
+-- tasks/workflows. Users with no pending items are skipped (no email sent).
+select cron.unschedule('send-due-reminders-daily') where exists (
+  select 1 from cron.job where jobname = 'send-due-reminders-daily'
+);
+select cron.schedule(
+  'send-due-reminders-daily',
+  '30 2 * * 1-6',
+  $$
+  select net.http_post(
+    url := 'https://nekdjoquirhecmejuoba.supabase.co/functions/v1/send-due-reminders',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'report_cron_service_role_key'),
+      'x-internal-service-key', (select decrypted_secret from vault.decrypted_secrets where name = 'report_cron_service_role_key')
+    ),
+    body := '{}'::jsonb
+  );
+  $$
+);
+
 -- Daily user digest — 08:00 IST (02:30 UTC)
 select cron.unschedule('send-daily-digest') where exists (
   select 1 from cron.job where jobname = 'send-daily-digest'

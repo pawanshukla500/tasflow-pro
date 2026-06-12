@@ -45,6 +45,8 @@ npx supabase functions deploy send-department-daily-summary --project-ref $Proje
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 npx supabase functions deploy send-daily-digest --project-ref $ProjectRef --no-verify-jwt
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+npx supabase functions deploy send-due-reminders --project-ref $ProjectRef --no-verify-jwt
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 npx supabase functions deploy send-weekly-pending-report --project-ref $ProjectRef --no-verify-jwt
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 npx supabase functions deploy create-team-member --project-ref $ProjectRef
