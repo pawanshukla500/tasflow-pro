@@ -135,6 +135,27 @@ npx supabase db push
 ### Email
 Branded HTML via **Gmail API** (not Resend). Welcome email on team member create.
 
+### AI tools (MCP)
+Connect external AI clients (Claude, ChatGPT, …) to TaskFlow Pro via a hosted **MCP server**
+(`supabase/functions/mcp-server`, Streamable HTTP). Each user generates a **Personal Access Token**
+in **Settings → Integrations → AI Connections**, then adds the server to their AI client:
+
+```json
+{
+  "mcpServers": {
+    "taskflow-pro": {
+      "type": "http",
+      "url": "https://<project>.supabase.co/functions/v1/mcp-server",
+      "headers": { "Authorization": "Bearer <YOUR_TOKEN>" }
+    }
+  }
+}
+```
+
+The token maps to one user; every tool call runs under that user's Supabase RLS scope, so the AI can
+only see/do what the user could. Tools cover tasks, subtasks, workflows, departments and people.
+Deploy: `npx supabase db push` then `npx supabase functions deploy mcp-server issue-mcp-token`.
+
 ---
 
 ## Scripts

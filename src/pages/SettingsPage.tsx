@@ -14,6 +14,7 @@ import { firebaseChangePassword, isFirebaseAuthError } from "@/integrations/fire
 import { todayIST } from "@/lib/time";
 import { PageHeader } from "@/components/PageHeader";
 import { AdminSettingsPanel } from "@/components/AdminSettingsPanel";
+import { McpTokensPanel } from "@/components/McpTokensPanel";
 
 const baseTabs = [
   { id: "profile", label: "Profile", icon: User },
@@ -420,6 +421,10 @@ const SettingsPage = () => {
             >
               Connect
             </Button>
+          </div>
+
+          <div className="border-t pt-6">
+            <McpTokensPanel />
           </div>
         </div>
       )}
