@@ -1,10 +1,11 @@
 # Auto-deploy TaskFlow Pro when changes land on main.
-# No manual Cloud Shell pull/merge/deploy needed after secrets are configured once.
 #
-# Required GitHub repo secrets (Settings → Secrets and variables → Actions):
-#   GCP_SA_KEY              — GCP service account JSON with Cloud Build + Cloud Run + Artifact Registry
+# ONE-TIME SETUP — add these GitHub repo secrets (Settings → Secrets → Actions):
+#   GCP_SA_KEY              — run: bash scripts/setup-gcp-github-actions.sh
 #   SUPABASE_ACCESS_TOKEN   — https://supabase.com/dashboard/account/tokens
-#   SUPABASE_DB_PASSWORD    — Supabase project database password (for migrations)
+#   SUPABASE_DB_PASSWORD    — Supabase Dashboard → Project Settings → Database
+#
+# Until secrets are set, jobs fail fast with a clear message (not a cryptic auth error).
 
 name: Deploy
 
@@ -18,6 +19,9 @@ env:
   GCP_REGION: europe-west1
   CLOUD_RUN_SERVICE: tasflow-pro
   SUPABASE_PROJECT_REF: nekdjoquirhecmejuoba
+  # Public keys — same values as scripts/deploy-cloudshell.sh (already in git).
+  VITE_SUPABASE_PUBLISHABLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5la2Rqb3F1aXJoZWNtZWp1b2JhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwODYzMTIsImV4cCI6MjA5NjY2MjMxMn0.fsBzWsY7moMUlNQHIUBtE7cHx-_6A45ArKw49B5SjyY
+  VITE_FIREBASE_API_KEY: AIzaSyDR8Yzd58za5h0wlcj-EJp4MdBInPnLePU
 
 jobs:
   deploy-frontend:
@@ -25,6 +29,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate GCP secret
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [ -z "$GCP_SA_KEY" ]; then
+            echo "::error title=Missing GCP_SA_KEY::GitHub secret GCP_SA_KEY is not set."
+            echo ""
+            echo "Fix (one time, ~5 min in Cloud Shell):"
+            echo "  bash scripts/setup-gcp-github-actions.sh"
+            echo ""
+            echo "Then paste the JSON into:"
+            echo "  GitHub → repo → Settings → Secrets and variables → Actions → New repository secret"
+            echo "  Name: GCP_SA_KEY"
+            exit 1
+          fi
 
       - uses: google-github-actions/auth@v2
         with:
@@ -47,9 +67,9 @@ jobs:
           _REGION=${GCP_REGION},\
           _SERVICE=${CLOUD_RUN_SERVICE},\
           _VITE_SUPABASE_URL=https://${SUPABASE_PROJECT_REF}.supabase.co,\
-          _VITE_SUPABASE_PUBLISHABLE_KEY=${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }},\
+          _VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY},\
           _VITE_APP_URL=https://task.youthnic.shop,\
-          _VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }},\
+          _VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY},\
           _VITE_FIREBASE_AUTH_DOMAIN=taskflow-pro-by-vb-exports.firebaseapp.com,\
           _VITE_FIREBASE_PROJECT_ID=taskflow-pro-by-vb-exports,\
           _VITE_FIREBASE_STORAGE_BUCKET=taskflow-pro-by-vb-exports.firebasestorage.app,\
@@ -58,9 +78,6 @@ jobs:
           _VITE_FIREBASE_MEASUREMENT_ID=G-YWGNCXGK7M"
 
       - name: Inject runtime env vars
-        env:
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
         run: |
           cat > /tmp/cloudrun.env.yaml <<EOF
           VITE_SUPABASE_URL: "https://nekdjoquirhecmejuoba.supabase.co"
@@ -92,6 +109,29 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
+      - name: Validate Supabase secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          MISSING=0
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::error title=Missing SUPABASE_ACCESS_TOKEN::GitHub secret SUPABASE_ACCESS_TOKEN is not set."
+            echo "  Create at: https://supabase.com/dashboard/account/tokens"
+            MISSING=1
+          fi
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error title=Missing SUPABASE_DB_PASSWORD::GitHub secret SUPABASE_DB_PASSWORD is not set."
+            echo "  Find at: Supabase Dashboard → Project Settings → Database → password"
+            MISSING=1
+          fi
+          if [ "$MISSING" -eq 1 ]; then
+            echo ""
+            echo "Add both secrets at:"
+            echo "  GitHub → repo → Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
 
       - name: Deploy migrations & edge functions
         env:

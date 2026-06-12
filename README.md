@@ -159,15 +159,16 @@ Deploy: `npx supabase db push` then `npx supabase functions deploy mcp-server is
 ### Automatic deploy (GitHub Actions)
 
 Pushes to `main` auto-deploy **Cloud Run** (frontend) and **Supabase** (migrations + edge functions including MCP).
-One-time setup — add these GitHub repo secrets (`Settings → Secrets → Actions`):
 
-| Secret | Where to get it |
-|--------|-----------------|
-| `GCP_SA_KEY` | GCP service account JSON with Cloud Build + Cloud Run + Artifact Registry roles |
+**One-time setup** — add 3 GitHub repo secrets (`Settings → Secrets → Actions`):
+
+| Secret | How to get it |
+|--------|----------------|
+| `GCP_SA_KEY` | In Cloud Shell: `bash scripts/setup-gcp-github-actions.sh` → paste JSON into GitHub |
 | `SUPABASE_ACCESS_TOKEN` | [Supabase account tokens](https://supabase.com/dashboard/account/tokens) |
 | `SUPABASE_DB_PASSWORD` | Supabase Dashboard → Project Settings → Database |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase anon key |
-| `VITE_FIREBASE_API_KEY` | Firebase web config |
+
+If secrets are missing, the workflow fails with a clear error (not a cryptic auth message).
 
 **Cloud Shell** (manual fallback):
 
