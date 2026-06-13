@@ -4,6 +4,8 @@
 #   GCP_SA_KEY              — run: bash scripts/setup-gcp-github-actions.sh
 #   SUPABASE_ACCESS_TOKEN   — https://supabase.com/dashboard/account/tokens
 #   SUPABASE_DB_PASSWORD    — Supabase Dashboard → Project Settings → Database
+#   GOOGLE_AI_API_KEY       — (optional) Gemini API key for Polish with AI & daily quotes
+#                             https://aistudio.google.com/apikey
 #
 # Until secrets are set, jobs fail fast with a clear message (not a cryptic auth error).
 
@@ -166,6 +168,7 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
           PROJECT_REF: ${{ env.SUPABASE_PROJECT_REF }}
           CI: "true"
         run: bash scripts/deploy-supabase.sh
