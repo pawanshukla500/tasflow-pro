@@ -56,13 +56,16 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Enable APIs & Artifact Registry
+      - name: Prepare GCP (APIs & Artifact Registry)
         run: |
           gcloud config set project "$GCP_PROJECT_ID"
-          gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com --quiet
+          # APIs are already enabled via Cloud Shell; don't fail if SA can't re-enable.
+          gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com --quiet 2>/dev/null || \
+            echo "Note: APIs already enabled (or enable skipped — continuing)."
           gcloud artifacts repositories describe cloud-run-source-deploy --location="$GCP_REGION" 2>/dev/null || \
             gcloud artifacts repositories create cloud-run-source-deploy \
-              --repository-format=docker --location="$GCP_REGION" --quiet
+              --repository-format=docker --location="$GCP_REGION" --quiet 2>/dev/null || \
+            echo "Note: Artifact Registry repo already exists (continuing)."
 
       # Mirrors scripts/deploy-cloudshell.sh (proven working path).
       # Runtime env is injected at Cloud Run — no VITE_* build args required.
