@@ -15,6 +15,9 @@ dist-ssr
 .env.local
 supabase/.env
 secrets/firebase-service-account.json
+supabase/.temp
+*.orig
+patches/full-feature.patch
 
 # Editor directories and files
 .vscode/*
