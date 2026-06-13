@@ -159,7 +159,7 @@ const Board = () => {
 
   return (
     <div className="p-4 md:p-6 space-y-4 h-full flex flex-col">
-      <ScopeBanner />
+      <ScopeBanner scope={accessScope} />
 
       {accessScope.tier === "member" && myPerformance && (
         <Card className="border-primary/20 bg-primary/5">
