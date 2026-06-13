@@ -83,6 +83,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${serviceKey}`,
         'apikey': serviceKey,
+        'x-internal-service-key': serviceKey,
       },
       body: JSON.stringify({
         templateName: 'task-assigned',

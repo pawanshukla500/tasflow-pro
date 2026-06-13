@@ -66,6 +66,9 @@ fi
 
 echo "==> Deploying edge functions..."
 MCP_FUNCTIONS=(mcp-server issue-mcp-token)
+GOOGLE_FUNCTIONS=(
+  google-oauth-start google-oauth-callback google-disconnect google-calendar-sync
+)
 CORE_FUNCTIONS=(
   firebase-auth create-team-member delete-team-member register-organization
   firebase-upload daily-motivation notify-task-assigned notify-workflow-stage
@@ -81,6 +84,12 @@ for fn in "${MCP_FUNCTIONS[@]}"; do
   else
     $SUPABASE_CLI functions deploy "$fn" --project-ref "$PROJECT_REF"
   fi
+done
+
+for fn in "${GOOGLE_FUNCTIONS[@]}"; do
+  echo "  - $fn"
+  $SUPABASE_CLI functions deploy "$fn" --project-ref "$PROJECT_REF" || \
+    echo "    WARNING: $fn deploy failed (continuing)"
 done
 
 for fn in "${CORE_FUNCTIONS[@]}"; do

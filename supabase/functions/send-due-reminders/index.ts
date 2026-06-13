@@ -1,23 +1,11 @@
-// Cron-driven: sends a daily "task due / overdue" reminder Mon–Sat (skips Sunday).
+// Cron-driven: sends a daily pending-task reminder Mon–Sat (skips Sunday).
 //
-// What changed (2026-06-12 fix):
-//   • Only includes items actually needing attention: overdue, due today, or due
-//     within the next 3 days. Previously every open task was included, even
-//     tasks due months away — that made the "Tasks coming due" subject line
-//     misleading and noisy.
-//   • Workflow stages are filtered the same way using their TAT-derived due date.
-//   • Users with no overdue/imminent tasks AND no overdue/imminent workflow
-//     stages are skipped entirely — no email is sent. (Was already true for
-//     users with zero open tasks; this strengthens it to "zero imminent items".)
-//   • MD / System Admin org overview is added only when the org has at least
-//     one overdue or due-today item — avoids misleading "0 overdue" digests.
+// Each active user with task_due_reminder enabled receives one email listing
+// all open (non-done) tasks assigned to them, plus active workflow stages they
+// own. Users with nothing pending are skipped.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }
-
-// Look-ahead window for "due soon" items, in days. Items due more than this
-// many days out are not surfaced in the due/overdue reminder.
-const DUE_SOON_DAYS = 3
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
@@ -50,13 +38,10 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey)
 
   const today = istNow.toISOString().slice(0, 10)
-  const dueSoonCutoff = new Date(istNow.getTime() + DUE_SOON_DAYS * 86400000)
-    .toISOString().slice(0, 10)
   const dayKey = today
 
   // All open tasks (pending = anything not done). We fetch every open task once
-  // and filter per-user below; only items in the overdue / due-today / due-soon
-  // window are surfaced to the user.
+  // and filter per-user below.
   const { data: openTasks } = await supabase
     .from('tasks').select('id, title, due_date, priority, status')
     .neq('status', 'done')
@@ -73,15 +58,6 @@ Deno.serve(async (req) => {
   const workflowDueDate = (s: any) => {
     if (!s.started_at || !s.tat_hours) return null
     return new Date(new Date(s.started_at).getTime() + Number(s.tat_hours) * 3600000).toISOString().slice(0, 10)
-  }
-
-  // A task / workflow stage counts as "due reminder worthy" when it is overdue,
-  // due today, or due within the next DUE_SOON_DAYS days. Items with no due date
-  // (and workflow stages with no TAT) are intentionally excluded — there is
-  // nothing for the user to be reminded about.
-  const isDueOrOverdue = (dueDate: string | null | undefined) => {
-    if (!dueDate) return false
-    return dueDate <= dueSoonCutoff
   }
 
   const taskIds = Array.from(tasksById.keys())
@@ -137,20 +113,17 @@ Deno.serve(async (req) => {
       continue
     }
 
-    // Filter the user's assigned tasks to the overdue / due-today / due-soon window.
+    // Include every open task assigned to the user.
     const myTasks = (userTasks.get(p.id) || [])
-      .filter((t: any) => isDueOrOverdue(t.due_date))
       .map((t: any) => ({
         title: t.title, dueDate: t.due_date, priority: t.priority,
       }))
     const myWorkflows = workflowStages
       .filter((s: any) => s.assignee_user_id === p.id || (s.owner_department_id && s.owner_department_id === p.department_id))
-      .map((s: any) => ({ stage: s, dueDate: workflowDueDate(s) }))
-      .filter((x: any) => isDueOrOverdue(x.dueDate))
-      .map((x: any) => ({
-        title: `Workflow: ${x.stage.workflows?.title || 'Workflow'} — ${x.stage.name}`,
-        dueDate: x.dueDate,
-        priority: x.stage.status === 'blocked' ? 'blocked' : 'workflow',
+      .map((s: any) => ({
+        title: `Workflow: ${s.workflows?.title || 'Workflow'} — ${s.name}`,
+        dueDate: workflowDueDate(s),
+        priority: s.status === 'blocked' ? 'blocked' : 'workflow',
       }))
     const isLeader = leaderIds.includes(p.id)
 
@@ -165,8 +138,8 @@ Deno.serve(async (req) => {
       : []
 
     const allItems = [...orgSummary, ...myTasks, ...myWorkflows]
-    // Skip users who have nothing imminent. No email is sent for users without
-    // any pending overdue / due-today / due-soon task or workflow stage.
+
+    // Skip users who have nothing pending.
     if (allItems.length === 0) {
       results.push({ user: p.email, skipped: 'no_pending_tasks' })
       continue
