@@ -30,6 +30,7 @@ GITHUB_SA_ROLES=(
   roles/artifactregistry.writer
   roles/iam.serviceAccountUser
   roles/storage.admin
+  roles/serviceusage.serviceUsageConsumer
 )
 
 echo "==> Granting IAM roles to GitHub Actions SA..."
