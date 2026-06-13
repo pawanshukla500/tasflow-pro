@@ -13,13 +13,12 @@ C:\Users\shukl\Desktop\full-feature.patch
 ### Apply in Cloud Shell
 
 ```bash
+# If a previous run is stuck at "File to patch:", press Ctrl+C first.
+
 cd ~/tasflow-pro
 git pull origin main
 mkdir -p patches
-
-# Upload from your PC (run in local terminal with gcloud):
-# gcloud cloud-shell scp localhost:"C:/Users/shukl/Desktop/full-feature.patch" \
-#   cloudshell:~/tasflow-pro/patches/full-feature.patch
+# Upload full-feature.patch to patches/ via Cloud Shell ⋮ → Upload
 
 bash scripts/apply-full-feature-patch.sh
 npm test -- --run
