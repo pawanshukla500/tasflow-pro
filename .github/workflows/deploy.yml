@@ -14,6 +14,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   GCP_PROJECT_ID: robust-solution-425310-t9
   GCP_REGION: europe-west1
@@ -37,7 +40,8 @@ jobs:
           if [ -z "$GCP_SA_KEY" ]; then
             echo "::error title=Missing GCP_SA_KEY::GitHub secret GCP_SA_KEY is not set."
             echo ""
-            echo "Fix (one time, ~5 min in Cloud Shell):"
+            echo "Fix (one time, in Cloud Shell):"
+            echo "  export PROJECT_ID=robust-solution-425310-t9"
             echo "  bash scripts/setup-gcp-github-actions.sh"
             echo ""
             echo "Then paste the JSON into:"
@@ -60,40 +64,43 @@ jobs:
             gcloud artifacts repositories create cloud-run-source-deploy \
               --repository-format=docker --location="$GCP_REGION" --quiet
 
-      - name: Build & deploy via Cloud Build
+      # Mirrors scripts/deploy-cloudshell.sh (proven working path).
+      # Runtime env is injected at Cloud Run — no VITE_* build args required.
+      - name: Build image via Cloud Build
         run: |
-          gcloud builds submit --config cloudbuild.yaml \
-            --substitutions="\
-          _REGION=${GCP_REGION},\
-          _SERVICE=${CLOUD_RUN_SERVICE},\
-          _VITE_SUPABASE_URL=https://${SUPABASE_PROJECT_REF}.supabase.co,\
-          _VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY},\
-          _VITE_APP_URL=https://task.youthnic.shop,\
-          _VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY},\
-          _VITE_FIREBASE_AUTH_DOMAIN=taskflow-pro-by-vb-exports.firebaseapp.com,\
-          _VITE_FIREBASE_PROJECT_ID=taskflow-pro-by-vb-exports,\
-          _VITE_FIREBASE_STORAGE_BUCKET=taskflow-pro-by-vb-exports.firebasestorage.app,\
-          _VITE_FIREBASE_MESSAGING_SENDER_ID=684659983755,\
-          _VITE_FIREBASE_APP_ID=1:684659983755:web:e255b6e5a60506c92a5b8e,\
-          _VITE_FIREBASE_MEASUREMENT_ID=G-YWGNCXGK7M"
+          TAG="${GITHUB_SHA::7}"
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/cloud-run-source-deploy/${CLOUD_RUN_SERVICE}/${CLOUD_RUN_SERVICE}:${TAG}"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          gcloud builds submit --tag "$IMAGE" \
+            --timeout=1200s \
+            --machine-type=e2-highcpu-8 \
+            --project "$GCP_PROJECT_ID" \
+            .
 
-      - name: Inject runtime env vars
+      - name: Deploy to Cloud Run
         run: |
-          cat > /tmp/cloudrun.env.yaml <<EOF
+          cat > /tmp/cloudrun.env.yaml <<'ENVEOF'
           VITE_SUPABASE_URL: "https://nekdjoquirhecmejuoba.supabase.co"
-          VITE_SUPABASE_PUBLISHABLE_KEY: "${VITE_SUPABASE_PUBLISHABLE_KEY}"
+          VITE_SUPABASE_PUBLISHABLE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5la2Rqb3F1aXJoZWNtZWp1b2JhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwODYzMTIsImV4cCI6MjA5NjY2MjMxMn0.fsBzWsY7moMUlNQHIUBtE7cHx-_6A45ArKw49B5SjyY"
           VITE_APP_URL: "https://task.youthnic.shop"
-          VITE_FIREBASE_API_KEY: "${VITE_FIREBASE_API_KEY}"
+          VITE_FIREBASE_API_KEY: "AIzaSyDR8Yzd58za5h0wlcj-EJp4MdBInPnLePU"
           VITE_FIREBASE_AUTH_DOMAIN: "taskflow-pro-by-vb-exports.firebaseapp.com"
           VITE_FIREBASE_PROJECT_ID: "taskflow-pro-by-vb-exports"
           VITE_FIREBASE_STORAGE_BUCKET: "taskflow-pro-by-vb-exports.firebasestorage.app"
           VITE_FIREBASE_MESSAGING_SENDER_ID: "684659983755"
           VITE_FIREBASE_APP_ID: "1:684659983755:web:e255b6e5a60506c92a5b8e"
           VITE_FIREBASE_MEASUREMENT_ID: "G-YWGNCXGK7M"
-          EOF
-          gcloud run services update "$CLOUD_RUN_SERVICE" \
+          ENVEOF
+          # Strip heredoc indentation so gcloud gets valid YAML.
+          sed -i 's/^          //' /tmp/cloudrun.env.yaml
+          gcloud run deploy "$CLOUD_RUN_SERVICE" \
+            --image "$IMAGE" \
             --region "$GCP_REGION" \
-            --env-vars-file /tmp/cloudrun.env.yaml
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --env-vars-file /tmp/cloudrun.env.yaml \
+            --project "$GCP_PROJECT_ID"
 
       - name: Print service URL
         run: |
@@ -138,4 +145,5 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           PROJECT_REF: ${{ env.SUPABASE_PROJECT_REF }}
+          CI: "true"
         run: bash scripts/deploy-supabase.sh

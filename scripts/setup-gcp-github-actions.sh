@@ -15,12 +15,16 @@ KEY_FILE="${HOME}/gcp-sa-github-actions.json"
 
 gcloud config set project "$PROJECT_ID"
 
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+CLOUD_BUILD_SA="${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com"
+
 echo "==> Creating service account (idempotent)..."
 gcloud iam service-accounts describe "$SA_EMAIL" 2>/dev/null || \
   gcloud iam service-accounts create "$SA_NAME" \
     --display-name="GitHub Actions deploy (tasflow-pro)"
 
-ROLES=(
+# GitHub Actions SA — submits builds and deploys Cloud Run.
+GITHUB_SA_ROLES=(
   roles/run.admin
   roles/cloudbuild.builds.editor
   roles/artifactregistry.writer
@@ -28,14 +32,31 @@ ROLES=(
   roles/storage.admin
 )
 
-echo "==> Granting IAM roles..."
-for role in "${ROLES[@]}"; do
+echo "==> Granting IAM roles to GitHub Actions SA..."
+for role in "${GITHUB_SA_ROLES[@]}"; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="$role" \
     --condition=None \
     --quiet >/dev/null
-  echo "  + $role"
+  echo "  + $role → ${SA_EMAIL}"
+done
+
+# Cloud Build SA — builds images and pushes to Artifact Registry.
+CLOUD_BUILD_ROLES=(
+  roles/run.admin
+  roles/artifactregistry.writer
+  roles/logging.logWriter
+)
+
+echo "==> Granting IAM roles to Cloud Build SA (${CLOUD_BUILD_SA})..."
+for role in "${CLOUD_BUILD_ROLES[@]}"; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${CLOUD_BUILD_SA}" \
+    --role="$role" \
+    --condition=None \
+    --quiet >/dev/null
+  echo "  + $role → ${CLOUD_BUILD_SA}"
 done
 
 echo "==> Creating key..."

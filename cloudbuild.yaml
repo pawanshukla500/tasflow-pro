@@ -5,6 +5,7 @@
 substitutions:
   _REGION: europe-west1
   _SERVICE: tasflow-pro
+  SHORT_SHA: manual
   _VITE_SUPABASE_URL: ""
   _VITE_SUPABASE_PUBLISHABLE_KEY: ""
   _VITE_APP_URL: https://tasflow-pro-426872152845.europe-west1.run.app
