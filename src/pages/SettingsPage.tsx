@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,7 +43,10 @@ const notificationEvents = [
 const SettingsPage = () => {
   const { user, refetchProfile, isAdminOrMD } = useAuth();
   const { theme, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === "undefined") return "profile";
+    return new URLSearchParams(window.location.search).get("tab") || "profile";
+  });
   const [saving, setSaving] = useState(false);
 
   const [name, setName] = useState("");
@@ -65,13 +68,49 @@ const SettingsPage = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPasswords, setShowPasswords] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [googleConnection, setGoogleConnection] = useState<GoogleConnection | null>(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleSyncing, setGoogleSyncing] = useState(false);
+  const [googleDisconnecting, setGoogleDisconnecting] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
     setName(user.profile?.name || "");
     setPosition(user.profile?.position || "");
     setMobileNo(user.profile?.mobile_no || "+91 ");
   }, [user?.id, user?.profile?.name, user?.profile?.position, user?.profile?.mobile_no]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const googleStatus = params.get("google");
+    const reason = params.get("reason");
+    if (googleStatus === "connected") {
+      setActiveTab("integrations");
+      toast.success("Google Calendar connected");
+      window.history.replaceState({}, "", "/settings?tab=integrations");
+    } else if (googleStatus === "error") {
+      setActiveTab("integrations");
+      toast.error(reason ? `Google connection failed: ${reason}` : "Google connection failed");
+      window.history.replaceState({}, "", "/settings?tab=integrations");
+    }
+  }, []);
+
+  const refreshGoogleConnection = useCallback(async () => {
+    if (!user?.id) return;
+    setGoogleLoading(true);
+    try {
+      setGoogleConnection(await getGoogleConnection());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load Google connection");
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    refreshGoogleConnection();
+  }, [refreshGoogleConnection]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -229,6 +268,40 @@ const SettingsPage = () => {
       toast.success(`Exported ${mine.length} tasks`);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Export failed");
+    }
+  };
+
+  const handleConnectGoogle = async () => {
+    try {
+      await connectGoogle(`${window.location.origin}/settings?tab=integrations`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to start Google connection");
+    }
+  };
+
+  const handleSyncGoogleCalendar = async () => {
+    setGoogleSyncing(true);
+    try {
+      const result = await syncGoogleCalendar();
+      await refreshGoogleConnection();
+      toast.success(`Google Calendar synced (${result.synced} meetings)`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to sync Google Calendar");
+    } finally {
+      setGoogleSyncing(false);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    setGoogleDisconnecting(true);
+    try {
+      await disconnectGoogle();
+      setGoogleConnection(null);
+      toast.success("Google disconnected");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to disconnect Google");
+    } finally {
+      setGoogleDisconnecting(false);
     }
   };
 
@@ -404,23 +477,88 @@ const SettingsPage = () => {
             <h2 className="text-base font-semibold text-foreground">Integrations</h2>
             <p className="text-xs text-muted-foreground mt-0.5">Backend: Supabase (database + auth). Files: Firebase Storage.</p>
           </div>
-          <div className="flex items-center justify-between gap-4 p-4 rounded-lg border bg-background/50">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-11 h-11 rounded-lg bg-white border flex items-center justify-center shrink-0">
-                <GmailLogo className="h-6 w-6" />
+          <div className="rounded-lg border bg-background/50">
+            <div className="flex items-start justify-between gap-4 p-4">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-lg bg-white border flex items-center justify-center shrink-0">
+                  <GmailLogo className="h-6 w-6" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium text-foreground">Google Workspace</p>
+                    {googleConnection && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Connected
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Sync meetings from your Google Calendar into TaskFlow Calendar. Gmail task automation can be enabled later.
+                  </p>
+                  {googleConnection && (
+                    <div className="space-y-0.5 text-xs text-muted-foreground">
+                      <p>{googleConnection.google_email}</p>
+                      <p>
+                        Last calendar sync:{" "}
+                        {googleConnection.last_calendar_sync_at
+                          ? new Date(googleConnection.last_calendar_sync_at).toLocaleString()
+                          : "Not synced yet"}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">Gmail</p>
-                <p className="text-xs text-muted-foreground truncate">Auto-create tasks from work emails (coming soon).</p>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                {googleConnection ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSyncGoogleCalendar}
+                      disabled={googleSyncing || googleLoading}
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 mr-1 ${googleSyncing ? "animate-spin" : ""}`} />
+                      {googleSyncing ? "Syncing" : "Sync"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDisconnectGoogle}
+                      disabled={googleDisconnecting}
+                    >
+                      <Unplug className="h-3.5 w-3.5 mr-1" />
+                      {googleDisconnecting ? "Disconnecting" : "Disconnect"}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleConnectGoogle}
+                    disabled={googleLoading}
+                  >
+                    <CalendarDays className="h-3.5 w-3.5 mr-1" />
+                    Connect Google
+                  </Button>
+                )}
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => toast.info("Gmail connection coming soon.")}
-            >
-              Connect
-            </Button>
+            <div className="border-t px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium text-foreground">Gmail email-to-task automation</p>
+                  <p className="text-xs text-muted-foreground">Planned next. Calendar sync does not request Gmail read access.</p>
+                </div>
+                <Button variant="ghost" size="sm" disabled>
+                  Coming soon
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t pt-6">
+            <McpTokensPanel />
           </div>
 
           <div className="border-t pt-6">

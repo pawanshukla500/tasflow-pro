@@ -29,4 +29,8 @@ export const edgeEnv = {
   emailWebhookSecret: read("EMAIL_WEBHOOK_SECRET"),
 
   googleAiApiKey: read("GOOGLE_AI_API_KEY"),
+  googleOAuthClientId: read("GOOGLE_OAUTH_CLIENT_ID"),
+  googleOAuthClientSecret: read("GOOGLE_OAUTH_CLIENT_SECRET"),
+  googleOAuthRedirectUri: read("GOOGLE_OAUTH_REDIRECT_URI"),
+  googleTokenEncryptionKey: read("GOOGLE_TOKEN_ENCRYPTION_KEY"),
 } as const;

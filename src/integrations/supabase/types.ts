@@ -600,6 +600,145 @@ export type Database = {
         }
         Relationships: []
       }
+      user_google_connections: {
+        Row: {
+          access_token_ciphertext: string | null
+          calendar_sync_enabled: boolean
+          created_at: string
+          expires_at: string | null
+          gmail_tasks_enabled: boolean
+          google_email: string
+          google_sub: string | null
+          last_calendar_sync_at: string | null
+          organization_id: string | null
+          refresh_token_ciphertext: string | null
+          scope: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token_ciphertext?: string | null
+          calendar_sync_enabled?: boolean
+          created_at?: string
+          expires_at?: string | null
+          gmail_tasks_enabled?: boolean
+          google_email: string
+          google_sub?: string | null
+          last_calendar_sync_at?: string | null
+          organization_id?: string | null
+          refresh_token_ciphertext?: string | null
+          scope?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token_ciphertext?: string | null
+          calendar_sync_enabled?: boolean
+          created_at?: string
+          expires_at?: string | null
+          gmail_tasks_enabled?: boolean
+          google_email?: string
+          google_sub?: string | null
+          last_calendar_sync_at?: string | null
+          organization_id?: string | null
+          refresh_token_ciphertext?: string | null
+          scope?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_google_connections_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      google_calendar_events: {
+        Row: {
+          attendees: Json
+          created_at: string
+          description: string | null
+          end_at: string | null
+          end_date: string | null
+          google_calendar_id: string
+          google_event_id: string
+          hangout_link: string | null
+          html_link: string | null
+          id: string
+          is_all_day: boolean
+          location: string | null
+          organization_id: string | null
+          organizer_email: string | null
+          raw_event: Json
+          start_at: string | null
+          start_date: string | null
+          status: string
+          synced_at: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attendees?: Json
+          created_at?: string
+          description?: string | null
+          end_at?: string | null
+          end_date?: string | null
+          google_calendar_id?: string
+          google_event_id: string
+          hangout_link?: string | null
+          html_link?: string | null
+          id?: string
+          is_all_day?: boolean
+          location?: string | null
+          organization_id?: string | null
+          organizer_email?: string | null
+          raw_event?: Json
+          start_at?: string | null
+          start_date?: string | null
+          status?: string
+          synced_at?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attendees?: Json
+          created_at?: string
+          description?: string | null
+          end_at?: string | null
+          end_date?: string | null
+          google_calendar_id?: string
+          google_event_id?: string
+          hangout_link?: string | null
+          html_link?: string | null
+          id?: string
+          is_all_day?: boolean
+          location?: string | null
+          organization_id?: string | null
+          organizer_email?: string | null
+          raw_event?: Json
+          start_at?: string | null
+          start_date?: string | null
+          status?: string
+          synced_at?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_scratch_notes: {
         Row: {
           id: string
