@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Clock, GitBranch, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, GitBranch, Info, TrendingDown, TrendingUp } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import type { UserPerformanceMetrics, PerformanceReason } from "@/hooks/usePerformance";
@@ -16,13 +16,24 @@ interface Props {
 }
 
 export function PerformanceBreakdown({ metrics, compact = false, showReasons = true }: Props) {
-  const factors = [
-    { label: "Task completion", value: metrics.task_completion_rate, weight: 40 },
-    { label: "On-time delivery", value: metrics.on_time_rate, weight: 25 },
-    { label: "Workflow completion", value: metrics.workflow_completion_rate, weight: 20 },
-    { label: "Quality / approvals", value: metrics.quality_rate, weight: 10 },
-    { label: "Response time", value: metrics.collaboration_score, weight: 5 },
-  ];
+  const hasData = metrics.has_sufficient_data ?? (metrics.tasks_assigned > 0 || metrics.workflows_assigned > 0);
+
+  const factors = (metrics.score_breakdown?.length
+    ? metrics.score_breakdown.map((b) => ({
+        label: b.factor,
+        value: b.value,
+        weight: b.weight,
+        contribution: b.contribution,
+      }))
+    : [
+        { label: "Task completion", value: metrics.task_completion_rate, weight: 30, contribution: Math.round(metrics.task_completion_rate * 0.3) },
+        { label: "On-time delivery", value: metrics.on_time_rate, weight: 25, contribution: Math.round(metrics.on_time_rate * 0.25) },
+        { label: "Overdue health", value: metrics.overdue_penalty_score ?? 100, weight: 15, contribution: Math.round((metrics.overdue_penalty_score ?? 100) * 0.15) },
+        { label: "Workflow completion", value: metrics.workflow_completion_rate, weight: 15, contribution: Math.round(metrics.workflow_completion_rate * 0.15) },
+        { label: "Quality / reviews", value: metrics.quality_rate, weight: 10, contribution: Math.round(metrics.quality_rate * 0.1) },
+        { label: "Recent activity", value: metrics.engagement_score ?? 0, weight: 5, contribution: Math.round((metrics.engagement_score ?? 0) * 0.05) },
+        { label: "Response time", value: metrics.collaboration_score, weight: 5, contribution: Math.round(metrics.collaboration_score * 0.05) },
+      ]);
 
   const reasons = (metrics.deduction_reasons || []).filter(
     (r) => showReasons || r.impact === "negative",
@@ -33,7 +44,11 @@ export function PerformanceBreakdown({ metrics, compact = false, showReasons = t
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs text-muted-foreground">Performance score</p>
-          <p className="text-2xl font-bold font-mono-num">{metrics.performance_score}</p>
+          {hasData ? (
+            <p className="text-2xl font-bold font-mono-num">{metrics.performance_score}</p>
+          ) : (
+            <p className="text-2xl font-bold text-muted-foreground">N/A</p>
+          )}
         </div>
         <div className="text-right text-xs text-muted-foreground space-y-0.5">
           <p>{metrics.tasks_completed}/{metrics.tasks_assigned} tasks done</p>
@@ -41,23 +56,40 @@ export function PerformanceBreakdown({ metrics, compact = false, showReasons = t
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center">
-        <Stat icon={<CheckCircle2 className="h-3.5 w-3.5" />} label="On-time" value={`${Math.round(metrics.on_time_rate)}%`} />
-        <Stat icon={<GitBranch className="h-3.5 w-3.5" />} label="Workflows" value={`${metrics.workflows_completed}/${metrics.workflows_assigned}`} />
-        <Stat icon={<AlertTriangle className="h-3.5 w-3.5" />} label="Pending" value={String(metrics.tasks_pending)} />
-      </div>
+      {!hasData && (
+        <div className="flex items-start gap-2 text-xs rounded-md border px-2.5 py-2 bg-muted/30 text-muted-foreground">
+          <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span>No assigned work yet. Your score will be calculated once tasks or workflow stages are assigned to you.</span>
+        </div>
+      )}
 
-      {!compact && (
+      {hasData && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center">
+          <Stat icon={<CheckCircle2 className="h-3.5 w-3.5" />} label="On-time" value={`${Math.round(metrics.on_time_rate)}%`} />
+          <Stat icon={<GitBranch className="h-3.5 w-3.5" />} label="Workflows" value={`${metrics.workflows_completed}/${metrics.workflows_assigned}`} />
+          <Stat icon={<AlertTriangle className="h-3.5 w-3.5" />} label="Pending" value={String(metrics.tasks_pending)} />
+        </div>
+      )}
+
+      {!compact && hasData && (
         <div className="space-y-2">
+          <p className="text-xs font-medium text-foreground">How your score is calculated</p>
           {factors.map((f) => (
             <div key={f.label}>
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-muted-foreground">{f.label} ({f.weight}%)</span>
-                <span className="font-mono-num font-medium">{Math.round(f.value)}%</span>
+                <span className="text-muted-foreground">
+                  {f.label} ({f.weight}%)
+                </span>
+                <span className="font-mono-num font-medium">
+                  {Math.round(f.value)}% → +{f.contribution ?? Math.round(f.value * f.weight / 100)} pts
+                </span>
               </div>
               <Progress value={f.value} className="h-1.5" />
             </div>
           ))}
+          <p className="text-[10px] text-muted-foreground pt-1">
+            Total = sum of weighted contributions (max 100). Overdue tasks and low activity reduce your score.
+          </p>
         </div>
       )}
 

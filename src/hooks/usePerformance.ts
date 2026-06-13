@@ -8,6 +8,13 @@ export interface PerformanceReason {
   impact: "positive" | "negative" | "neutral";
 }
 
+export interface ScoreBreakdownItem {
+  factor: string;
+  weight: number;
+  value: number;
+  contribution: number;
+}
+
 export interface UserPerformanceMetrics {
   user_id: string;
   organization_id: string | null;
@@ -29,6 +36,10 @@ export interface UserPerformanceMetrics {
   workflow_completion_rate: number;
   quality_rate: number;
   collaboration_score: number;
+  engagement_score?: number;
+  overdue_penalty_score?: number;
+  has_sufficient_data?: boolean;
+  score_breakdown?: ScoreBreakdownItem[];
   deduction_reasons: PerformanceReason[];
   updated_at: string;
 }
@@ -63,6 +74,8 @@ export function usePerformance(userIds?: string[]) {
         (data || []).map((m: UserPerformanceMetrics) => ({
           ...m,
           deduction_reasons: Array.isArray(m.deduction_reasons) ? m.deduction_reasons : [],
+          score_breakdown: Array.isArray(m.score_breakdown) ? m.score_breakdown : [],
+          has_sufficient_data: m.has_sufficient_data ?? (m.tasks_assigned > 0 || m.workflows_assigned > 0),
         })),
       );
     } catch (e) {
@@ -136,7 +149,7 @@ export function buildProductivityTrends(
       label,
       tasks_completed: doneTasks.length,
       workflows_completed: doneWf.length,
-      on_time_pct: doneTasks.length ? Math.round((onTime / doneTasks.length) * 100) : 100,
+      on_time_pct: doneTasks.length ? Math.round((onTime / doneTasks.length) * 100) : 0,
     });
   }
 
@@ -154,7 +167,11 @@ export function buildDepartmentPerformance(
 
   return departments.map((dept) => {
     const deptProfiles = profiles.filter((p) => p.department_id === dept.id);
-    const deptMetrics = metrics.filter((m) => deptProfiles.some((p) => p.id === m.user_id));
+    const deptMetrics = metrics.filter(
+      (m) =>
+        deptProfiles.some((p) => p.id === m.user_id) &&
+        (m.has_sufficient_data ?? (m.tasks_assigned > 0 || m.workflows_assigned > 0)),
+    );
     const deptTasks = tasks.filter((t) => t.department_id === dept.id);
     const done = deptTasks.filter((t) => t.status === "done");
     const onTime = done.filter((t) => t.completed_on_time !== false);
@@ -171,7 +188,7 @@ export function buildDepartmentPerformance(
       tasks_overdue: deptTasks.filter(
         (t) => t.status !== "done" && t.due_date && t.due_date < today,
       ).length,
-      on_time_pct: done.length ? Math.round((onTime.length / done.length) * 100) : 100,
+      on_time_pct: done.length ? Math.round((onTime.length / done.length) * 100) : 0,
       pending_workflows: workflows.filter(
         (w) => w.raised_by_department_id === dept.id && w.status === "active",
       ).length,

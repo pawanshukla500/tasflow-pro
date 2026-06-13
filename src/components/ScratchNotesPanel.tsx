@@ -92,19 +92,43 @@ export function ScratchNotesPanel({ compact = false }: { compact?: boolean }) {
   const polishNote = async (note: ScratchNote) => {
     setPolishingId(note.id);
     try {
-      const result = await invokeEdgeFunction<{ polished?: string; error?: string }>("polish-note", {
+      const result = await invokeEdgeFunction<{
+        polished?: string;
+        error?: string;
+        code?: string;
+        source?: string;
+        changed?: boolean;
+      }>("polish-note", {
         body: { content: note.content },
       });
-      const polished = result?.polished || note.content;
+
+      if (result?.error) {
+        throw new Error(result.error);
+      }
+
+      const polished = result?.polished?.trim();
+      if (!polished) {
+        throw new Error("AI returned no polished text");
+      }
+
+      if (!result.changed && polished === note.content.trim()) {
+        toast({ title: "Already polished", description: "No grammar changes were needed." });
+        return;
+      }
+
       const { error } = await supabase.from("user_scratch_notes").update({
         polished_content: polished,
         content: polished,
       }).eq("id", note.id).eq("user_id", user!.id);
       if (error) throw error;
-      toast({ title: "Polished with AI", description: "Grammar and clarity improved." });
+      toast({
+        title: "Polished with AI",
+        description: result.source ? `Improved using ${result.source}` : "Grammar and clarity improved.",
+      });
       fetchNotes();
     } catch (err: unknown) {
-      toast({ title: "Polish failed", description: formatDbError(err), variant: "destructive" });
+      const msg = err instanceof Error ? err.message : formatDbError(err);
+      toast({ title: "Polish failed", description: msg, variant: "destructive" });
     } finally {
       setPolishingId(null);
     }

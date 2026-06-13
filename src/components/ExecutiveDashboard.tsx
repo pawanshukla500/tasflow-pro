@@ -46,7 +46,14 @@ export function ExecutiveDashboard({
 
   const topDepts = deptPerf.slice(0, 3);
   const bottomDepts = [...deptPerf].sort((a, b) => a.avg_score - b.avg_score).slice(0, 3);
-  const topUsers = [...metrics].sort((a, b) => b.performance_score - a.performance_score).slice(0, 5);
+  const topUsers = [...metrics]
+    .sort((a, b) => {
+      const aHas = a.has_sufficient_data ?? (a.tasks_assigned > 0 || a.workflows_assigned > 0);
+      const bHas = b.has_sufficient_data ?? (b.tasks_assigned > 0 || b.workflows_assigned > 0);
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      return b.performance_score - a.performance_score;
+    })
+    .slice(0, 5);
   const wfCompleted = workflows.filter((w) => w.status === "completed").length;
   const wfTotal = workflows.length;
   const orgAvg = metrics.length
@@ -143,8 +150,8 @@ export function ExecutiveDashboard({
                     {m.tasks_completed}/{m.tasks_assigned} tasks · {Math.round(m.on_time_rate)}% on-time
                   </p>
                 </div>
-                <Badge variant={m.performance_score >= 70 ? "default" : "destructive"} className="font-mono-num">
-                  {m.performance_score}
+                <Badge variant={m.has_sufficient_data === false ? "outline" : m.performance_score >= 70 ? "default" : "destructive"} className="font-mono-num">
+                  {m.has_sufficient_data === false ? "N/A" : m.performance_score}
                 </Badge>
               </div>
             );
