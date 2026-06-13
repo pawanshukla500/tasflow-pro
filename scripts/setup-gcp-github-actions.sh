@@ -27,10 +27,12 @@ gcloud iam service-accounts describe "$SA_EMAIL" 2>/dev/null || \
 GITHUB_SA_ROLES=(
   roles/run.admin
   roles/cloudbuild.builds.editor
+  roles/cloudbuild.builds.viewer
   roles/artifactregistry.writer
   roles/iam.serviceAccountUser
   roles/storage.admin
   roles/serviceusage.serviceUsageConsumer
+  roles/logging.viewer
 )
 
 echo "==> Granting IAM roles to GitHub Actions SA..."

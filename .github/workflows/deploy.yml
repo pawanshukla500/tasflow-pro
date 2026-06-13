@@ -74,11 +74,30 @@ jobs:
           TAG="${GITHUB_SHA::7}"
           IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/cloud-run-source-deploy/${CLOUD_RUN_SERVICE}/${CLOUD_RUN_SERVICE}:${TAG}"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
-          gcloud builds submit --tag "$IMAGE" \
+          BUILD_ID=$(gcloud builds submit --tag "$IMAGE" \
             --timeout=1200s \
             --machine-type=e2-highcpu-8 \
             --project "$GCP_PROJECT_ID" \
-            .
+            --async \
+            --format='value(id)' \
+            .)
+          echo "Cloud Build ID: $BUILD_ID"
+          STATUS=""
+          for _ in $(seq 1 80); do
+            STATUS=$(gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --format='value(status)')
+            echo "Build status: $STATUS"
+            if [ "$STATUS" = "SUCCESS" ]; then break; fi
+            if [ "$STATUS" = "FAILURE" ] || [ "$STATUS" = "CANCELLED" ] || [ "$STATUS" = "TIMEOUT" ] || [ "$STATUS" = "INTERNAL_ERROR" ]; then
+              echo "::error::Cloud Build failed with status $STATUS"
+              gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --format='yaml(failureInfo,statusDetail)' || true
+              exit 1
+            fi
+            sleep 15
+          done
+          if [ "$STATUS" != "SUCCESS" ]; then
+            echo "::error::Timed out waiting for Cloud Build $BUILD_ID (last status: $STATUS)"
+            exit 1
+          fi
 
       - name: Deploy to Cloud Run
         run: |
