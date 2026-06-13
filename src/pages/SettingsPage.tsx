@@ -9,12 +9,34 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/edgeFunctions";
 import { toast } from "sonner";
-import { Upload, Download, User, Bell, Palette, Plug, Settings2, KeyRound, Eye, EyeOff } from "lucide-react";
+import {
+  Upload,
+  Download,
+  User,
+  Bell,
+  Palette,
+  Plug,
+  Settings2,
+  KeyRound,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  RefreshCw,
+  Unplug,
+  CalendarDays,
+} from "lucide-react";
 import { firebaseChangePassword, isFirebaseAuthError } from "@/integrations/firebase/auth";
 import { todayIST } from "@/lib/time";
 import { PageHeader } from "@/components/PageHeader";
 import { AdminSettingsPanel } from "@/components/AdminSettingsPanel";
 import { McpTokensPanel } from "@/components/McpTokensPanel";
+import {
+  type GoogleConnection,
+  connectGoogle,
+  disconnectGoogle,
+  getGoogleConnection,
+  syncGoogleCalendar,
+} from "@/lib/googleIntegration";
 
 const baseTabs = [
   { id: "profile", label: "Profile", icon: User },
@@ -555,10 +577,6 @@ const SettingsPage = () => {
                 </Button>
               </div>
             </div>
-          </div>
-
-          <div className="border-t pt-6">
-            <McpTokensPanel />
           </div>
 
           <div className="border-t pt-6">

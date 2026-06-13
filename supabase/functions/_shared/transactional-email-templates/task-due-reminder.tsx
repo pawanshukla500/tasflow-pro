@@ -16,7 +16,7 @@ const formatDue = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''
 
 const statusFor = (dueDate?: string | null) => {
-  if (!dueDate) return { label: '', color: colors.muted }
+  if (!dueDate) return { label: 'PENDING', color: colors.muted }
   const today = todayKey()
   if (dueDate < today) return { label: 'OVERDUE', color: colors.danger }
   if (dueDate === today) return { label: 'DUE TODAY', color: colors.warning }
@@ -36,10 +36,10 @@ const TaskDueReminderEmail = ({ recipientName, tasks = [] }: Props) => {
       heroTitle="Tasks need your attention"
       heroSubtitle={summary}
     >
-      <Heading style={h1}>Tasks coming due ⏰</Heading>
+      <Heading style={h1}>Your pending tasks ⏰</Heading>
       <Text style={text}>Hi{recipientName ? ` ${recipientName}` : ''},</Text>
       <Text style={text}>
-        You have {tasks.length} item{tasks.length === 1 ? '' : 's'} that need attention
+        You have {tasks.length} pending item{tasks.length === 1 ? '' : 's'}
         {overdueCount > 0 ? ` — ${overdueCount} already overdue.` : '.'} Please review and take action.
       </Text>
       <Section style={{
@@ -76,8 +76,8 @@ export const template = {
     const overdue = tasks.filter((t) => t.dueDate && t.dueDate < today).length
     if (overdue > 0) return `${overdue} overdue task${overdue === 1 ? '' : 's'} need attention`
     return tasks.length > 0
-      ? `${tasks.length} task${tasks.length === 1 ? '' : 's'} due soon`
-      : 'Tasks due soon'
+      ? `${tasks.length} pending task${tasks.length === 1 ? '' : 's'}`
+      : 'Your pending tasks'
   },
   displayName: 'Task due reminder',
   previewData: {
