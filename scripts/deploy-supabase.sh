@@ -64,6 +64,15 @@ else
   echo "==> Skipping db push (SUPABASE_DB_PASSWORD not set)."
 fi
 
+if [[ -n "${GOOGLE_AI_API_KEY:-}" ]]; then
+  echo "==> Setting GOOGLE_AI_API_KEY for edge functions (polish-note, daily-motivation)..."
+  $SUPABASE_CLI secrets set "GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY}" --project-ref "$PROJECT_REF"
+else
+  echo "==> GOOGLE_AI_API_KEY not set — Polish with AI and AI daily quotes will use fallbacks/errors."
+  echo "    Add GOOGLE_AI_API_KEY to GitHub Actions secrets or run:"
+  echo "    npx supabase secrets set GOOGLE_AI_API_KEY=your-key --project-ref $PROJECT_REF"
+fi
+
 echo "==> Deploying edge functions..."
 MCP_FUNCTIONS=(mcp-server issue-mcp-token)
 GOOGLE_FUNCTIONS=(
