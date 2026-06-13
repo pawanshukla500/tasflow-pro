@@ -53,7 +53,7 @@ if [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
   echo "==> Applying database migrations..."
   ENCODED_PW="$(urlencode "$SUPABASE_DB_PASSWORD")"
   export SUPABASE_DB_URL="postgresql://postgres.${PROJECT_REF}:${ENCODED_PW}@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres"
-  if $SUPABASE_CLI db push --include-all; then
+  if $SUPABASE_CLI db push --include-all --yes; then
     echo "==> Migrations applied."
   else
     DB_PUSH_OK=0
