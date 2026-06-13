@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAccessScope } from "@/hooks/useAccessScope";
 import { ScopeBanner } from "@/components/ScopeBanner";
 import { supabase } from "@/integrations/supabase/client";
+import { usePerformance } from "@/hooks/usePerformance";
 import { useTasks } from "@/hooks/useTasks";
 import CreateTaskModal from "@/components/CreateTaskModal";
 import { PageHeader } from "@/components/PageHeader";
@@ -127,6 +128,7 @@ const Dashboard = () => {
     () => filterProfiles(profiles),
     [profiles, filterProfiles],
   );
+  const { metrics: perfMetrics } = usePerformance(scopedProfiles.map((p: { id: string }) => p.id));
 
   const scopedDepartments = useMemo(
     () => filterDepartments(departments),
@@ -248,11 +250,20 @@ const Dashboard = () => {
   ];
 
   const activeWorkflows = workflows.filter(w => w.status === "active");
-  const topPerformers = scopedProfiles
-    .slice()
-    .sort((a: { performance_score?: number }, b: { performance_score?: number }) =>
-      (b.performance_score ?? 0) - (a.performance_score ?? 0))
-    .slice(0, 5);
+  const topPerformers = useMemo(() => {
+    const metricsByUser = new Map(perfMetrics.map((m) => [m.user_id, m]));
+    return scopedProfiles
+      .slice()
+      .sort((a, b) => {
+        const ma = metricsByUser.get(a.id);
+        const mb = metricsByUser.get(b.id);
+        const aHas = ma?.has_sufficient_data ?? false;
+        const bHas = mb?.has_sufficient_data ?? false;
+        if (aHas !== bHas) return aHas ? -1 : 1;
+        return (mb?.performance_score ?? 0) - (ma?.performance_score ?? 0);
+      })
+      .slice(0, 5);
+  }, [scopedProfiles, perfMetrics]);
   const medals = ["🥇", "🥈", "🥉"];
   const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 
@@ -562,7 +573,11 @@ const Dashboard = () => {
                 <p className="text-sm text-muted-foreground py-4 text-center">No team members yet</p>
               ) : (
                 <div className="space-y-3 stagger-children">
-                  {topPerformers.map((u, i) => (
+                  {topPerformers.map((u, i) => {
+                    const m = perfMetrics.find((pm) => pm.user_id === u.id);
+                    const hasData = m?.has_sufficient_data ?? false;
+                    const score = hasData ? u.performance_score : null;
+                    return (
                     <div key={u.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted/40 transition-colors">
                       <span className="w-6 text-center text-sm">{medals[i] || <span className="text-[11px] text-muted-foreground font-mono-num">{i + 1}</span>}</span>
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center text-[10px] font-bold ring-2 ring-background shadow-sm">
@@ -573,13 +588,20 @@ const Dashboard = () => {
                         <p className="text-[10px] text-muted-foreground truncate">{u.position || "Team Member"}</p>
                       </div>
                       <div className="flex items-center gap-2">
+                        {score === null ? (
+                          <span className="text-[10px] text-muted-foreground">N/A</span>
+                        ) : (
+                        <>
                         <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-gradient-to-r from-success to-success/70 bar-grow" style={{ width: `${u.performance_score}%`, animationDelay: `${300 + i * 80}ms` }} />
+                          <div className="h-full rounded-full bg-gradient-to-r from-success to-success/70 bar-grow" style={{ width: `${score}%`, animationDelay: `${300 + i * 80}ms` }} />
                         </div>
-                        <span className="text-[10px] font-mono-num text-foreground font-semibold w-8 text-right">{u.performance_score}%</span>
+                        <span className="text-[10px] font-mono-num text-foreground font-semibold w-8 text-right">{score}%</span>
+                        </>
+                        )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

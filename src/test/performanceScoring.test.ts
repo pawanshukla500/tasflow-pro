@@ -34,6 +34,7 @@ describe("buildDepartmentPerformance", () => {
     const profiles = [
       { id: "u1", name: "A", department_id: "d1" },
       { id: "u2", name: "B", department_id: "d2" },
+      { id: "u3", name: "C", department_id: "d1" },
     ];
     const metrics = [
       {
@@ -55,6 +56,7 @@ describe("buildDepartmentPerformance", () => {
         workflow_completion_rate: 100,
         quality_rate: 100,
         collaboration_score: 80,
+        has_sufficient_data: true,
         deduction_reasons: [],
       },
       {
@@ -76,6 +78,29 @@ describe("buildDepartmentPerformance", () => {
         workflow_completion_rate: 0,
         quality_rate: 100,
         collaboration_score: 70,
+        has_sufficient_data: true,
+        deduction_reasons: [],
+      },
+      {
+        user_id: "u3",
+        performance_score: 0,
+        tasks_assigned: 0,
+        tasks_completed: 0,
+        tasks_on_time: 0,
+        tasks_late: 0,
+        tasks_overdue: 0,
+        tasks_pending: 0,
+        workflows_assigned: 0,
+        workflows_completed: 0,
+        workflows_on_time: 0,
+        reviews_passed: 0,
+        reviews_total: 0,
+        on_time_rate: 0,
+        task_completion_rate: 0,
+        workflow_completion_rate: 0,
+        quality_rate: 0,
+        collaboration_score: 0,
+        has_sufficient_data: false,
         deduction_reasons: [],
       },
     ] as Parameters<typeof buildDepartmentPerformance>[2];
@@ -96,5 +121,11 @@ describe("buildProductivityTrends", () => {
     );
     expect(result).toHaveLength(8);
     expect(result.some((p) => p.tasks_completed >= 1)).toBe(true);
+    expect(result.at(-1)?.on_time_pct).toBe(100);
+  });
+
+  it("uses zero on-time when no tasks completed in week", () => {
+    const result = buildProductivityTrends([], []);
+    expect(result[0].on_time_pct).toBe(0);
   });
 });

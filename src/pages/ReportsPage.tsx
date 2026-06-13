@@ -11,6 +11,7 @@ import { ScopeBanner } from "@/components/ScopeBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { toast } from "sonner";
 import { formatDateIST } from "@/lib/time";
+import { usePerformance } from "@/hooks/usePerformance";
 
 interface StageRow {
   id: string;
@@ -36,6 +37,19 @@ const ReportsPage = () => {
   const scopedDepartments = useMemo(() => filterDepartments(departments), [departments, filterDepartments]);
   const tasks = useMemo(() => filterTasks(allTasks, profiles), [allTasks, profiles, filterTasks]);
   const deptNames = useMemo(() => scopedDepartments.map((d: { name: string }) => d.name), [scopedDepartments]);
+  const { metrics: perfMetrics } = usePerformance(scopedProfiles.map((p: { id: string }) => p.id));
+
+  const rankedProfiles = useMemo(() => {
+    const metricsByUser = new Map(perfMetrics.map((m) => [m.user_id, m]));
+    return [...scopedProfiles].sort((a, b) => {
+      const ma = metricsByUser.get(a.id);
+      const mb = metricsByUser.get(b.id);
+      const aHas = ma?.has_sufficient_data ?? false;
+      const bHas = mb?.has_sufficient_data ?? false;
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      return (mb?.performance_score ?? 0) - (ma?.performance_score ?? 0);
+    });
+  }, [scopedProfiles, perfMetrics]);
 
   useEffect(() => {
     const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
@@ -313,7 +327,11 @@ const ReportsPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {scopedProfiles.map((u, i) => (
+                  {rankedProfiles.map((u, i) => {
+                    const m = perfMetrics.find((pm) => pm.user_id === u.id);
+                    const hasData = m?.has_sufficient_data ?? false;
+                    const score = hasData ? u.performance_score : null;
+                    return (
                     <tr key={u.id} className="border-b last:border-b-0 hover:bg-muted/30">
                       <td className="py-2 px-2 text-center">{medals[i] || i + 1}</td>
                       <td className="py-2 px-2">
@@ -324,15 +342,20 @@ const ReportsPage = () => {
                       </td>
                       <td className="py-2 px-2 text-muted-foreground">{u.position || "—"}</td>
                       <td className="py-2 px-2 text-right">
+                        {score === null ? (
+                          <span className="text-xs text-muted-foreground">N/A</span>
+                        ) : (
                         <div className="flex items-center justify-end gap-2">
                           <div className="w-16 h-1.5 bg-muted rounded-full">
-                            <div className={`h-full rounded-full ${u.performance_score >= 80 ? "bg-success" : u.performance_score >= 60 ? "bg-warning" : "bg-destructive"}`} style={{ width: `${u.performance_score}%` }} />
+                            <div className={`h-full rounded-full ${score >= 80 ? "bg-success" : score >= 60 ? "bg-warning" : "bg-destructive"}`} style={{ width: `${score}%` }} />
                           </div>
-                          <span className="font-mono-num text-xs w-8 text-right">{u.performance_score}%</span>
+                          <span className="font-mono-num text-xs w-8 text-right">{score}%</span>
                         </div>
+                        )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
