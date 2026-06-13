@@ -110,9 +110,33 @@ npx supabase db push
 | `FIREBASE_SERVICE_ACCOUNT_JSON_PATH` | Path to `./secrets/firebase-service-account.json` (local) |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Inline JSON in Supabase Dashboard secrets (production) |
 | `FIREBASE_STORAGE_BUCKET` | Firebase bucket name |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client for per-user Calendar connection |
+| `GOOGLE_OAUTH_REDIRECT_URI` | `https://<project>.supabase.co/functions/v1/google-oauth-callback` |
+| `GOOGLE_TOKEN_ENCRYPTION_KEY` | Long random secret used to encrypt user Google tokens |
 | `GMAIL_*` / `EMAIL_LOGO_URL` / `APP_URL` | Email sending |
 
 **Note:** The React app does **not** use `DATABASE_URL` directly — it uses `VITE_SUPABASE_URL` + anon key. `DATABASE_URL` is for migrations (`npx supabase db push`).
+
+### AI tools (MCP)
+Connect external AI clients (Claude, ChatGPT, …) to TaskFlow Pro via a hosted **MCP server**
+(`supabase/functions/mcp-server`, Streamable HTTP). Each user generates a **Personal Access Token**
+in **Settings → Integrations → AI Connections**, then adds the server to their AI client:
+
+```json
+{
+  "mcpServers": {
+    "taskflow-pro": {
+      "type": "http",
+      "url": "https://<project>.supabase.co/functions/v1/mcp-server",
+      "headers": { "Authorization": "Bearer <YOUR_TOKEN>" }
+    }
+  }
+}
+```
+
+The token maps to one user; every tool call runs under that user's Supabase RLS scope, so the AI can
+only see/do what the user could. Tools cover tasks, subtasks, workflows, departments and people.
+Deploy: `npx supabase db push` then `npx supabase functions deploy mcp-server issue-mcp-token`.
 
 ---
 

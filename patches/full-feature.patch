@@ -1,0 +1,3915 @@
+diff --git a/.env.example b/.env.example
+index 518d2d9..8021051 100644
+--- a/.env.example
++++ b/.env.example
+@@ -25,6 +25,12 @@ SUPABASE_SERVICE_ROLE_KEY=REPLACE_ME_service_role_key
+ FIREBASE_SERVICE_ACCOUNT_JSON_PATH=./secrets/firebase-service-account.json
+ FIREBASE_STORAGE_BUCKET=YOUR_PROJECT.firebasestorage.app
+ 
++# Google Calendar user-level OAuth (Supabase Edge Function secrets)
++GOOGLE_OAUTH_CLIENT_ID=REPLACE_ME_google_oauth_client_id
++GOOGLE_OAUTH_CLIENT_SECRET=REPLACE_ME_google_oauth_client_secret
++GOOGLE_OAUTH_REDIRECT_URI=https://YOUR_PROJECT.supabase.co/functions/v1/google-oauth-callback
++GOOGLE_TOKEN_ENCRYPTION_KEY=REPLACE_ME_long_random_secret
++
+ # ─── Email (Resend) — upload with: node scripts/upload-email-secrets.mjs ─────
+ RESEND_API_KEY=REPLACE_ME_resend_api_key
+ EMAIL_FROM=noreply@youthnic.shop
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 495251c..71ab7af 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -84,6 +84,20 @@ Multi-tenant: every row is scoped to an `organization_id`. RLS policies enforce
+ 
+ Attachments and avatars go to Firebase Storage via the `firebase-upload` edge function. The client gets a download URL back; metadata is stored in `task_attachments`.
+ 
++### MCP server (external AI access)
++
++`supabase/functions/mcp-server` is a hand-rolled JSON-RPC 2.0 / Streamable HTTP MCP server that lets
++external AI clients act on TaskFlow data. Auth is a **Personal Access Token** (table
++`mcp_access_tokens`, only the SHA-256 hash stored), issued by `issue-mcp-token` and managed in
++Settings → Integrations (`src/components/McpTokensPanel.tsx`, `src/lib/mcpTokens.ts`).
++
++Key design: the server never queries tool data with the service role. `_shared/mcp-auth.ts` validates
++the PAT, then mints a **user-scoped Supabase session** (the same magic-link trick as `firebase-auth`)
++and runs every tool through it — so existing RLS policies enforce per-user "full access" automatically.
++`config.toml` sets `verify_jwt = false` for `mcp-server` (the bearer is a PAT, not a Supabase JWT).
++Tools live in `supabase/functions/mcp-server/tools/` (tasks, workflows, org); add a tool by exporting
++it from one of those files — it's auto-registered via `tools/index.ts`.
++
+ ## Environment setup
+ 
+ Copy `.env.example` → `.env`. Required frontend vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`. Firebase vars (`VITE_FIREBASE_*`) are needed for auth and uploads. Backend secrets (no `VITE_` prefix) are set in Supabase Dashboard → Edge Function secrets.
+diff --git a/README.md b/README.md
+index 31d3742..f83f412 100644
+--- a/README.md
++++ b/README.md
+@@ -110,6 +110,9 @@ npx supabase db push
+ | `FIREBASE_SERVICE_ACCOUNT_JSON_PATH` | Path to `./secrets/firebase-service-account.json` (local) |
+ | `FIREBASE_SERVICE_ACCOUNT_JSON` | Inline JSON in Supabase Dashboard secrets (production) |
+ | `FIREBASE_STORAGE_BUCKET` | Firebase bucket name |
++| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client for per-user Calendar connection |
++| `GOOGLE_OAUTH_REDIRECT_URI` | `https://<project>.supabase.co/functions/v1/google-oauth-callback` |
++| `GOOGLE_TOKEN_ENCRYPTION_KEY` | Long random secret used to encrypt user Google tokens |
+ | `GMAIL_*` / `EMAIL_LOGO_URL` / `APP_URL` | Email sending |
+ 
+ **Note:** The React app does **not** use `DATABASE_URL` directly — it uses `VITE_SUPABASE_URL` + anon key. `DATABASE_URL` is for migrations (`npx supabase db push`).
+@@ -135,6 +138,27 @@ npx supabase db push
+ ### Email
+ Branded HTML via **Gmail API** (not Resend). Welcome email on team member create.
+ 
++### AI tools (MCP)
++Connect external AI clients (Claude, ChatGPT, …) to TaskFlow Pro via a hosted **MCP server**
++(`supabase/functions/mcp-server`, Streamable HTTP). Each user generates a **Personal Access Token**
++in **Settings → Integrations → AI Connections**, then adds the server to their AI client:
++
++```json
++{
++  "mcpServers": {
++    "taskflow-pro": {
++      "type": "http",
++      "url": "https://<project>.supabase.co/functions/v1/mcp-server",
++      "headers": { "Authorization": "Bearer <YOUR_TOKEN>" }
++    }
++  }
++}
++```
++
++The token maps to one user; every tool call runs under that user's Supabase RLS scope, so the AI can
++only see/do what the user could. Tools cover tasks, subtasks, workflows, departments and people.
++Deploy: `npx supabase db push` then `npx supabase functions deploy mcp-server issue-mcp-token`.
++
+ ---
+ 
+ ## Scripts
+diff --git a/src/components/McpTokensPanel.tsx b/src/components/McpTokensPanel.tsx
+new file mode 100644
+index 0000000..0e670c5
+--- /dev/null
++++ b/src/components/McpTokensPanel.tsx
+@@ -0,0 +1,258 @@
++import { useEffect, useState } from "react";
++import { Button } from "@/components/ui/button";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
++import { toast } from "sonner";
++import { Bot, Copy, Check, Trash2, Plus, KeyRound } from "lucide-react";
++import {
++  type McpToken,
++  issueMcpToken,
++  listMcpTokens,
++  mcpServerUrl,
++  revokeMcpToken,
++} from "@/lib/mcpTokens";
++
++function CopyButton({ value, label = "Copy" }: { value: string; label?: string }) {
++  const [copied, setCopied] = useState(false);
++  return (
++    <Button
++      variant="outline"
++      size="sm"
++      onClick={async () => {
++        await navigator.clipboard.writeText(value);
++        setCopied(true);
++        setTimeout(() => setCopied(false), 1500);
++      }}
++    >
++      {copied ? <Check className="h-3.5 w-3.5 mr-1" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
++      {copied ? "Copied" : label}
++    </Button>
++  );
++}
++
++export function McpTokensPanel() {
++  const [tokens, setTokens] = useState<McpToken[]>([]);
++  const [loading, setLoading] = useState(true);
++  const [name, setName] = useState("");
++  const [expiry, setExpiry] = useState("never");
++  const [creating, setCreating] = useState(false);
++  const [newToken, setNewToken] = useState<string | null>(null);
++
++  const url = mcpServerUrl();
++
++  const refresh = async () => {
++    try {
++      setTokens(await listMcpTokens());
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : "Failed to load tokens");
++    } finally {
++      setLoading(false);
++    }
++  };
++
++  useEffect(() => {
++    refresh();
++  }, []);
++
++  const handleCreate = async () => {
++    if (!name.trim()) {
++      toast.error("Give the token a name (e.g. 'Claude Desktop')");
++      return;
++    }
++    setCreating(true);
++    try {
++      const days = expiry === "never" ? undefined : Number(expiry);
++      const { token } = await issueMcpToken(name.trim(), days);
++      setNewToken(token);
++      setName("");
++      setExpiry("never");
++      await refresh();
++      toast.success("Token created — copy it now, it won't be shown again");
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : "Failed to create token");
++    } finally {
++      setCreating(false);
++    }
++  };
++
++  const handleRevoke = async (id: string, label: string) => {
++    if (!confirm(`Revoke "${label}"? Any AI client using it will lose access immediately.`)) return;
++    try {
++      await revokeMcpToken(id);
++      await refresh();
++      toast.success("Token revoked");
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : "Failed to revoke token");
++    }
++  };
++
++  // Working Claude Desktop config: a static bearer token via the mcp-remote bridge.
++  // (Claude's native "http" connector uses OAuth, which this token-based server doesn't implement.)
++  const claudeSnippet = `{
++  "mcpServers": {
++    "taskflow-pro": {
++      "command": "cmd",
++      "args": [
++        "/c", "npx", "-y", "mcp-remote",
++        "${url}",
++        "--header", "Authorization:\${AUTH_HEADER}"
++      ],
++      "env": { "AUTH_HEADER": "Bearer YOUR_TOKEN" }
++    }
++  }
++}`;
++
++  return (
++    <div className="space-y-6">
++      <div className="flex items-center gap-3">
++        <div className="w-11 h-11 rounded-lg bg-primary/10 border flex items-center justify-center shrink-0">
++          <Bot className="h-6 w-6 text-primary" />
++        </div>
++        <div className="min-w-0">
++          <h2 className="text-base font-semibold text-foreground">AI Connections (MCP)</h2>
++          <p className="text-xs text-muted-foreground">
++            Connect Claude, ChatGPT, or any MCP client to act on your tasks &amp; workflows. Access is
++            limited to what your role allows.
++          </p>
++        </div>
++      </div>
++
++      {/* Server endpoint */}
++      <div className="space-y-2">
++        <Label>MCP Server URL</Label>
++        <div className="flex items-center gap-2">
++          <Input value={url} readOnly className="font-mono text-xs" />
++          <CopyButton value={url} />
++        </div>
++      </div>
++
++      {/* Always-available setup instructions for Claude Desktop */}
++      <div className="rounded-lg border bg-background/50 p-4 space-y-3">
++        <p className="text-sm font-medium text-foreground">Connect Claude Desktop</p>
++        <ol className="text-xs text-muted-foreground list-decimal pl-4 space-y-1">
++          <li>Generate a token below and copy it (shown only once).</li>
++          <li>Claude Desktop → Settings → Developer → <strong>Edit Config</strong>.</li>
++          <li>
++            Paste the JSON below, replacing <code className="font-mono">YOUR_TOKEN</code> with your token
++            (keep the word <code className="font-mono">Bearer</code> and the space).
++          </li>
++          <li>Save, fully quit Claude (system tray → Quit), then reopen.</li>
++        </ol>
++        <div className="flex items-center justify-between gap-2">
++          <span className="text-xs text-muted-foreground">
++            Config — works on Windows. On macOS/Linux remove <code className="font-mono">"cmd", "/c",</code>.
++          </span>
++          <CopyButton value={claudeSnippet} label="Copy config" />
++        </div>
++        <pre className="p-3 rounded-md bg-muted overflow-x-auto text-[11px] leading-relaxed">
++          {claudeSnippet}
++        </pre>
++        <p className="text-xs text-muted-foreground">
++          Don't use Claude's <strong>Connectors → Connect</strong> button — that path requires OAuth and
++          won't work with a token.
++        </p>
++      </div>
++
++      {/* Freshly minted token — shown once */}
++      {newToken && (
++        <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 space-y-3">
++          <div className="flex items-center gap-2">
++            <KeyRound className="h-4 w-4 text-primary" />
++            <p className="text-sm font-medium text-foreground">Copy your token now</p>
++          </div>
++          <p className="text-xs text-muted-foreground">
++            This is the only time the full token is shown. Store it in your AI client's config.
++          </p>
++          <div className="flex items-center gap-2">
++            <Input value={newToken} readOnly className="font-mono text-xs" />
++            <CopyButton value={newToken} />
++          </div>
++          <details className="text-xs">
++            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
++              Claude Desktop / config snippet
++            </summary>
++            <pre className="mt-2 p-3 rounded-md bg-muted overflow-x-auto text-[11px] leading-relaxed">
++              {claudeSnippet.replace("YOUR_TOKEN", newToken)}
++            </pre>
++          </details>
++          <Button variant="ghost" size="sm" onClick={() => setNewToken(null)}>
++            Done
++          </Button>
++        </div>
++      )}
++
++      {/* Create new token */}
++      <div className="rounded-lg border bg-background/50 p-4 space-y-4">
++        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 items-end">
++          <div className="space-y-2">
++            <Label>New token name</Label>
++            <Input
++              value={name}
++              onChange={(e) => setName(e.target.value)}
++              placeholder="e.g. Claude Desktop, ChatGPT"
++              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
++            />
++          </div>
++          <div className="space-y-2">
++            <Label>Expires</Label>
++            <Select value={expiry} onValueChange={setExpiry}>
++              <SelectTrigger className="w-36">
++                <SelectValue />
++              </SelectTrigger>
++              <SelectContent>
++                <SelectItem value="never">Never</SelectItem>
++                <SelectItem value="30">30 days</SelectItem>
++                <SelectItem value="90">90 days</SelectItem>
++                <SelectItem value="365">1 year</SelectItem>
++              </SelectContent>
++            </Select>
++          </div>
++        </div>
++        <Button onClick={handleCreate} disabled={creating}>
++          <Plus className="h-3.5 w-3.5 mr-1" />
++          {creating ? "Generating…" : "Generate Token"}
++        </Button>
++      </div>
++
++      {/* Existing tokens */}
++      <div className="space-y-2">
++        <Label>Active tokens</Label>
++        {loading ? (
++          <p className="text-xs text-muted-foreground">Loading…</p>
++        ) : tokens.length === 0 ? (
++          <p className="text-xs text-muted-foreground">No tokens yet.</p>
++        ) : (
++          <div className="divide-y rounded-lg border">
++            {tokens.map((t) => (
++              <div key={t.id} className="flex items-center justify-between gap-4 p-3">
++                <div className="min-w-0">
++                  <p className="text-sm font-medium text-foreground truncate">{t.name}</p>
++                  <p className="text-xs text-muted-foreground font-mono">
++                    {t.token_prefix}…
++                    <span className="font-sans">
++                      {" · "}
++                      {t.last_used_at
++                        ? `last used ${new Date(t.last_used_at).toLocaleDateString()}`
++                        : "never used"}
++                      {t.expires_at ? ` · expires ${new Date(t.expires_at).toLocaleDateString()}` : ""}
++                    </span>
++                  </p>
++                </div>
++                <Button
++                  variant="ghost"
++                  size="sm"
++                  className="text-destructive hover:text-destructive"
++                  onClick={() => handleRevoke(t.id, t.name)}
++                >
++                  <Trash2 className="h-3.5 w-3.5 mr-1" />
++                  Revoke
++                </Button>
++              </div>
++            ))}
++          </div>
++        )}
++      </div>
++    </div>
++  );
++}
+diff --git a/src/integrations/supabase/types.ts b/src/integrations/supabase/types.ts
+index 9afcf67..807c9ec 100644
+--- a/src/integrations/supabase/types.ts
++++ b/src/integrations/supabase/types.ts
+@@ -600,6 +600,145 @@ export type Database = {
+         }
+         Relationships: []
+       }
++      user_google_connections: {
++        Row: {
++          access_token_ciphertext: string | null
++          calendar_sync_enabled: boolean
++          created_at: string
++          expires_at: string | null
++          gmail_tasks_enabled: boolean
++          google_email: string
++          google_sub: string | null
++          last_calendar_sync_at: string | null
++          organization_id: string | null
++          refresh_token_ciphertext: string | null
++          scope: string
++          updated_at: string
++          user_id: string
++        }
++        Insert: {
++          access_token_ciphertext?: string | null
++          calendar_sync_enabled?: boolean
++          created_at?: string
++          expires_at?: string | null
++          gmail_tasks_enabled?: boolean
++          google_email: string
++          google_sub?: string | null
++          last_calendar_sync_at?: string | null
++          organization_id?: string | null
++          refresh_token_ciphertext?: string | null
++          scope?: string
++          updated_at?: string
++          user_id: string
++        }
++        Update: {
++          access_token_ciphertext?: string | null
++          calendar_sync_enabled?: boolean
++          created_at?: string
++          expires_at?: string | null
++          gmail_tasks_enabled?: boolean
++          google_email?: string
++          google_sub?: string | null
++          last_calendar_sync_at?: string | null
++          organization_id?: string | null
++          refresh_token_ciphertext?: string | null
++          scope?: string
++          updated_at?: string
++          user_id?: string
++        }
++        Relationships: [
++          {
++            foreignKeyName: "user_google_connections_organization_id_fkey"
++            columns: ["organization_id"]
++            isOneToOne: false
++            referencedRelation: "organizations"
++            referencedColumns: ["id"]
++          },
++        ]
++      }
++      google_calendar_events: {
++        Row: {
++          attendees: Json
++          created_at: string
++          description: string | null
++          end_at: string | null
++          end_date: string | null
++          google_calendar_id: string
++          google_event_id: string
++          hangout_link: string | null
++          html_link: string | null
++          id: string
++          is_all_day: boolean
++          location: string | null
++          organization_id: string | null
++          organizer_email: string | null
++          raw_event: Json
++          start_at: string | null
++          start_date: string | null
++          status: string
++          synced_at: string
++          title: string
++          updated_at: string
++          user_id: string
++        }
++        Insert: {
++          attendees?: Json
++          created_at?: string
++          description?: string | null
++          end_at?: string | null
++          end_date?: string | null
++          google_calendar_id?: string
++          google_event_id: string
++          hangout_link?: string | null
++          html_link?: string | null
++          id?: string
++          is_all_day?: boolean
++          location?: string | null
++          organization_id?: string | null
++          organizer_email?: string | null
++          raw_event?: Json
++          start_at?: string | null
++          start_date?: string | null
++          status?: string
++          synced_at?: string
++          title: string
++          updated_at?: string
++          user_id: string
++        }
++        Update: {
++          attendees?: Json
++          created_at?: string
++          description?: string | null
++          end_at?: string | null
++          end_date?: string | null
++          google_calendar_id?: string
++          google_event_id?: string
++          hangout_link?: string | null
++          html_link?: string | null
++          id?: string
++          is_all_day?: boolean
++          location?: string | null
++          organization_id?: string | null
++          organizer_email?: string | null
++          raw_event?: Json
++          start_at?: string | null
++          start_date?: string | null
++          status?: string
++          synced_at?: string
++          title?: string
++          updated_at?: string
++          user_id?: string
++        }
++        Relationships: [
++          {
++            foreignKeyName: "google_calendar_events_organization_id_fkey"
++            columns: ["organization_id"]
++            isOneToOne: false
++            referencedRelation: "organizations"
++            referencedColumns: ["id"]
++          },
++        ]
++      }
+       user_scratch_notes: {
+         Row: {
+           id: string
+diff --git a/src/lib/googleIntegration.ts b/src/lib/googleIntegration.ts
+new file mode 100644
+index 0000000..c994d9c
+--- /dev/null
++++ b/src/lib/googleIntegration.ts
+@@ -0,0 +1,71 @@
++import { supabase } from "@/integrations/supabase/client";
++import type { Tables } from "@/integrations/supabase/types";
++import { invokeEdgeFunction } from "@/lib/edgeFunctions";
++
++export type GoogleConnection = Pick<
++  Tables<"user_google_connections">,
++  | "user_id"
++  | "google_email"
++  | "scope"
++  | "calendar_sync_enabled"
++  | "gmail_tasks_enabled"
++  | "last_calendar_sync_at"
++  | "created_at"
++  | "updated_at"
++>;
++
++export type GoogleCalendarEvent = Tables<"google_calendar_events">;
++
++export async function getGoogleConnection(): Promise<GoogleConnection | null> {
++  const { data, error } = await supabase
++    .from("user_google_connections")
++    .select(
++      "user_id, google_email, scope, calendar_sync_enabled, gmail_tasks_enabled, last_calendar_sync_at, created_at, updated_at",
++    )
++    .maybeSingle();
++  if (error) throw error;
++  return data;
++}
++
++export async function connectGoogle(redirectTo = `${window.location.origin}/settings?tab=integrations`) {
++  const data = await invokeEdgeFunction<{ authUrl: string }>("google-oauth-start", {
++    body: { redirectTo },
++  });
++  if (!data.authUrl) throw new Error("Google did not return a connection URL");
++  window.location.href = data.authUrl;
++}
++
++export async function syncGoogleCalendar(range?: { timeMin: string; timeMax: string }) {
++  return invokeEdgeFunction<{ synced: number; removed: number; timeMin: string; timeMax: string }>(
++    "google-calendar-sync",
++    { body: range ?? {} },
++  );
++}
++
++export async function disconnectGoogle() {
++  return invokeEdgeFunction<{ disconnected: boolean }>("google-disconnect", { body: {} });
++}
++
++export async function listGoogleCalendarEvents(): Promise<GoogleCalendarEvent[]> {
++  const { data, error } = await supabase
++    .from("google_calendar_events")
++    .select(
++      "id, user_id, organization_id, google_calendar_id, google_event_id, title, description, location, html_link, hangout_link, start_at, end_at, start_date, end_date, is_all_day, status, organizer_email, attendees, raw_event, synced_at, created_at, updated_at",
++    )
++    .order("start_at", { ascending: true });
++  if (error) throw error;
++  return data || [];
++}
++
++export function calendarRangeForMonth(date: Date) {
++  const start = new Date(date.getFullYear(), date.getMonth(), 1);
++  start.setDate(start.getDate() - 7);
++  start.setHours(0, 0, 0, 0);
++
++  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
++  end.setDate(end.getDate() + 7);
++  end.setHours(23, 59, 59, 999);
++
++  return { timeMin: start.toISOString(), timeMax: end.toISOString() };
++}
++
+diff --git a/src/lib/mcpTokens.ts b/src/lib/mcpTokens.ts
+new file mode 100644
+index 0000000..e177e6b
+--- /dev/null
++++ b/src/lib/mcpTokens.ts
+@@ -0,0 +1,47 @@
++import { supabase } from "@/integrations/supabase/client";
++import { invokeEdgeFunction } from "@/lib/edgeFunctions";
++import { env } from "@/lib/env";
++
++export interface McpToken {
++  id: string;
++  name: string;
++  token_prefix: string;
++  last_used_at: string | null;
++  expires_at: string | null;
++  created_at: string;
++}
++
++/** Public URL AI clients point at. */
++export function mcpServerUrl(): string {
++  return `${env.supabaseUrl}/functions/v1/mcp-server`;
++}
++
++/** List the current user's active (non-revoked) MCP tokens. Never returns the hash. */
++export async function listMcpTokens(): Promise<McpToken[]> {
++  const { data, error } = await supabase
++    .from("mcp_access_tokens")
++    .select("id, name, token_prefix, last_used_at, expires_at, created_at")
++    .is("revoked_at", null)
++    .order("created_at", { ascending: false });
++  if (error) throw new Error(error.message);
++  return data || [];
++}
++
++/** Issue a new token. The raw value is returned ONCE — show it, then it's gone. */
++export async function issueMcpToken(
++  name: string,
++  expiresInDays?: number,
++): Promise<{ token: string; record: McpToken }> {
++  return invokeEdgeFunction("issue-mcp-token", {
++    body: { name, ...(expiresInDays ? { expiresInDays } : {}) },
++  });
++}
++
++/** Revoke a token (soft-delete via revoked_at). */
++export async function revokeMcpToken(id: string): Promise<void> {
++  const { error } = await supabase
++    .from("mcp_access_tokens")
++    .update({ revoked_at: new Date().toISOString() })
++    .eq("id", id);
++  if (error) throw new Error(error.message);
++}
+diff --git a/src/pages/CalendarPage.tsx b/src/pages/CalendarPage.tsx
+index 224b94e..2a9b29f 100644
+--- a/src/pages/CalendarPage.tsx
++++ b/src/pages/CalendarPage.tsx
+@@ -1,8 +1,16 @@
+-import { useState } from "react";
+-import { ChevronLeft, ChevronRight } from "lucide-react";
++import { useCallback, useEffect, useState } from "react";
++import { CalendarClock, ChevronLeft, ChevronRight, RefreshCw, Video } from "lucide-react";
+ import { Button } from "@/components/ui/button";
+-import { useTasks, TaskRow } from "@/hooks/useTasks";
++import { useTasks } from "@/hooks/useTasks";
+ import { todayIST, formatDateIST } from "@/lib/time";
++import {
++  calendarRangeForMonth,
++  getGoogleConnection,
++  listGoogleCalendarEvents,
++  syncGoogleCalendar,
++  type GoogleCalendarEvent,
++} from "@/lib/googleIntegration";
++import { toast } from "sonner";
+ 
+ const priorityColors: Record<string, string> = {
+   critical: "hsl(0,72%,51%)", high: "hsl(38,92%,50%)", medium: "hsl(239,84%,67%)", low: "hsl(142,71%,45%)",
+@@ -11,6 +19,9 @@ const priorityColors: Record<string, string> = {
+ const CalendarPage = () => {
+   const { tasks, loading } = useTasks();
+   const [currentDate, setCurrentDate] = useState(new Date());
++  const [googleConnected, setGoogleConnected] = useState(false);
++  const [googleEvents, setGoogleEvents] = useState<GoogleCalendarEvent[]>([]);
++  const [googleLoading, setGoogleLoading] = useState(false);
+ 
+   const year = currentDate.getFullYear();
+   const month = currentDate.getMonth();
+@@ -22,6 +33,35 @@ const CalendarPage = () => {
+   const next = () => setCurrentDate(new Date(year, month + 1, 1));
+   const goToday = () => setCurrentDate(new Date());
+ 
++  const loadGoogleEvents = useCallback(async (syncFirst = false) => {
++    setGoogleLoading(true);
++    try {
++      const connection = await getGoogleConnection();
++      setGoogleConnected(Boolean(connection));
++      if (!connection) {
++        setGoogleEvents([]);
++        return;
++      }
++      if (syncFirst) {
++        await syncGoogleCalendar(calendarRangeForMonth(currentDate));
++      }
++      setGoogleEvents(await listGoogleCalendarEvents());
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : "Failed to load Google Calendar");
++    } finally {
++      setGoogleLoading(false);
++    }
++  }, [currentDate]);
++
++  useEffect(() => {
++    loadGoogleEvents(true);
++  }, [loadGoogleEvents]);
++
++  const handleSyncGoogle = async () => {
++    await loadGoogleEvents(true);
++    toast.success("Google Calendar synced");
++  };
++
+   const days = Array.from({ length: 42 }, (_, i) => {
+     const d = i - firstDay + 1;
+     if (d < 1 || d > daysInMonth) return null;
+@@ -38,6 +78,12 @@ const CalendarPage = () => {
+             {formatDateIST(currentDate, { month: "long", year: "numeric" })}
+           </span>
+           <Button variant="ghost" size="icon" onClick={next}><ChevronRight className="h-4 w-4" /></Button>
++          {googleConnected && (
++            <Button variant="outline" size="sm" onClick={handleSyncGoogle} disabled={googleLoading}>
++              <RefreshCw className={`h-3.5 w-3.5 mr-1 ${googleLoading ? "animate-spin" : ""}`} />
++              Sync
++            </Button>
++          )}
+           <Button variant="outline" size="sm" onClick={goToday}>Today</Button>
+         </div>
+       </div>
+@@ -56,6 +102,7 @@ const CalendarPage = () => {
+               if (day === null) return <div key={i} className="min-h-[100px] border-b border-r bg-muted/30" />;
+               const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+               const dayTasks = tasks.filter(t => t.due_date === dateStr);
++              const dayMeetings = googleEvents.filter((event) => eventDate(event) === dateStr);
+               const isToday = dateStr === today;
+               return (
+                 <div key={i} className="min-h-[100px] border-b border-r p-1 hover:bg-muted/30 transition-colors">
+@@ -63,6 +110,23 @@ const CalendarPage = () => {
+                     {day}
+                   </span>
+                   <div className="mt-0.5 space-y-0.5">
++                    {dayMeetings.slice(0, 2).map((event) => (
++                      <button
++                        key={event.id}
++                        type="button"
++                        onClick={() => {
++                          const url = event.hangout_link || event.html_link;
++                          if (url) window.open(url, "_blank", "noopener,noreferrer");
++                        }}
++                        className="w-full text-left text-[10px] px-1.5 py-0.5 rounded truncate bg-sky-100 text-sky-900 border border-sky-200 hover:bg-sky-200"
++                        title={event.title}
++                      >
++                        <span className="inline-flex max-w-full items-center gap-1">
++                          {event.hangout_link ? <Video className="h-2.5 w-2.5 shrink-0" /> : <CalendarClock className="h-2.5 w-2.5 shrink-0" />}
++                          <span className="truncate">{eventTime(event)} {event.title}</span>
++                        </span>
++                      </button>
++                    ))}
+                     {dayTasks.slice(0, 3).map(t => (
+                       <div
+                         key={t.id}
+@@ -72,7 +136,11 @@ const CalendarPage = () => {
+                         {t.title}
+                       </div>
+                     ))}
+-                    {dayTasks.length > 3 && <p className="text-[10px] text-muted-foreground px-1">+{dayTasks.length - 3} more</p>}
++                    {dayMeetings.length + dayTasks.length > 5 && (
++                      <p className="text-[10px] text-muted-foreground px-1">
++                        +{dayMeetings.length + dayTasks.length - 5} more
++                      </p>
++                    )}
+                   </div>
+                 </div>
+               );
+@@ -84,4 +152,16 @@ const CalendarPage = () => {
+   );
+ };
+ 
++function eventDate(event: GoogleCalendarEvent): string | null {
++  if (event.is_all_day) return event.start_date;
++  if (!event.start_at) return null;
++  const date = new Date(event.start_at);
++  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
++}
++
++function eventTime(event: GoogleCalendarEvent): string {
++  if (event.is_all_day || !event.start_at) return "";
++  return new Date(event.start_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
++}
++
+ export default CalendarPage;
+diff --git a/src/pages/SettingsPage.tsx b/src/pages/SettingsPage.tsx
+index e05f893..a6f3065 100644
+--- a/src/pages/SettingsPage.tsx
++++ b/src/pages/SettingsPage.tsx
+@@ -1,4 +1,4 @@
+-import { useState, useEffect } from "react";
++import { useCallback, useState, useEffect } from "react";
+ import { Button } from "@/components/ui/button";
+ import { Input } from "@/components/ui/input";
+ import { Label } from "@/components/ui/label";
+@@ -9,11 +9,22 @@ import { useTheme } from "@/contexts/ThemeContext";
+ import { supabase } from "@/integrations/supabase/client";
+ import { invokeEdgeFunction } from "@/lib/edgeFunctions";
+ import { toast } from "sonner";
+-import { Upload, Download, User, Bell, Palette, Plug, Settings2, KeyRound, Eye, EyeOff } from "lucide-react";
++import {
++  Upload, Download, User, Bell, Palette, Plug, Settings2, KeyRound, Eye, EyeOff,
++  CalendarDays, CheckCircle2, RefreshCw, Unplug,
++} from "lucide-react";
+ import { firebaseChangePassword, isFirebaseAuthError } from "@/integrations/firebase/auth";
+ import { todayIST } from "@/lib/time";
+ import { PageHeader } from "@/components/PageHeader";
+ import { AdminSettingsPanel } from "@/components/AdminSettingsPanel";
++import { McpTokensPanel } from "@/components/McpTokensPanel";
++import {
++  connectGoogle,
++  disconnectGoogle,
++  getGoogleConnection,
++  syncGoogleCalendar,
++  type GoogleConnection,
++} from "@/lib/googleIntegration";
+ 
+ const baseTabs = [
+   { id: "profile", label: "Profile", icon: User },
+@@ -42,7 +53,10 @@ const notificationEvents = [
+ const SettingsPage = () => {
+   const { user, refetchProfile, isAdminOrMD } = useAuth();
+   const { theme, setTheme } = useTheme();
+-  const [activeTab, setActiveTab] = useState("profile");
++  const [activeTab, setActiveTab] = useState(() => {
++    if (typeof window === "undefined") return "profile";
++    return new URLSearchParams(window.location.search).get("tab") || "profile";
++  });
+   const [saving, setSaving] = useState(false);
+ 
+   const [name, setName] = useState("");
+@@ -64,14 +78,50 @@ const SettingsPage = () => {
+   const [confirmPassword, setConfirmPassword] = useState("");
+   const [showPasswords, setShowPasswords] = useState(false);
+   const [changingPassword, setChangingPassword] = useState(false);
++  const [googleConnection, setGoogleConnection] = useState<GoogleConnection | null>(null);
++  const [googleLoading, setGoogleLoading] = useState(false);
++  const [googleSyncing, setGoogleSyncing] = useState(false);
++  const [googleDisconnecting, setGoogleDisconnecting] = useState(false);
+ 
+   useEffect(() => {
+-    if (!user) return;
++    if (!user?.id) return;
+     setName(user.profile?.name || "");
+     setPosition(user.profile?.position || "");
+     setMobileNo(user.profile?.mobile_no || "+91 ");
+   }, [user?.id, user?.profile?.name, user?.profile?.position, user?.profile?.mobile_no]);
+ 
++  useEffect(() => {
++    if (typeof window === "undefined") return;
++    const params = new URLSearchParams(window.location.search);
++    const googleStatus = params.get("google");
++    const reason = params.get("reason");
++    if (googleStatus === "connected") {
++      setActiveTab("integrations");
++      toast.success("Google Calendar connected");
++      window.history.replaceState({}, "", "/settings?tab=integrations");
++    } else if (googleStatus === "error") {
++      setActiveTab("integrations");
++      toast.error(reason ? `Google connection failed: ${reason}` : "Google connection failed");
++      window.history.replaceState({}, "", "/settings?tab=integrations");
++    }
++  }, []);
++
++  const refreshGoogleConnection = useCallback(async () => {
++    if (!user?.id) return;
++    setGoogleLoading(true);
++    try {
++      setGoogleConnection(await getGoogleConnection());
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : "Failed to load Google connection");
++    } finally {
++      setGoogleLoading(false);
++    }
++  }, [user?.id]);
++
++  useEffect(() => {
++    refreshGoogleConnection();
++  }, [refreshGoogleConnection]);
++
+   useEffect(() => {
+     if (!user?.id) return;
+     supabase
+@@ -231,6 +281,40 @@ const SettingsPage = () => {
+     }
+   };
+ 
++  const handleConnectGoogle = async () => {
++    try {
++      await connectGoogle(`${window.location.origin}/settings?tab=integrations`);
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : "Failed to start Google connection");
++    }
++  };
++
++  const handleSyncGoogleCalendar = async () => {
++    setGoogleSyncing(true);
++    try {
++      const result = await syncGoogleCalendar();
++      await refreshGoogleConnection();
++      toast.success(`Google Calendar synced (${result.synced} meetings)`);
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : "Failed to sync Google Calendar");
++    } finally {
++      setGoogleSyncing(false);
++    }
++  };
++
++  const handleDisconnectGoogle = async () => {
++    setGoogleDisconnecting(true);
++    try {
++      await disconnectGoogle();
++      setGoogleConnection(null);
++      toast.success("Google disconnected");
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : "Failed to disconnect Google");
++    } finally {
++      setGoogleDisconnecting(false);
++    }
++  };
++
+   const getInitials = (n: string) => n.split(" ").map((p) => p[0]).join("").toUpperCase().slice(0, 2);
+ 
+   const tabs = isAdminOrMD
+@@ -403,23 +487,88 @@ const SettingsPage = () => {
+             <h2 className="text-base font-semibold text-foreground">Integrations</h2>
+             <p className="text-xs text-muted-foreground mt-0.5">Backend: Supabase (database + auth). Files: Firebase Storage.</p>
+           </div>
+-          <div className="flex items-center justify-between gap-4 p-4 rounded-lg border bg-background/50">
+-            <div className="flex items-center gap-3 min-w-0">
+-              <div className="w-11 h-11 rounded-lg bg-white border flex items-center justify-center shrink-0">
+-                <GmailLogo className="h-6 w-6" />
++          <div className="rounded-lg border bg-background/50">
++            <div className="flex items-start justify-between gap-4 p-4">
++              <div className="flex items-start gap-3 min-w-0">
++                <div className="w-11 h-11 rounded-lg bg-white border flex items-center justify-center shrink-0">
++                  <GmailLogo className="h-6 w-6" />
++                </div>
++                <div className="min-w-0 space-y-1">
++                  <div className="flex flex-wrap items-center gap-2">
++                    <p className="text-sm font-medium text-foreground">Google Workspace</p>
++                    {googleConnection && (
++                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
++                        <CheckCircle2 className="h-3 w-3" />
++                        Connected
++                      </span>
++                    )}
++                  </div>
++                  <p className="text-xs text-muted-foreground">
++                    Sync meetings from your Google Calendar into TaskFlow Calendar. Gmail task automation can be enabled later.
++                  </p>
++                  {googleConnection && (
++                    <div className="space-y-0.5 text-xs text-muted-foreground">
++                      <p>{googleConnection.google_email}</p>
++                      <p>
++                        Last calendar sync:{" "}
++                        {googleConnection.last_calendar_sync_at
++                          ? new Date(googleConnection.last_calendar_sync_at).toLocaleString()
++                          : "Not synced yet"}
++                      </p>
++                    </div>
++                  )}
++                </div>
+               </div>
+-              <div className="min-w-0">
+-                <p className="text-sm font-medium text-foreground">Gmail</p>
+-                <p className="text-xs text-muted-foreground truncate">Auto-create tasks from work emails (coming soon).</p>
++              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
++                {googleConnection ? (
++                  <>
++                    <Button
++                      variant="outline"
++                      size="sm"
++                      onClick={handleSyncGoogleCalendar}
++                      disabled={googleSyncing || googleLoading}
++                    >
++                      <RefreshCw className={`h-3.5 w-3.5 mr-1 ${googleSyncing ? "animate-spin" : ""}`} />
++                      {googleSyncing ? "Syncing" : "Sync"}
++                    </Button>
++                    <Button
++                      variant="outline"
++                      size="sm"
++                      onClick={handleDisconnectGoogle}
++                      disabled={googleDisconnecting}
++                    >
++                      <Unplug className="h-3.5 w-3.5 mr-1" />
++                      {googleDisconnecting ? "Disconnecting" : "Disconnect"}
++                    </Button>
++                  </>
++                ) : (
++                  <Button
++                    variant="outline"
++                    size="sm"
++                    onClick={handleConnectGoogle}
++                    disabled={googleLoading}
++                  >
++                    <CalendarDays className="h-3.5 w-3.5 mr-1" />
++                    Connect Google
++                  </Button>
++                )}
+               </div>
+             </div>
+-            <Button
+-              variant="outline"
+-              size="sm"
+-              onClick={() => toast.info("Gmail connection coming soon.")}
+-            >
+-              Connect
+-            </Button>
++            <div className="border-t px-4 py-3">
++              <div className="flex items-center justify-between gap-3">
++                <div>
++                  <p className="text-xs font-medium text-foreground">Gmail email-to-task automation</p>
++                  <p className="text-xs text-muted-foreground">Planned next. Calendar sync does not request Gmail read access.</p>
++                </div>
++                <Button variant="ghost" size="sm" disabled>
++                  Coming soon
++                </Button>
++              </div>
++            </div>
++          </div>
++
++          <div className="border-t pt-6">
++            <McpTokensPanel />
+           </div>
+         </div>
+       )}
+diff --git a/supabase/config.toml b/supabase/config.toml
+index ae70760..8bc992e 100644
+--- a/supabase/config.toml
++++ b/supabase/config.toml
+@@ -48,3 +48,17 @@ project_id = "nekdjoquirhecmejuoba"
+     verify_jwt = false
+   [functions.polish-note]
+     verify_jwt = true
++  [functions.issue-mcp-token]
++    verify_jwt = true
++  [functions.google-oauth-start]
++    verify_jwt = true
++  [functions.google-oauth-callback]
++    verify_jwt = false
++  [functions.google-calendar-sync]
++    verify_jwt = true
++  [functions.google-disconnect]
++    verify_jwt = true
++  # MCP server authenticates its own Personal Access Token (not a Supabase JWT),
++  # so the gateway JWT check must be off.
++  [functions.mcp-server]
++    verify_jwt = false
+diff --git a/supabase/functions/_shared/env.ts b/supabase/functions/_shared/env.ts
+index c42b758..2206ce2 100644
+--- a/supabase/functions/_shared/env.ts
++++ b/supabase/functions/_shared/env.ts
+@@ -29,4 +29,8 @@ export const edgeEnv = {
+   emailWebhookSecret: read("EMAIL_WEBHOOK_SECRET"),
+ 
+   googleAiApiKey: read("GOOGLE_AI_API_KEY"),
++  googleOAuthClientId: read("GOOGLE_OAUTH_CLIENT_ID"),
++  googleOAuthClientSecret: read("GOOGLE_OAUTH_CLIENT_SECRET"),
++  googleOAuthRedirectUri: read("GOOGLE_OAUTH_REDIRECT_URI"),
++  googleTokenEncryptionKey: read("GOOGLE_TOKEN_ENCRYPTION_KEY"),
+ } as const;
+diff --git a/supabase/functions/_shared/google-oauth.ts b/supabase/functions/_shared/google-oauth.ts
+new file mode 100644
+index 0000000..99af5db
+--- /dev/null
++++ b/supabase/functions/_shared/google-oauth.ts
+@@ -0,0 +1,137 @@
++import { createClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
++
++export const corsHeaders = {
++  "Access-Control-Allow-Origin": "*",
++  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
++};
++
++export const calendarScopes = [
++  "openid",
++  "email",
++  "profile",
++  "https://www.googleapis.com/auth/calendar.readonly",
++];
++
++export function json(body: unknown, status = 200) {
++  return new Response(JSON.stringify(body), {
++    status,
++    headers: { ...corsHeaders, "Content-Type": "application/json" },
++  });
++}
++
++export function adminClient() {
++  const url = Deno.env.get("SUPABASE_URL");
++  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
++  if (!url || !serviceRole) throw new Error("Supabase service secrets are not configured");
++  return createClient(url, serviceRole, {
++    auth: { autoRefreshToken: false, persistSession: false },
++  });
++}
++
++export async function requireUser(req: Request) {
++  const authHeader = req.headers.get("Authorization") || "";
++  if (!authHeader.startsWith("Bearer ")) throw new Error("Missing auth");
++
++  const token = authHeader.replace("Bearer ", "");
++  const admin = adminClient();
++  const { data, error } = await admin.auth.getUser(token);
++  if (error || !data?.user) throw new Error("Not authenticated");
++  return { admin, user: data.user };
++}
++
++export function requiredEnv(key: string): string {
++  const value = Deno.env.get(key)?.trim();
++  if (!value) throw new Error(`${key} is not configured`);
++  return value;
++}
++
++async function encryptionKey(): Promise<CryptoKey> {
++  const secret = requiredEnv("GOOGLE_TOKEN_ENCRYPTION_KEY");
++  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
++  return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
++}
++
++function b64(bytes: Uint8Array): string {
++  let binary = "";
++  for (const byte of bytes) binary += String.fromCharCode(byte);
++  return btoa(binary);
++}
++
++function fromB64(value: string): Uint8Array {
++  const binary = atob(value);
++  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
++}
++
++export async function encryptToken(token: string | null | undefined): Promise<string | null> {
++  if (!token) return null;
++  const iv = crypto.getRandomValues(new Uint8Array(12));
++  const key = await encryptionKey();
++  const encrypted = await crypto.subtle.encrypt(
++    { name: "AES-GCM", iv },
++    key,
++    new TextEncoder().encode(token),
++  );
++  return `${b64(iv)}:${b64(new Uint8Array(encrypted))}`;
++}
++
++export async function decryptToken(ciphertext: string | null | undefined): Promise<string | null> {
++  if (!ciphertext) return null;
++  const [ivB64, dataB64] = ciphertext.split(":");
++  if (!ivB64 || !dataB64) throw new Error("Invalid encrypted token format");
++  const key = await encryptionKey();
++  const decrypted = await crypto.subtle.decrypt(
++    { name: "AES-GCM", iv: fromB64(ivB64) },
++    key,
++    fromB64(dataB64),
++  );
++  return new TextDecoder().decode(decrypted);
++}
++
++export async function exchangeCodeForTokens(code: string) {
++  const res = await fetch("https://oauth2.googleapis.com/token", {
++    method: "POST",
++    headers: { "Content-Type": "application/x-www-form-urlencoded" },
++    body: new URLSearchParams({
++      code,
++      client_id: requiredEnv("GOOGLE_OAUTH_CLIENT_ID"),
++      client_secret: requiredEnv("GOOGLE_OAUTH_CLIENT_SECRET"),
++      redirect_uri: requiredEnv("GOOGLE_OAUTH_REDIRECT_URI"),
++      grant_type: "authorization_code",
++    }),
++  });
++  const body = await res.json().catch(() => ({}));
++  if (!res.ok) throw new Error(body?.error_description || body?.error || "Google token exchange failed");
++  return body as {
++    access_token: string;
++    refresh_token?: string;
++    expires_in?: number;
++    scope?: string;
++    id_token?: string;
++  };
++}
++
++export async function refreshAccessToken(refreshToken: string) {
++  const res = await fetch("https://oauth2.googleapis.com/token", {
++    method: "POST",
++    headers: { "Content-Type": "application/x-www-form-urlencoded" },
++    body: new URLSearchParams({
++      refresh_token: refreshToken,
++      client_id: requiredEnv("GOOGLE_OAUTH_CLIENT_ID"),
++      client_secret: requiredEnv("GOOGLE_OAUTH_CLIENT_SECRET"),
++      grant_type: "refresh_token",
++    }),
++  });
++  const body = await res.json().catch(() => ({}));
++  if (!res.ok) throw new Error(body?.error_description || body?.error || "Google token refresh failed");
++  return body as { access_token: string; expires_in?: number; scope?: string };
++}
++
++export async function fetchGoogleUserInfo(accessToken: string) {
++  const res = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
++    headers: { Authorization: `Bearer ${accessToken}` },
++  });
++  const body = await res.json().catch(() => ({}));
++  if (!res.ok) throw new Error(body?.error_description || body?.error || "Failed to read Google profile");
++  return body as { sub?: string; email?: string };
++}
++
+diff --git a/supabase/functions/_shared/mcp-auth.ts b/supabase/functions/_shared/mcp-auth.ts
+new file mode 100644
+index 0000000..2bd7b96
+--- /dev/null
++++ b/supabase/functions/_shared/mcp-auth.ts
+@@ -0,0 +1,134 @@
++// Personal Access Token (PAT) auth for the MCP server.
++//
++// A PAT maps to exactly one TaskFlow user. To enforce that user's role/RLS we do
++// NOT query with the service role for tool data — instead we mint a real,
++// user-scoped Supabase session (same magic-link technique as firebase-auth) and
++// run every tool query through it, so Postgres RLS does the enforcement.
++
++import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
++
++const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
++const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
++const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
++
++/** Plaintext PATs start with this prefix so they are recognizable / greppable. */
++export const PAT_PREFIX = "tfp_pat_";
++
++export interface ValidatedPat {
++  userId: string;
++  email: string;
++  organizationId: string | null;
++  tokenId: string;
++}
++
++/** SHA-256 hex of the raw token (we only ever store / compare the hash). */
++export async function hashToken(raw: string): Promise<string> {
++  const data = new TextEncoder().encode(raw);
++  const digest = await crypto.subtle.digest("SHA-256", data);
++  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
++}
++
++/** Generate a new random PAT and its hash. The raw value is shown to the user once. */
++export async function generatePat(): Promise<{ raw: string; hash: string; prefix: string }> {
++  const bytes = new Uint8Array(32);
++  crypto.getRandomValues(bytes);
++  const secret = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
++  const raw = `${PAT_PREFIX}${secret}`;
++  return { raw, hash: await hashToken(raw), prefix: raw.slice(0, 12) };
++}
++
++/** A service-role client — used ONLY for PAT lookup and session minting, never tool data. */
++export function adminClient(): SupabaseClient {
++  return createClient(SUPABASE_URL, SERVICE_ROLE, {
++    auth: { autoRefreshToken: false, persistSession: false },
++  });
++}
++
++/**
++ * Validate a raw PAT. Returns the owning user or throws (caller maps to 401).
++ * Rejects revoked / expired tokens. Bumps last_used_at best-effort.
++ */
++export async function validatePat(admin: SupabaseClient, rawToken: string): Promise<ValidatedPat> {
++  if (!rawToken || !rawToken.startsWith(PAT_PREFIX)) {
++    throw new Error("Invalid access token");
++  }
++  const tokenHash = await hashToken(rawToken);
++
++  const { data: row, error } = await admin
++    .from("mcp_access_tokens")
++    .select("id, user_id, organization_id, expires_at, revoked_at")
++    .eq("token_hash", tokenHash)
++    .is("revoked_at", null)
++    .maybeSingle();
++
++  if (error || !row) throw new Error("Invalid or revoked access token");
++  if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
++    throw new Error("Access token expired");
++  }
++
++  const { data: userRes, error: userErr } = await admin.auth.admin.getUserById(row.user_id);
++  if (userErr || !userRes?.user?.email) throw new Error("Token owner no longer exists");
++
++  // Best-effort usage timestamp; never fail the request on this.
++  admin.from("mcp_access_tokens").update({ last_used_at: new Date().toISOString() })
++    .eq("id", row.id).then(() => {}, () => {});
++
++  return {
++    userId: row.user_id,
++    email: userRes.user.email,
++    organizationId: row.organization_id,
++    tokenId: row.id,
++  };
++}
++
++interface CachedSession {
++  client: SupabaseClient;
++  accessToken: string;
++  expiresAt: number;
++}
++
++/** A user-scoped client plus the session JWT (for calling other edge functions). */
++export interface UserScope {
++  client: SupabaseClient;
++  accessToken: string;
++}
++
++// Per-instance cache so we don't mint a session on every MCP call. Keyed by user id.
++const sessionCache = new Map<string, CachedSession>();
++const SESSION_TTL_MS = 10 * 60 * 1000; // refresh well before the JWT's own expiry
++
++/**
++ * Return a Supabase client whose auth.uid() == the PAT owner, so all queries run
++ * under that user's RLS, plus the session access token. Mints a session via the
++ * magic-link trick used in firebase-auth/index.ts and caches it briefly.
++ */
++export async function getUserScopedClient(pat: ValidatedPat): Promise<UserScope> {
++  const cached = sessionCache.get(pat.userId);
++  if (cached && cached.expiresAt > Date.now()) {
++    return { client: cached.client, accessToken: cached.accessToken };
++  }
++
++  const admin = adminClient();
++  const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
++    type: "magiclink",
++    email: pat.email,
++  });
++  if (linkErr || !linkData?.properties?.hashed_token) {
++    throw new Error(linkErr?.message || "Failed to establish user session");
++  }
++
++  const anon = createClient(SUPABASE_URL, ANON_KEY, {
++    auth: { autoRefreshToken: false, persistSession: false },
++  });
++  const { data: sessionData, error: otpErr } = await anon.auth.verifyOtp({
++    token_hash: linkData.properties.hashed_token,
++    type: "magiclink",
++  });
++  if (otpErr || !sessionData.session) {
++    throw new Error(otpErr?.message || "Failed to verify user session");
++  }
++
++  const accessToken = sessionData.session.access_token;
++  sessionCache.set(pat.userId, { client: anon, accessToken, expiresAt: Date.now() + SESSION_TTL_MS });
++  return { client: anon, accessToken };
++}
+diff --git a/supabase/functions/google-calendar-sync/index.ts b/supabase/functions/google-calendar-sync/index.ts
+new file mode 100644
+index 0000000..447b777
+--- /dev/null
++++ b/supabase/functions/google-calendar-sync/index.ts
+@@ -0,0 +1,149 @@
++import {
++  corsHeaders,
++  decryptToken,
++  encryptToken,
++  json,
++  refreshAccessToken,
++  requireUser,
++} from "../_shared/google-oauth.ts";
++
++type GoogleEvent = {
++  id: string;
++  status?: string;
++  summary?: string;
++  description?: string;
++  location?: string;
++  htmlLink?: string;
++  hangoutLink?: string;
++  start?: { date?: string; dateTime?: string };
++  end?: { date?: string; dateTime?: string };
++  organizer?: { email?: string };
++  attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string }>;
++};
++
++function defaultRange() {
++  const from = new Date();
++  from.setDate(from.getDate() - 7);
++  from.setHours(0, 0, 0, 0);
++  const to = new Date();
++  to.setDate(to.getDate() + 45);
++  to.setHours(23, 59, 59, 999);
++  return { timeMin: from.toISOString(), timeMax: to.toISOString() };
++}
++
++function eventRow(event: GoogleEvent, userId: string, organizationId: string | null) {
++  const isAllDay = Boolean(event.start?.date);
++  return {
++    user_id: userId,
++    organization_id: organizationId,
++    google_calendar_id: "primary",
++    google_event_id: event.id,
++    title: event.summary || "Untitled event",
++    description: event.description ?? null,
++    location: event.location ?? null,
++    html_link: event.htmlLink ?? null,
++    hangout_link: event.hangoutLink ?? null,
++    start_at: isAllDay ? null : event.start?.dateTime ?? null,
++    end_at: isAllDay ? null : event.end?.dateTime ?? null,
++    start_date: isAllDay ? event.start?.date ?? null : null,
++    end_date: isAllDay ? event.end?.date ?? null : null,
++    is_all_day: isAllDay,
++    status: event.status || "confirmed",
++    organizer_email: event.organizer?.email ?? null,
++    attendees: event.attendees || [],
++    raw_event: event,
++    synced_at: new Date().toISOString(),
++    updated_at: new Date().toISOString(),
++  };
++}
++
++Deno.serve(async (req) => {
++  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
++
++  try {
++    const { admin, user } = await requireUser(req);
++    const body = await req.json().catch(() => ({}));
++    const fallback = defaultRange();
++    const timeMin = typeof body?.timeMin === "string" ? body.timeMin : fallback.timeMin;
++    const timeMax = typeof body?.timeMax === "string" ? body.timeMax : fallback.timeMax;
++
++    const { data: connection, error: connectionErr } = await admin
++      .from("user_google_connections")
++      .select("*")
++      .eq("user_id", user.id)
++      .maybeSingle();
++    if (connectionErr) throw connectionErr;
++    if (!connection) return json({ error: "Google Calendar is not connected" }, 400);
++
++    let accessToken = await decryptToken(connection.access_token_ciphertext);
++    const refreshToken = await decryptToken(connection.refresh_token_ciphertext);
++    const expiresAt = connection.expires_at ? new Date(connection.expires_at).getTime() : 0;
++
++    if (!accessToken || expiresAt < Date.now() + 60_000) {
++      if (!refreshToken) return json({ error: "Google connection expired. Please reconnect Google." }, 401);
++      const refreshed = await refreshAccessToken(refreshToken);
++      accessToken = refreshed.access_token;
++      await admin.from("user_google_connections").update({
++        access_token_ciphertext: await encryptToken(refreshed.access_token),
++        expires_at: refreshed.expires_in
++          ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
++          : null,
++        scope: refreshed.scope ?? connection.scope,
++      }).eq("user_id", user.id);
++    }
++
++    const params = new URLSearchParams({
++      timeMin,
++      timeMax,
++      singleEvents: "true",
++      orderBy: "startTime",
++      showDeleted: "true",
++      maxResults: "250",
++    });
++
++    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`, {
++      headers: { Authorization: `Bearer ${accessToken}` },
++    });
++    const googleBody = await res.json().catch(() => ({}));
++    if (!res.ok) throw new Error(googleBody?.error?.message || "Failed to sync Google Calendar");
++
++    const events = (googleBody.items || []) as GoogleEvent[];
++    const cancelledIds = events.filter((event) => event.status === "cancelled").map((event) => event.id);
++    if (cancelledIds.length) {
++      await admin
++        .from("google_calendar_events")
++        .delete()
++        .eq("user_id", user.id)
++        .eq("google_calendar_id", "primary")
++        .in("google_event_id", cancelledIds);
++    }
++
++    const activeRows = events
++      .filter((event) => event.status !== "cancelled")
++      .map((event) => eventRow(event, user.id, connection.organization_id ?? null));
++
++    if (activeRows.length) {
++      const { error: upsertErr } = await admin
++        .from("google_calendar_events")
++        .upsert(activeRows, { onConflict: "user_id,google_calendar_id,google_event_id" });
++      if (upsertErr) throw upsertErr;
++    }
++
++    await admin
++      .from("user_google_connections")
++      .update({ last_calendar_sync_at: new Date().toISOString() })
++      .eq("user_id", user.id);
++
++    return json({
++      synced: activeRows.length,
++      removed: cancelledIds.length,
++      timeMin,
++      timeMax,
++    });
++  } catch (err) {
++    const message = err instanceof Error ? err.message : "Failed to sync Google Calendar";
++    const status = message.includes("auth") || message.includes("authenticated") ? 401 : 500;
++    return json({ error: message }, status);
++  }
++});
++
+diff --git a/supabase/functions/google-disconnect/index.ts b/supabase/functions/google-disconnect/index.ts
+new file mode 100644
+index 0000000..92dc7a7
+--- /dev/null
++++ b/supabase/functions/google-disconnect/index.ts
+@@ -0,0 +1,35 @@
++import { corsHeaders, decryptToken, json, requireUser } from "../_shared/google-oauth.ts";
++
++Deno.serve(async (req) => {
++  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
++
++  try {
++    const { admin, user } = await requireUser(req);
++    const { data: connection } = await admin
++      .from("user_google_connections")
++      .select("access_token_ciphertext, refresh_token_ciphertext")
++      .eq("user_id", user.id)
++      .maybeSingle();
++
++    const accessToken = await decryptToken(connection?.access_token_ciphertext);
++    const refreshToken = await decryptToken(connection?.refresh_token_ciphertext);
++    const tokenToRevoke = refreshToken || accessToken;
++    if (tokenToRevoke) {
++      await fetch("https://oauth2.googleapis.com/revoke", {
++        method: "POST",
++        headers: { "Content-Type": "application/x-www-form-urlencoded" },
++        body: new URLSearchParams({ token: tokenToRevoke }),
++      }).catch(() => undefined);
++    }
++
++    await admin.from("google_calendar_events").delete().eq("user_id", user.id);
++    await admin.from("user_google_connections").delete().eq("user_id", user.id);
++
++    return json({ disconnected: true });
++  } catch (err) {
++    const message = err instanceof Error ? err.message : "Failed to disconnect Google";
++    const status = message.includes("auth") || message.includes("authenticated") ? 401 : 500;
++    return json({ error: message }, status);
++  }
++});
++
+diff --git a/supabase/functions/google-oauth-callback/index.ts b/supabase/functions/google-oauth-callback/index.ts
+new file mode 100644
+index 0000000..731096a
+--- /dev/null
++++ b/supabase/functions/google-oauth-callback/index.ts
+@@ -0,0 +1,79 @@
++import {
++  corsHeaders,
++  encryptToken,
++  exchangeCodeForTokens,
++  fetchGoogleUserInfo,
++  adminClient,
++} from "../_shared/google-oauth.ts";
++
++function redirect(path: string) {
++  return new Response(null, { status: 302, headers: { Location: path, ...corsHeaders } });
++}
++
++Deno.serve(async (req) => {
++  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
++
++  const appUrl = Deno.env.get("APP_URL") || Deno.env.get("VITE_APP_URL") || "";
++  const fallback = `${appUrl}/settings?tab=integrations`;
++
++  try {
++    const url = new URL(req.url);
++    const code = url.searchParams.get("code");
++    const state = url.searchParams.get("state");
++    const oauthError = url.searchParams.get("error");
++    if (oauthError) return redirect(`${fallback}&google=error&reason=${encodeURIComponent(oauthError)}`);
++    if (!code || !state) return redirect(`${fallback}&google=error&reason=missing_code_or_state`);
++
++    const admin = adminClient();
++    const { data: stateRow, error: stateErr } = await admin
++      .from("google_oauth_states")
++      .select("state, user_id, organization_id, redirect_to, expires_at")
++      .eq("state", state)
++      .maybeSingle();
++
++    if (stateErr || !stateRow) return redirect(`${fallback}&google=error&reason=invalid_state`);
++    await admin.from("google_oauth_states").delete().eq("state", state);
++    if (new Date(stateRow.expires_at).getTime() < Date.now()) {
++      return redirect(`${fallback}&google=error&reason=expired_state`);
++    }
++
++    const tokens = await exchangeCodeForTokens(code);
++    const googleUser = await fetchGoogleUserInfo(tokens.access_token);
++    if (!googleUser.email) throw new Error("Google account did not return an email address");
++
++    const { data: existing } = await admin
++      .from("user_google_connections")
++      .select("refresh_token_ciphertext")
++      .eq("user_id", stateRow.user_id)
++      .maybeSingle();
++
++    const refreshCiphertext = tokens.refresh_token
++      ? await encryptToken(tokens.refresh_token)
++      : existing?.refresh_token_ciphertext ?? null;
++
++    const expiresAt = tokens.expires_in
++      ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
++      : null;
++
++    const { error: upsertErr } = await admin.from("user_google_connections").upsert({
++      user_id: stateRow.user_id,
++      organization_id: stateRow.organization_id,
++      google_email: googleUser.email.toLowerCase(),
++      google_sub: googleUser.sub ?? null,
++      scope: tokens.scope ?? "",
++      access_token_ciphertext: await encryptToken(tokens.access_token),
++      refresh_token_ciphertext: refreshCiphertext,
++      expires_at: expiresAt,
++      calendar_sync_enabled: true,
++    }, { onConflict: "user_id" });
++    if (upsertErr) throw upsertErr;
++
++    const target = stateRow.redirect_to || fallback;
++    const separator = target.includes("?") ? "&" : "?";
++    return redirect(`${target}${separator}google=connected`);
++  } catch (err) {
++    const reason = encodeURIComponent(err instanceof Error ? err.message : "google_connection_failed");
++    return redirect(`${fallback}&google=error&reason=${reason}`);
++  }
++});
++
+diff --git a/supabase/functions/google-oauth-start/index.ts b/supabase/functions/google-oauth-start/index.ts
+new file mode 100644
+index 0000000..0682acc
+--- /dev/null
++++ b/supabase/functions/google-oauth-start/index.ts
+@@ -0,0 +1,45 @@
++import { calendarScopes, corsHeaders, json, requireUser, requiredEnv } from "../_shared/google-oauth.ts";
++
++Deno.serve(async (req) => {
++  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
++
++  try {
++    const { admin, user } = await requireUser(req);
++    const body = await req.json().catch(() => ({}));
++    const redirectTo = typeof body?.redirectTo === "string" ? body.redirectTo : null;
++
++    const { data: profile } = await admin
++      .from("profiles")
++      .select("organization_id")
++      .eq("id", user.id)
++      .maybeSingle();
++
++    const stateBytes = crypto.getRandomValues(new Uint8Array(24));
++    const state = btoa(String.fromCharCode(...stateBytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
++
++    const { error } = await admin.from("google_oauth_states").insert({
++      state,
++      user_id: user.id,
++      organization_id: profile?.organization_id ?? null,
++      redirect_to: redirectTo,
++    });
++    if (error) throw error;
++
++    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
++    authUrl.searchParams.set("client_id", requiredEnv("GOOGLE_OAUTH_CLIENT_ID"));
++    authUrl.searchParams.set("redirect_uri", requiredEnv("GOOGLE_OAUTH_REDIRECT_URI"));
++    authUrl.searchParams.set("response_type", "code");
++    authUrl.searchParams.set("scope", calendarScopes.join(" "));
++    authUrl.searchParams.set("access_type", "offline");
++    authUrl.searchParams.set("prompt", "consent");
++    authUrl.searchParams.set("include_granted_scopes", "true");
++    authUrl.searchParams.set("state", state);
++
++    return json({ authUrl: authUrl.toString() });
++  } catch (err) {
++    const message = err instanceof Error ? err.message : "Failed to start Google connection";
++    const status = message.includes("auth") || message.includes("authenticated") ? 401 : 500;
++    return json({ error: message }, status);
++  }
++});
++
+diff --git a/supabase/functions/issue-mcp-token/deno.json b/supabase/functions/issue-mcp-token/deno.json
+new file mode 100644
+index 0000000..0967ef4
+--- /dev/null
++++ b/supabase/functions/issue-mcp-token/deno.json
+@@ -0,0 +1 @@
++{}
+diff --git a/supabase/functions/issue-mcp-token/index.ts b/supabase/functions/issue-mcp-token/index.ts
+new file mode 100644
+index 0000000..7a37431
+--- /dev/null
++++ b/supabase/functions/issue-mcp-token/index.ts
+@@ -0,0 +1,71 @@
++// Issues a Personal Access Token for the MCP server.
++// Authorization: caller must be a signed-in user (Supabase access token). The
++// token is generated and hashed server-side; the raw value is returned ONCE.
++import { createClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
++import { generatePat } from "../_shared/mcp-auth.ts";
++
++const corsHeaders = {
++  "Access-Control-Allow-Origin": "*",
++  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
++};
++
++Deno.serve(async (req) => {
++  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
++
++  try {
++    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
++    const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
++
++    const authHeader = req.headers.get("Authorization") || "";
++    if (!authHeader.startsWith("Bearer ")) return json({ error: "Missing auth" }, 401);
++    const token = authHeader.replace("Bearer ", "");
++
++    const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
++      auth: { autoRefreshToken: false, persistSession: false },
++    });
++
++    const { data: userData, error: authErr } = await admin.auth.getUser(token);
++    if (authErr || !userData?.user) return json({ error: "Not authenticated" }, 401);
++    const user = userData.user;
++
++    const body = await req.json().catch(() => ({}));
++    const name = String(body?.name || "").trim() || "AI client";
++    const expiresInDays = Number(body?.expiresInDays);
++    const expiresAt =
++      Number.isFinite(expiresInDays) && expiresInDays > 0
++        ? new Date(Date.now() + expiresInDays * 86400_000).toISOString()
++        : null;
++
++    const { data: profile } = await admin
++      .from("profiles").select("organization_id").eq("id", user.id).maybeSingle();
++
++    const { raw, hash, prefix } = await generatePat();
++
++    const { data: inserted, error: insErr } = await admin
++      .from("mcp_access_tokens")
++      .insert({
++        user_id: user.id,
++        organization_id: profile?.organization_id ?? null,
++        name,
++        token_hash: hash,
++        token_prefix: prefix,
++        expires_at: expiresAt,
++      })
++      .select("id, name, token_prefix, expires_at, created_at")
++      .single();
++
++    if (insErr || !inserted) return json({ error: insErr?.message || "Failed to create token" }, 500);
++
++    // Raw token is returned exactly once — never stored or logged.
++    return json({ token: raw, record: inserted });
++  } catch (err) {
++    return json({ error: (err as Error).message }, 500);
++  }
++});
++
++function json(body: unknown, status = 200) {
++  return new Response(JSON.stringify(body), {
++    status,
++    headers: { ...corsHeaders, "Content-Type": "application/json" },
++  });
++}
+diff --git a/supabase/functions/mcp-server/deno.json b/supabase/functions/mcp-server/deno.json
+new file mode 100644
+index 0000000..0967ef4
+--- /dev/null
++++ b/supabase/functions/mcp-server/deno.json
+@@ -0,0 +1 @@
++{}
+diff --git a/supabase/functions/mcp-server/index.ts b/supabase/functions/mcp-server/index.ts
+new file mode 100644
+index 0000000..5b4abae
+--- /dev/null
++++ b/supabase/functions/mcp-server/index.ts
+@@ -0,0 +1,155 @@
++// TaskFlow Pro MCP server — lets external AI clients (Claude, ChatGPT, …) connect
++// in over Streamable HTTP and act on TaskFlow data as a specific user.
++//
++// Auth: a Personal Access Token (PAT) in the Authorization header. We resolve it
++// to a user, mint a user-scoped Supabase session, and run every tool through RLS.
++// MCP over HTTP is plain JSON-RPC 2.0, so we handle it directly (no SDK) to stay
++// compatible with Deno's serverless runtime.
++
++import { adminClient, getUserScopedClient, validatePat } from "../_shared/mcp-auth.ts";
++import { allTools, toolsByName, type ToolContext } from "./tools/index.ts";
++
++const PROTOCOL_VERSION = "2025-06-18";
++const SERVER_INFO = { name: "taskflow-pro", version: "1.0.0", title: "TaskFlow Pro" };
++
++const corsHeaders = {
++  "Access-Control-Allow-Origin": "*",
++  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
++  "Access-Control-Allow-Headers":
++    "authorization, x-client-info, apikey, content-type, mcp-session-id, mcp-protocol-version",
++  "Access-Control-Expose-Headers": "mcp-session-id, mcp-protocol-version",
++};
++
++interface JsonRpcMessage {
++  jsonrpc: string;
++  id?: string | number | null;
++  method?: string;
++  params?: Record<string, unknown>;
++}
++
++function rpcResult(id: unknown, result: unknown) {
++  return { jsonrpc: "2.0", id, result };
++}
++function rpcError(id: unknown, code: number, message: string) {
++  return { jsonrpc: "2.0", id, error: { code, message } };
++}
++
++async function dispatch(msg: JsonRpcMessage, ctx: ToolContext): Promise<object | null> {
++  const { id, method, params } = msg;
++  const isNotification = id === undefined || id === null;
++
++  switch (method) {
++    case "initialize":
++      return rpcResult(id, {
++        protocolVersion: (params?.protocolVersion as string) || PROTOCOL_VERSION,
++        capabilities: { tools: { listChanged: false } },
++        serverInfo: SERVER_INFO,
++        instructions:
++          "Tools act on TaskFlow Pro tasks, subtasks, workflows, departments and people. " +
++          "Everything is scoped to the connected user's role and permissions.",
++      });
++
++    case "notifications/initialized":
++    case "notifications/cancelled":
++      return null; // notifications get no response
++
++    case "ping":
++      return rpcResult(id, {});
++
++    case "tools/list":
++      return rpcResult(id, {
++        tools: allTools.map((t) => ({
++          name: t.name,
++          description: t.description,
++          inputSchema: t.inputSchema,
++        })),
++      });
++
++    case "tools/call": {
++      const name = String(params?.name || "");
++      const tool = toolsByName[name];
++      if (!tool) return rpcError(id, -32602, `Unknown tool: ${name}`);
++      const args = (params?.arguments as Record<string, unknown>) || {};
++      try {
++        const output = await tool.handler(ctx, args);
++        return rpcResult(id, {
++          content: [{ type: "text", text: JSON.stringify(output, null, 2) }],
++        });
++      } catch (err) {
++        // Tool execution errors are reported in-band per MCP spec.
++        return rpcResult(id, {
++          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
++          isError: true,
++        });
++      }
++    }
++
++    default:
++      if (isNotification) return null;
++      return rpcError(id, -32601, `Method not found: ${method}`);
++  }
++}
++
++Deno.serve(async (req) => {
++  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
++
++  // Streamable HTTP also defines GET (server->client stream); we are stateless.
++  if (req.method === "GET") {
++    return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
++  }
++  if (req.method !== "POST") {
++    return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
++  }
++
++  // Authenticate the PAT before any data access. Accept "Bearer <token>",
++  // "bearer <token>", or a bare token — some clients omit the prefix.
++  const authHeader = req.headers.get("Authorization") || "";
++  const rawToken = authHeader.replace(/^Bearer\s+/i, "").trim();
++  if (!rawToken) {
++    return jsonResponse(rpcError(null, -32001, "Missing access token"), 401);
++  }
++
++  let ctx: ToolContext;
++  try {
++    const admin = adminClient();
++    const pat = await validatePat(admin, rawToken);
++    const { client, accessToken } = await getUserScopedClient(pat);
++    ctx = {
++      client,
++      accessToken,
++      userId: pat.userId,
++      email: pat.email,
++      organizationId: pat.organizationId,
++    };
++  } catch (err) {
++    return jsonResponse(rpcError(null, -32001, (err as Error).message), 401);
++  }
++
++  let body: unknown;
++  try {
++    body = await req.json();
++  } catch {
++    return jsonResponse(rpcError(null, -32700, "Parse error"), 400);
++  }
++
++  // Support both a single message and a JSON-RPC batch.
++  if (Array.isArray(body)) {
++    const responses = (await Promise.all(body.map((m) => dispatch(m as JsonRpcMessage, ctx))))
++      .filter((r): r is object => r !== null);
++    return responses.length === 0
++      ? new Response(null, { status: 202, headers: corsHeaders })
++      : jsonResponse(responses);
++  }
++
++  const response = await dispatch(body as JsonRpcMessage, ctx);
++  return response === null
++    ? new Response(null, { status: 202, headers: corsHeaders })
++    : jsonResponse(response);
++});
++
++function jsonResponse(body: unknown, status = 200) {
++  return new Response(JSON.stringify(body), {
++    status,
++    headers: { ...corsHeaders, "Content-Type": "application/json" },
++  });
++}
+diff --git a/supabase/functions/mcp-server/tools/attachments.ts b/supabase/functions/mcp-server/tools/attachments.ts
+new file mode 100644
+index 0000000..96f58d3
+--- /dev/null
++++ b/supabase/functions/mcp-server/tools/attachments.ts
+@@ -0,0 +1,103 @@
++import { type McpTool, objectSchema, permissionError } from "./types.ts";
++
++const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
++
++function decodeBase64(b64: string): Uint8Array {
++  const clean = b64.replace(/^data:[^;]+;base64,/, "");
++  const bin = atob(clean);
++  const bytes = new Uint8Array(bin.length);
++  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
++  return bytes;
++}
++
++export const attachmentTools: McpTool[] = [
++  {
++    name: "list_task_attachments",
++    description: "List files attached to a task (name + download URL).",
++    inputSchema: objectSchema({ task_id: { type: "string" } }, ["task_id"]),
++    handler: async ({ client }, args) => {
++      const { data, error } = await client
++        .from("task_attachments")
++        .select("id, file_name, file_url, mime_type, size_bytes, uploaded_by, created_at")
++        .eq("task_id", String(args.task_id))
++        .order("created_at", { ascending: false });
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++  {
++    name: "add_task_attachment",
++    description:
++      "Attach a file to a task. Provide either source_url (the server fetches it) or content_base64 " +
++      "(for AI-generated or small text files). Local-disk files can't be read by the AI — use a URL. " +
++      "Stored in Firebase Storage; metadata saved on the task.",
++    inputSchema: objectSchema(
++      {
++        task_id: { type: "string" },
++        file_name: { type: "string", description: "Name to store, e.g. 'invoice.pdf'." },
++        source_url: { type: "string", description: "Public URL to fetch the file from." },
++        content_base64: { type: "string", description: "Base64-encoded file bytes (alternative to source_url)." },
++        mime_type: { type: "string", description: "Optional MIME type (e.g. text/csv, application/pdf)." },
++      },
++      ["task_id", "file_name"],
++    ),
++    handler: async ({ client, accessToken, userId }, args) => {
++      const fileName = String(args.file_name);
++      const mime = args.mime_type ? String(args.mime_type) : "application/octet-stream";
++
++      // Obtain the file bytes.
++      let blob: Blob;
++      if (args.source_url) {
++        const res = await fetch(String(args.source_url));
++        if (!res.ok) throw new Error(`Could not fetch source_url (HTTP ${res.status})`);
++        blob = new Blob([new Uint8Array(await res.arrayBuffer())], {
++          type: args.mime_type ? mime : (res.headers.get("content-type") || mime),
++        });
++      } else if (args.content_base64) {
++        blob = new Blob([decodeBase64(String(args.content_base64))], { type: mime });
++      } else {
++        throw new Error("Provide either source_url or content_base64");
++      }
++
++      // Upload via the existing firebase-upload edge function (runs as this user).
++      const form = new FormData();
++      form.append("file", blob, fileName);
++      form.append("filename", fileName);
++      form.append("folder", "attachments");
++      const upRes = await fetch(`${SUPABASE_URL}/functions/v1/firebase-upload`, {
++        method: "POST",
++        headers: { Authorization: `Bearer ${accessToken}` },
++        body: form,
++      });
++      const up = await upRes.json().catch(() => ({}));
++      if (!upRes.ok || !up?.url) throw new Error(up?.error || `Upload failed (HTTP ${upRes.status})`);
++
++      // Save metadata on the task (RLS enforces task access).
++      const { data, error } = await client
++        .from("task_attachments")
++        .insert({
++          task_id: String(args.task_id),
++          file_name: fileName,
++          file_url: up.url,
++          file_path: up.path ?? null,
++          mime_type: blob.type || mime,
++          size_bytes: blob.size,
++          uploaded_by: userId,
++        })
++        .select("id, file_name, file_url, mime_type, size_bytes, created_at")
++        .single();
++      if (error) throw permissionError(error, "attach files to this task");
++      return data;
++    },
++  },
++  {
++    name: "delete_task_attachment",
++    description: "Remove an attachment from a task (deletes the metadata record).",
++    inputSchema: objectSchema({ attachment_id: { type: "string" } }, ["attachment_id"]),
++    handler: async ({ client }, args) => {
++      const { error } = await client.from("task_attachments").delete().eq("id", String(args.attachment_id));
++      if (error) throw permissionError(error, "delete this attachment");
++      return { deleted: true, attachment_id: args.attachment_id };
++    },
++  },
++];
+diff --git a/supabase/functions/mcp-server/tools/dashboard.ts b/supabase/functions/mcp-server/tools/dashboard.ts
+new file mode 100644
+index 0000000..faf32b4
+--- /dev/null
++++ b/supabase/functions/mcp-server/tools/dashboard.ts
+@@ -0,0 +1,82 @@
++import { type McpTool, objectSchema } from "./types.ts";
++
++/** Today's date (YYYY-MM-DD) in IST, matching the app's date handling. */
++function istToday(): string {
++  return new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
++}
++
++export const dashboardTools: McpTool[] = [
++  {
++    name: "get_dashboard",
++    description:
++      "Home dashboard summary for the current user: counts of visible tasks by status, due today, overdue, and tasks assigned to you.",
++    inputSchema: objectSchema({}),
++    handler: async ({ client, userId }) => {
++      const today = istToday();
++      const [tasksRes, mineRes] = await Promise.all([
++        client.from("tasks").select("id, status, due_date"),
++        client.from("task_assignees").select("task_id").eq("user_id", userId),
++      ]);
++      const tasks = tasksRes.data || [];
++      const myIds = new Set((mineRes.data || []).map((m) => m.task_id));
++      const open = tasks.filter((t) => t.status !== "done");
++      return {
++        today,
++        total_visible: tasks.length,
++        by_status: tasks.reduce((acc: Record<string, number>, t) => {
++          acc[t.status] = (acc[t.status] || 0) + 1;
++          return acc;
++        }, {}),
++        open: open.length,
++        done: tasks.length - open.length,
++        due_today: open.filter((t) => t.due_date === today).length,
++        overdue: open.filter((t) => t.due_date && t.due_date < today).length,
++        my_open_tasks: open.filter((t) => myIds.has(t.id)).length,
++      };
++    },
++  },
++  {
++    name: "get_board",
++    description: "Kanban board: tasks the user can see, grouped into status columns.",
++    inputSchema: objectSchema({
++      department_id: { type: "string", description: "Optional department UUID filter." },
++    }),
++    handler: async ({ client }, args) => {
++      let q = client
++        .from("tasks")
++        .select("id, title, status, priority, due_date, department_id")
++        .order("created_at", { ascending: false });
++      if (args.department_id) q = q.eq("department_id", String(args.department_id));
++      const { data, error } = await q;
++      if (error) throw new Error(error.message);
++      const columns: Record<string, unknown[]> = { todo: [], in_progress: [], in_review: [], done: [], blocked: [] };
++      for (const t of data || []) {
++        (columns[t.status] ||= []).push({ id: t.id, title: t.title, priority: t.priority, due_date: t.due_date });
++      }
++      return columns;
++    },
++  },
++  {
++    name: "list_calendar",
++    description:
++      "Tasks with a due date in a range (calendar view). Defaults to the next 30 days if no range is given.",
++    inputSchema: objectSchema({
++      from: { type: "string", description: "Start date YYYY-MM-DD (inclusive). Default: today." },
++      to: { type: "string", description: "End date YYYY-MM-DD (inclusive). Default: today + 30 days." },
++    }),
++    handler: async ({ client }, args) => {
++      const from = args.from ? String(args.from) : istToday();
++      const to = args.to
++        ? String(args.to)
++        : new Date(Date.now() + (5.5 * 3600 + 30 * 86400) * 1000).toISOString().slice(0, 10);
++      const { data, error } = await client
++        .from("tasks")
++        .select("id, title, status, priority, due_date, department_id")
++        .gte("due_date", from)
++        .lte("due_date", to)
++        .order("due_date", { ascending: true });
++      if (error) throw new Error(error.message);
++      return { from, to, tasks: data || [] };
++    },
++  },
++];
+diff --git a/supabase/functions/mcp-server/tools/goals.ts b/supabase/functions/mcp-server/tools/goals.ts
+new file mode 100644
+index 0000000..d0ab28b
+--- /dev/null
++++ b/supabase/functions/mcp-server/tools/goals.ts
+@@ -0,0 +1,315 @@
++import { type McpTool, objectSchema, permissionError } from "./types.ts";
++
++const PRIORITIES = ["low", "medium", "high", "urgent"];
++
++// Goals (org goals, dept-scoped writes) + KRAs/KPIs (your own).
++
++export const goalTools: McpTool[] = [
++  {
++    name: "list_goals",
++    description: "List goals visible to the current user. Optional filters by status or department.",
++    inputSchema: objectSchema({
++      status: { type: "string", description: "Filter by status (e.g. active, completed, at_risk)." },
++      department_id: { type: "string", description: "Filter by department UUID." },
++    }),
++    handler: async ({ client }, args) => {
++      let q = client
++        .from("goals")
++        .select("id, title, description, category, status, priority, current_value, target_value, unit, deadline, department_id, created_at")
++        .order("created_at", { ascending: false });
++      if (args.status) q = q.eq("status", String(args.status));
++      if (args.department_id) q = q.eq("department_id", String(args.department_id));
++      const { data, error } = await q;
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++  {
++    name: "get_goal",
++    description: "Get a single goal by id.",
++    inputSchema: objectSchema({ goal_id: { type: "string" } }, ["goal_id"]),
++    handler: async ({ client }, args) => {
++      const { data, error } = await client.from("goals").select("*").eq("id", String(args.goal_id)).maybeSingle();
++      if (error) throw new Error(error.message);
++      if (!data) throw new Error("Goal not found or not accessible");
++      return data;
++    },
++  },
++  {
++    name: "create_goal",
++    description:
++      "Create a goal. Requires admin/MD, or a department manager creating in a department they manage (defaults to your own department).",
++    inputSchema: objectSchema(
++      {
++        title: { type: "string" },
++        description: { type: "string" },
++        category: { type: "string", description: "Default 'general'." },
++        target_value: { type: "number", description: "Default 100." },
++        current_value: { type: "number", description: "Default 0." },
++        unit: { type: "string", description: "e.g. %, tasks, ₹. Default '%'." },
++        priority: { type: "string", enum: PRIORITIES, description: "Default 'medium'." },
++        deadline: { type: "string", description: "ISO date (YYYY-MM-DD)." },
++        department_id: { type: "string", description: "Department UUID. Defaults to your own department." },
++      },
++      ["title"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      const { data: profile } = await client
++        .from("profiles").select("department_id").eq("id", userId).maybeSingle();
++      const departmentId = args.department_id ? String(args.department_id) : (profile?.department_id ?? null);
++      const { data, error } = await client
++        .from("goals")
++        .insert({
++          title: String(args.title),
++          description: args.description ? String(args.description) : null,
++          category: args.category ? String(args.category) : "general",
++          target_value: args.target_value !== undefined ? Number(args.target_value) : 100,
++          current_value: args.current_value !== undefined ? Number(args.current_value) : 0,
++          unit: args.unit ? String(args.unit) : "%",
++          priority: args.priority ? String(args.priority) : "medium",
++          deadline: args.deadline ? String(args.deadline) : null,
++          department_id: departmentId,
++          created_by: userId,
++        })
++        .select("*")
++        .single();
++      if (error) {
++        throw new Error(
++          `${error.message}. Goal creation needs admin/MD, or a manager creating in a department they manage.`,
++        );
++      }
++      return data;
++    },
++  },
++  {
++    name: "update_goal",
++    description: "Update fields on a goal (title, description, status, priority, target_value, deadline).",
++    inputSchema: objectSchema(
++      {
++        goal_id: { type: "string" },
++        title: { type: "string" },
++        description: { type: "string" },
++        status: { type: "string" },
++        priority: { type: "string", enum: PRIORITIES },
++        target_value: { type: "number" },
++        deadline: { type: "string" },
++      },
++      ["goal_id"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      const patch: Record<string, unknown> = { updated_by: userId };
++      if (args.title !== undefined) patch.title = String(args.title);
++      if (args.description !== undefined) patch.description = String(args.description) || null;
++      if (args.status !== undefined) patch.status = String(args.status);
++      if (args.priority !== undefined) patch.priority = String(args.priority);
++      if (args.target_value !== undefined) patch.target_value = Number(args.target_value);
++      if (args.deadline !== undefined) patch.deadline = String(args.deadline) || null;
++      const { data, error } = await client
++        .from("goals").update(patch).eq("id", String(args.goal_id)).select("*").maybeSingle();
++      if (error) throw new Error(error.message);
++      if (!data) throw new Error("Goal not found or not allowed to update");
++      return data;
++    },
++  },
++  {
++    name: "update_goal_progress",
++    description: "Set a goal's current progress value.",
++    inputSchema: objectSchema(
++      { goal_id: { type: "string" }, current_value: { type: "number" } },
++      ["goal_id", "current_value"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      const { data, error } = await client
++        .from("goals")
++        .update({ current_value: Number(args.current_value), updated_by: userId })
++        .eq("id", String(args.goal_id))
++        .select("id, title, current_value, target_value, unit")
++        .maybeSingle();
++      if (error) throw new Error(error.message);
++      if (!data) throw new Error("Goal not found or not allowed");
++      return data;
++    },
++  },
++  {
++    name: "list_kras",
++    description: "List Key Result Areas (KRAs) the current user can see.",
++    inputSchema: objectSchema({}),
++    handler: async ({ client }) => {
++      const { data, error } = await client
++        .from("kras").select("id, title, description, period, status, weight, target_date, user_id")
++        .order("created_at", { ascending: false });
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++  {
++    name: "list_kpis",
++    description: "List KPIs the current user can see.",
++    inputSchema: objectSchema({
++      kra_id: { type: "string", description: "Optional: only KPIs under this KRA." },
++    }),
++    handler: async ({ client }, args) => {
++      let q = client
++        .from("kpis").select("id, title, metric, period, status, current_value, target_value, unit, kra_id, user_id")
++        .order("created_at", { ascending: false });
++      if (args.kra_id) q = q.eq("kra_id", String(args.kra_id));
++      const { data, error } = await q;
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++  {
++    name: "delete_goal",
++    description: "Delete a goal. Requires admin/MD, or a manager of the goal's department.",
++    inputSchema: objectSchema({ goal_id: { type: "string" } }, ["goal_id"]),
++    handler: async ({ client }, args) => {
++      const { error } = await client.from("goals").delete().eq("id", String(args.goal_id));
++      if (error) throw permissionError(error, "delete this goal");
++      return { deleted: true, goal_id: args.goal_id };
++    },
++  },
++  // ── KRAs (your own; RLS: user_id = auth.uid()) ──────────────────────────────
++  {
++    name: "create_kra",
++    description: "Create a Key Result Area (KRA) for yourself.",
++    inputSchema: objectSchema(
++      {
++        title: { type: "string" },
++        description: { type: "string" },
++        period: { type: "string", description: "e.g. Q1-2026, monthly. Default 'quarterly'." },
++        weight: { type: "number", description: "Relative weight. Default 1." },
++        target_date: { type: "string", description: "ISO date (YYYY-MM-DD)." },
++      },
++      ["title"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      const { data, error } = await client
++        .from("kras")
++        .insert({
++          user_id: userId,
++          title: String(args.title),
++          description: args.description ? String(args.description) : null,
++          period: args.period ? String(args.period) : "quarterly",
++          weight: args.weight !== undefined ? Number(args.weight) : 1,
++          target_date: args.target_date ? String(args.target_date) : null,
++        })
++        .select("*")
++        .single();
++      if (error) throw permissionError(error, "create a KRA");
++      return data;
++    },
++  },
++  {
++    name: "update_kra",
++    description: "Update one of your KRAs.",
++    inputSchema: objectSchema(
++      {
++        kra_id: { type: "string" },
++        title: { type: "string" },
++        description: { type: "string" },
++        status: { type: "string" },
++        weight: { type: "number" },
++        target_date: { type: "string" },
++      },
++      ["kra_id"],
++    ),
++    handler: async ({ client }, args) => {
++      const patch: Record<string, unknown> = {};
++      if (args.title !== undefined) patch.title = String(args.title);
++      if (args.description !== undefined) patch.description = String(args.description) || null;
++      if (args.status !== undefined) patch.status = String(args.status);
++      if (args.weight !== undefined) patch.weight = Number(args.weight);
++      if (args.target_date !== undefined) patch.target_date = String(args.target_date) || null;
++      const { data, error } = await client
++        .from("kras").update(patch).eq("id", String(args.kra_id)).select("*").maybeSingle();
++      if (error) throw permissionError(error, "update this KRA");
++      if (!data) throw new Error("KRA not found or not yours");
++      return data;
++    },
++  },
++  {
++    name: "delete_kra",
++    description: "Delete one of your KRAs.",
++    inputSchema: objectSchema({ kra_id: { type: "string" } }, ["kra_id"]),
++    handler: async ({ client }, args) => {
++      const { error } = await client.from("kras").delete().eq("id", String(args.kra_id));
++      if (error) throw permissionError(error, "delete this KRA");
++      return { deleted: true, kra_id: args.kra_id };
++    },
++  },
++  // ── KPIs (your own; RLS: user_id = auth.uid()) ──────────────────────────────
++  {
++    name: "create_kpi",
++    description: "Create a KPI for yourself, optionally linked to a KRA.",
++    inputSchema: objectSchema(
++      {
++        title: { type: "string" },
++        metric: { type: "string", description: "What is measured." },
++        target_value: { type: "number", description: "Default 100." },
++        current_value: { type: "number", description: "Default 0." },
++        unit: { type: "string" },
++        period: { type: "string", description: "Default 'monthly'." },
++        kra_id: { type: "string", description: "Optional parent KRA." },
++      },
++      ["title"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      const { data, error } = await client
++        .from("kpis")
++        .insert({
++          user_id: userId,
++          title: String(args.title),
++          metric: args.metric ? String(args.metric) : null,
++          target_value: args.target_value !== undefined ? Number(args.target_value) : 100,
++          current_value: args.current_value !== undefined ? Number(args.current_value) : 0,
++          unit: args.unit ? String(args.unit) : null,
++          period: args.period ? String(args.period) : "monthly",
++          kra_id: args.kra_id ? String(args.kra_id) : null,
++        })
++        .select("*")
++        .single();
++      if (error) throw permissionError(error, "create a KPI");
++      return data;
++    },
++  },
++  {
++    name: "update_kpi",
++    description: "Update one of your KPIs (e.g. progress via current_value).",
++    inputSchema: objectSchema(
++      {
++        kpi_id: { type: "string" },
++        title: { type: "string" },
++        metric: { type: "string" },
++        status: { type: "string" },
++        current_value: { type: "number" },
++        target_value: { type: "number" },
++        unit: { type: "string" },
++      },
++      ["kpi_id"],
++    ),
++    handler: async ({ client }, args) => {
++      const patch: Record<string, unknown> = {};
++      if (args.title !== undefined) patch.title = String(args.title);
++      if (args.metric !== undefined) patch.metric = String(args.metric) || null;
++      if (args.status !== undefined) patch.status = String(args.status);
++      if (args.current_value !== undefined) patch.current_value = Number(args.current_value);
++      if (args.target_value !== undefined) patch.target_value = Number(args.target_value);
++      if (args.unit !== undefined) patch.unit = String(args.unit) || null;
++      const { data, error } = await client
++        .from("kpis").update(patch).eq("id", String(args.kpi_id)).select("*").maybeSingle();
++      if (error) throw permissionError(error, "update this KPI");
++      if (!data) throw new Error("KPI not found or not yours");
++      return data;
++    },
++  },
++  {
++    name: "delete_kpi",
++    description: "Delete one of your KPIs.",
++    inputSchema: objectSchema({ kpi_id: { type: "string" } }, ["kpi_id"]),
++    handler: async ({ client }, args) => {
++      const { error } = await client.from("kpis").delete().eq("id", String(args.kpi_id));
++      if (error) throw permissionError(error, "delete this KPI");
++      return { deleted: true, kpi_id: args.kpi_id };
++    },
++  },
++];
+diff --git a/supabase/functions/mcp-server/tools/inbox.ts b/supabase/functions/mcp-server/tools/inbox.ts
+new file mode 100644
+index 0000000..28b32f7
+--- /dev/null
++++ b/supabase/functions/mcp-server/tools/inbox.ts
+@@ -0,0 +1,191 @@
++import { type McpTool, objectSchema, permissionError } from "./types.ts";
++
++// Inbox — in-app notifications + internal chat (RLS: own notifications; chat by participant).
++
++export const inboxTools: McpTool[] = [
++  {
++    name: "list_notifications",
++    description: "List the current user's in-app notifications, newest first.",
++    inputSchema: objectSchema({
++      unread_only: { type: "boolean", description: "Only return unread notifications (default false)." },
++      limit: { type: "number", description: "Max rows (default 30, max 100)." },
++    }),
++    handler: async ({ client }, args) => {
++      let q = client
++        .from("in_app_notifications")
++        .select("id, notification_type, title, body, action_url, read_at, created_at")
++        .order("created_at", { ascending: false })
++        .limit(Math.min(Number(args.limit) || 30, 100));
++      if (args.unread_only) q = q.is("read_at", null);
++      const { data, error } = await q;
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++  {
++    name: "mark_notification_read",
++    description: "Mark a single notification as read.",
++    inputSchema: objectSchema({ notification_id: { type: "string" } }, ["notification_id"]),
++    handler: async ({ client }, args) => {
++      const { data, error } = await client
++        .from("in_app_notifications")
++        .update({ read_at: new Date().toISOString() })
++        .eq("id", String(args.notification_id))
++        .select("id, read_at")
++        .maybeSingle();
++      if (error) throw new Error(error.message);
++      if (!data) throw new Error("Notification not found");
++      return data;
++    },
++  },
++  {
++    name: "mark_all_notifications_read",
++    description: "Mark all of the current user's unread notifications as read.",
++    inputSchema: objectSchema({}),
++    handler: async ({ client }) => {
++      const { data, error } = await client
++        .from("in_app_notifications")
++        .update({ read_at: new Date().toISOString() })
++        .is("read_at", null)
++        .select("id");
++      if (error) throw new Error(error.message);
++      return { marked_read: (data || []).length };
++    },
++  },
++  {
++    name: "list_conversations",
++    description: "List the current user's chat conversations (most recent activity first).",
++    inputSchema: objectSchema({}),
++    handler: async ({ client }) => {
++      const { data, error } = await client
++        .from("conversations")
++        .select("id, title, is_group, last_message_at, created_at")
++        .order("last_message_at", { ascending: false });
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++  {
++    name: "list_messages",
++    description: "List messages in a conversation, newest first.",
++    inputSchema: objectSchema(
++      {
++        conversation_id: { type: "string" },
++        limit: { type: "number", description: "Max messages (default 30, max 100)." },
++      },
++      ["conversation_id"],
++    ),
++    handler: async ({ client }, args) => {
++      const { data, error } = await client
++        .from("chat_messages")
++        .select("id, sender_id, body, created_at")
++        .eq("conversation_id", String(args.conversation_id))
++        .order("created_at", { ascending: false })
++        .limit(Math.min(Number(args.limit) || 30, 100));
++      if (error) throw new Error(error.message);
++      const rows = data || [];
++      const senderIds = [...new Set(rows.map((m) => m.sender_id))];
++      const { data: profiles } = senderIds.length
++        ? await client.from("profiles").select("id, name").in("id", senderIds)
++        : { data: [] };
++      return rows.map((m) => ({
++        ...m,
++        sender_name: (profiles || []).find((p) => p.id === m.sender_id)?.name || "Unknown",
++      }));
++    },
++  },
++  {
++    name: "send_message",
++    description: "Send a chat message in a conversation the current user is part of.",
++    inputSchema: objectSchema(
++      { conversation_id: { type: "string" }, body: { type: "string" } },
++      ["conversation_id", "body"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      const { data, error } = await client
++        .from("chat_messages")
++        .insert({
++          conversation_id: String(args.conversation_id),
++          sender_id: userId,
++          body: String(args.body),
++        })
++        .select("id, conversation_id, body, created_at")
++        .single();
++      if (error) throw permissionError(error, "send a message in this conversation");
++      return data;
++    },
++  },
++  {
++    name: "start_conversation",
++    description:
++      "Start a new chat conversation with one or more people, optionally with a first message. " +
++      "Use list_team_members to find user IDs.",
++    inputSchema: objectSchema(
++      {
++        participant_ids: { type: "array", items: { type: "string" }, description: "User UUIDs to include (besides you)." },
++        title: { type: "string", description: "Optional title (for group chats)." },
++        is_group: { type: "boolean", description: "Group chat? Defaults to true if >1 participant." },
++        first_message: { type: "string", description: "Optional message to send immediately." },
++      },
++      ["participant_ids"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      const participants = Array.isArray(args.participant_ids) ? (args.participant_ids as string[]) : [];
++      if (participants.length === 0) throw new Error("At least one participant is required");
++      const isGroup = args.is_group !== undefined ? Boolean(args.is_group) : participants.length > 1;
++      const { data: convId, error } = await client.rpc("create_conversation_with_participants", {
++        _is_group: isGroup,
++        _participant_ids: participants,
++        _title: args.title ? String(args.title) : null,
++      });
++      if (error) throw permissionError(error, "start a conversation");
++
++      let firstMessage = null;
++      if (args.first_message) {
++        const { data: msg } = await client
++          .from("chat_messages")
++          .insert({ conversation_id: convId, sender_id: userId, body: String(args.first_message) })
++          .select("id, body, created_at").maybeSingle();
++        firstMessage = msg;
++      }
++      return { conversation_id: convId, first_message: firstMessage };
++    },
++  },
++  {
++    name: "mark_conversation_read",
++    description: "Mark a conversation as read up to now (updates your last-read timestamp).",
++    inputSchema: objectSchema({ conversation_id: { type: "string" } }, ["conversation_id"]),
++    handler: async ({ client, userId }, args) => {
++      const { data, error } = await client
++        .from("conversation_participants")
++        .update({ last_read_at: new Date().toISOString() })
++        .eq("conversation_id", String(args.conversation_id))
++        .eq("user_id", userId)
++        .select("conversation_id, last_read_at")
++        .maybeSingle();
++      if (error) throw permissionError(error, "mark this conversation read");
++      if (!data) throw new Error("Conversation not found or you're not a participant");
++      return data;
++    },
++  },
++  {
++    name: "delete_conversation",
++    description: "Delete a conversation and its messages.",
++    inputSchema: objectSchema({ conversation_id: { type: "string" } }, ["conversation_id"]),
++    handler: async ({ client }, args) => {
++      const { error } = await client.rpc("delete_conversation_cascade", { _conv_id: String(args.conversation_id) });
++      if (error) throw permissionError(error, "delete this conversation");
++      return { deleted: true, conversation_id: args.conversation_id };
++    },
++  },
++  {
++    name: "delete_message",
++    description: "Delete one of your own chat messages.",
++    inputSchema: objectSchema({ message_id: { type: "string" } }, ["message_id"]),
++    handler: async ({ client }, args) => {
++      const { error } = await client.from("chat_messages").delete().eq("id", String(args.message_id));
++      if (error) throw permissionError(error, "delete this message");
++      return { deleted: true, message_id: args.message_id };
++    },
++  },
++];
+diff --git a/supabase/functions/mcp-server/tools/index.ts b/supabase/functions/mcp-server/tools/index.ts
+new file mode 100644
+index 0000000..439d29c
+--- /dev/null
++++ b/supabase/functions/mcp-server/tools/index.ts
+@@ -0,0 +1,28 @@
++import type { McpTool } from "./types.ts";
++import { taskTools } from "./tasks.ts";
++import { workflowTools } from "./workflows.ts";
++import { orgTools } from "./org.ts";
++import { dashboardTools } from "./dashboard.ts";
++import { noteTools } from "./notes.ts";
++import { inboxTools } from "./inbox.ts";
++import { goalTools } from "./goals.ts";
++import { attachmentTools } from "./attachments.ts";
++import { reportTools } from "./reports.ts";
++
++export const allTools: McpTool[] = [
++  ...taskTools,
++  ...workflowTools,
++  ...orgTools,
++  ...dashboardTools,
++  ...noteTools,
++  ...inboxTools,
++  ...goalTools,
++  ...attachmentTools,
++  ...reportTools,
++];
++
++export const toolsByName: Record<string, McpTool> = Object.fromEntries(
++  allTools.map((t) => [t.name, t]),
++);
++
++export type { McpTool, ToolContext } from "./types.ts";
+diff --git a/supabase/functions/mcp-server/tools/notes.ts b/supabase/functions/mcp-server/tools/notes.ts
+new file mode 100644
+index 0000000..6b176e7
+--- /dev/null
++++ b/supabase/functions/mcp-server/tools/notes.ts
+@@ -0,0 +1,62 @@
++import { type McpTool, objectSchema } from "./types.ts";
++
++// Quick Notes — personal scratch notes (table user_scratch_notes, own-row RLS).
++
++export const noteTools: McpTool[] = [
++  {
++    name: "list_notes",
++    description: "List the current user's quick notes (most recently updated first).",
++    inputSchema: objectSchema({}),
++    handler: async ({ client }) => {
++      const { data, error } = await client
++        .from("user_scratch_notes")
++        .select("id, content, polished_content, created_at, updated_at")
++        .order("updated_at", { ascending: false });
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++  {
++    name: "create_note",
++    description: "Create a new quick note for the current user.",
++    inputSchema: objectSchema({ content: { type: "string" } }, ["content"]),
++    handler: async ({ client, userId }, args) => {
++      const { data, error } = await client
++        .from("user_scratch_notes")
++        .insert({ user_id: userId, content: String(args.content) })
++        .select("id, content, created_at")
++        .single();
++      if (error) throw new Error(error.message);
++      return data;
++    },
++  },
++  {
++    name: "update_note",
++    description: "Update the content of an existing quick note.",
++    inputSchema: objectSchema(
++      { note_id: { type: "string" }, content: { type: "string" } },
++      ["note_id", "content"],
++    ),
++    handler: async ({ client }, args) => {
++      const { data, error } = await client
++        .from("user_scratch_notes")
++        .update({ content: String(args.content), updated_at: new Date().toISOString() })
++        .eq("id", String(args.note_id))
++        .select("id, content, updated_at")
++        .maybeSingle();
++      if (error) throw new Error(error.message);
++      if (!data) throw new Error("Note not found or not yours");
++      return data;
++    },
++  },
++  {
++    name: "delete_note",
++    description: "Delete a quick note.",
++    inputSchema: objectSchema({ note_id: { type: "string" } }, ["note_id"]),
++    handler: async ({ client }, args) => {
++      const { error } = await client.from("user_scratch_notes").delete().eq("id", String(args.note_id));
++      if (error) throw new Error(error.message);
++      return { deleted: true, note_id: args.note_id };
++    },
++  },
++];
+diff --git a/supabase/functions/mcp-server/tools/org.ts b/supabase/functions/mcp-server/tools/org.ts
+new file mode 100644
+index 0000000..a65a240
+--- /dev/null
++++ b/supabase/functions/mcp-server/tools/org.ts
+@@ -0,0 +1,52 @@
++import { type McpTool, objectSchema } from "./types.ts";
++
++export const orgTools: McpTool[] = [
++  {
++    name: "whoami",
++    description: "Return the current user's profile, roles, and access scope for this connection.",
++    inputSchema: objectSchema({}),
++    handler: async ({ client, userId, email }) => {
++      const [profileRes, rolesRes, deptMgrRes] = await Promise.all([
++        client.from("profiles").select("id, name, email, position, department_id, organization_id").eq("id", userId).maybeSingle(),
++        client.from("user_roles").select("role").eq("user_id", userId),
++        client.from("department_managers").select("department_id").eq("user_id", userId),
++      ]);
++      return {
++        user_id: userId,
++        email,
++        profile: profileRes.data ?? null,
++        roles: (rolesRes.data || []).map((r) => r.role),
++        managed_departments: (deptMgrRes.data || []).map((d) => d.department_id),
++      };
++    },
++  },
++  {
++    name: "list_departments",
++    description: "List departments the current user can see.",
++    inputSchema: objectSchema({}),
++    handler: async ({ client }) => {
++      const { data, error } = await client
++        .from("departments").select("id, name, color, description").order("name");
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++  {
++    name: "list_team_members",
++    description:
++      "List people (profiles) the current user can see, optionally filtered by department. Scoped by role via RLS.",
++    inputSchema: objectSchema({
++      department_id: { type: "string", description: "Filter by department UUID." },
++    }),
++    handler: async ({ client }, args) => {
++      let q = client
++        .from("profiles")
++        .select("id, name, email, position, department_id, active")
++        .order("name");
++      if (args.department_id) q = q.eq("department_id", String(args.department_id));
++      const { data, error } = await q;
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++];
+diff --git a/supabase/functions/mcp-server/tools/reports.ts b/supabase/functions/mcp-server/tools/reports.ts
+new file mode 100644
+index 0000000..23b3698
+--- /dev/null
++++ b/supabase/functions/mcp-server/tools/reports.ts
+@@ -0,0 +1,105 @@
++import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
++import { type McpTool, objectSchema } from "./types.ts";
++
++function istToday(): string {
++  return new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
++}
++
++interface TaskRow {
++  id: string; title: string; status: string; priority: string;
++  due_date: string | null; department_id: string | null; created_by: string | null; created_at: string;
++}
++
++async function fetchTasks(client: SupabaseClient, args: Record<string, unknown>): Promise<TaskRow[]> {
++  let q = client.from("tasks").select("id, title, status, priority, due_date, department_id, created_by, created_at");
++  if (args.status) q = q.eq("status", String(args.status));
++  if (args.department_id) q = q.eq("department_id", String(args.department_id));
++  if (args.from) q = q.gte("created_at", String(args.from));
++  if (args.to) q = q.lte("created_at", `${String(args.to)}T23:59:59`);
++  const { data, error } = await q;
++  if (error) throw new Error(error.message);
++  return (data || []) as TaskRow[];
++}
++
++export const reportTools: McpTool[] = [
++  {
++    name: "get_report",
++    description:
++      "Task report over the data you can see (scoped by your role). Groups tasks by status, department, " +
++      "priority, or assignee, with totals, completed, overdue, and completion rate.",
++    inputSchema: objectSchema({
++      group_by: { type: "string", enum: ["status", "department", "priority", "assignee"], description: "Default 'status'." },
++      department_id: { type: "string" },
++      from: { type: "string", description: "Created on/after (YYYY-MM-DD)." },
++      to: { type: "string", description: "Created on/before (YYYY-MM-DD)." },
++    }),
++    handler: async ({ client }, args) => {
++      const tasks = await fetchTasks(client, args);
++      const today = istToday();
++      const groupBy = (args.group_by ? String(args.group_by) : "status") as
++        "status" | "department" | "priority" | "assignee";
++
++      // Resolve display names for department / assignee grouping.
++      let nameOf: (t: TaskRow) => Promise<string[]> = async (t) => [t[groupBy as "status" | "priority"] || "unknown"];
++      if (groupBy === "department") {
++        const { data: depts } = await client.from("departments").select("id, name");
++        nameOf = async (t) => [(depts || []).find((d) => d.id === t.department_id)?.name || "No department"];
++      } else if (groupBy === "assignee") {
++        const ids = tasks.map((t) => t.id);
++        const { data: asg } = ids.length
++          ? await client.from("task_assignees").select("task_id, user_id").in("task_id", ids)
++          : { data: [] };
++        const { data: profiles } = await client.from("profiles").select("id, name");
++        const byTask = new Map<string, string[]>();
++        for (const a of asg || []) {
++          const n = (profiles || []).find((p) => p.id === a.user_id)?.name || "Unknown";
++          byTask.set(a.task_id, [...(byTask.get(a.task_id) || []), n]);
++        }
++        nameOf = async (t) => byTask.get(t.id) || ["Unassigned"];
++      }
++
++      const groups: Record<string, { total: number; done: number; overdue: number }> = {};
++      for (const t of tasks) {
++        const isDone = t.status === "done";
++        const isOverdue = !isDone && !!t.due_date && t.due_date < today;
++        for (const key of await nameOf(t)) {
++          const g = (groups[key] ||= { total: 0, done: 0, overdue: 0 });
++          g.total++;
++          if (isDone) g.done++;
++          if (isOverdue) g.overdue++;
++        }
++      }
++      const rows = Object.entries(groups).map(([key, g]) => ({
++        group: key, ...g,
++        completion_rate: g.total ? Math.round((g.done / g.total) * 100) : 0,
++      })).sort((a, b) => b.total - a.total);
++
++      return {
++        group_by: groupBy,
++        total_tasks: tasks.length,
++        completed: tasks.filter((t) => t.status === "done").length,
++        overdue: tasks.filter((t) => t.status !== "done" && t.due_date && t.due_date < today).length,
++        groups: rows,
++      };
++    },
++  },
++  {
++    name: "export_tasks_csv",
++    description: "Export the tasks you can see as CSV text (Title, Status, Priority, Due Date, Created).",
++    inputSchema: objectSchema({
++      status: { type: "string" },
++      department_id: { type: "string" },
++      from: { type: "string", description: "Created on/after (YYYY-MM-DD)." },
++      to: { type: "string", description: "Created on/before (YYYY-MM-DD)." },
++    }),
++    handler: async ({ client }, args) => {
++      const tasks = await fetchTasks(client, args);
++      const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
++      const csv = [
++        "Title,Status,Priority,Due Date,Created",
++        ...tasks.map((t) => [esc(t.title), t.status, t.priority, t.due_date || "", t.created_at].join(",")),
++      ].join("\n");
++      return { row_count: tasks.length, csv };
++    },
++  },
++];
+diff --git a/supabase/functions/mcp-server/tools/tasks.ts b/supabase/functions/mcp-server/tools/tasks.ts
+new file mode 100644
+index 0000000..2fcedde
+--- /dev/null
++++ b/supabase/functions/mcp-server/tools/tasks.ts
+@@ -0,0 +1,264 @@
++import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
++import { type McpTool, objectSchema, type ToolContext } from "./types.ts";
++
++const STATUSES = ["todo", "in_progress", "in_review", "done", "blocked"];
++const PRIORITIES = ["low", "medium", "high", "urgent"];
++
++/** Enrich raw task rows with department name, assignee names, and subtask counts. */
++async function enrich(client: SupabaseClient, tasks: Record<string, unknown>[]) {
++  if (tasks.length === 0) return [];
++  const ids = tasks.map((t) => t.id as string);
++  const [deptsRes, assigneesRes, profilesRes, subtasksRes] = await Promise.all([
++    client.from("departments").select("id, name"),
++    client.from("task_assignees").select("task_id, user_id").in("task_id", ids),
++    client.from("profiles").select("id, name"),
++    client.from("task_subtasks").select("task_id, completed").in("task_id", ids),
++  ]);
++  const depts = deptsRes.data || [];
++  const assignees = assigneesRes.data || [];
++  const profiles = profilesRes.data || [];
++  const subtasks = subtasksRes.data || [];
++
++  return tasks.map((t) => {
++    const dept = depts.find((d) => d.id === t.department_id);
++    const ta = assignees
++      .filter((a) => a.task_id === t.id)
++      .map((a) => ({
++        user_id: a.user_id,
++        name: profiles.find((p) => p.id === a.user_id)?.name || "Unknown",
++      }));
++    const subs = subtasks.filter((s) => s.task_id === t.id);
++    return {
++      id: t.id,
++      title: t.title,
++      description: t.description,
++      status: t.status,
++      priority: t.priority,
++      due_date: t.due_date,
++      start_date: t.start_date,
++      department: dept?.name ?? null,
++      department_id: t.department_id,
++      assignees: ta,
++      created_by: t.created_by,
++      created_at: t.created_at,
++      completed_at: t.completed_at,
++      subtasks_done: subs.filter((s) => s.completed).length,
++      subtasks_total: subs.length,
++    };
++  });
++}
++
++export const taskTools: McpTool[] = [
++  {
++    name: "list_tasks",
++    description:
++      "List tasks visible to the current user (scoped by their role). Optional filters by status, priority, or department.",
++    inputSchema: objectSchema({
++      status: { type: "string", enum: STATUSES, description: "Filter by task status." },
++      priority: { type: "string", enum: PRIORITIES, description: "Filter by priority." },
++      department_id: { type: "string", description: "Filter by department UUID." },
++      limit: { type: "number", description: "Max rows (default 50, max 200)." },
++    }),
++    handler: async ({ client }, args) => {
++      let q = client.from("tasks").select("*").order("created_at", { ascending: false });
++      if (args.status) q = q.eq("status", String(args.status));
++      if (args.priority) q = q.eq("priority", String(args.priority));
++      if (args.department_id) q = q.eq("department_id", String(args.department_id));
++      const limit = Math.min(Number(args.limit) || 50, 200);
++      q = q.limit(limit);
++      const { data, error } = await q;
++      if (error) throw new Error(error.message);
++      return enrich(client, data || []);
++    },
++  },
++  {
++    name: "list_my_tasks",
++    description: "List tasks assigned to the current user.",
++    inputSchema: objectSchema({
++      include_done: { type: "boolean", description: "Include completed tasks (default false)." },
++    }),
++    handler: async ({ client, userId }, args) => {
++      const { data: mine, error: aErr } = await client
++        .from("task_assignees").select("task_id").eq("user_id", userId);
++      if (aErr) throw new Error(aErr.message);
++      const ids = (mine || []).map((m) => m.task_id);
++      if (ids.length === 0) return [];
++      let q = client.from("tasks").select("*").in("id", ids)
++        .order("due_date", { ascending: true, nullsFirst: false });
++      if (!args.include_done) q = q.neq("status", "done");
++      const { data, error } = await q;
++      if (error) throw new Error(error.message);
++      return enrich(client, data || []);
++    },
++  },
++  {
++    name: "get_task",
++    description: "Get a single task by id with its assignees and subtask counts.",
++    inputSchema: objectSchema({ task_id: { type: "string" } }, ["task_id"]),
++    handler: async ({ client }, args) => {
++      const { data, error } = await client.from("tasks").select("*").eq("id", String(args.task_id)).maybeSingle();
++      if (error) throw new Error(error.message);
++      if (!data) throw new Error("Task not found or not accessible");
++      const [enriched] = await enrich(client, [data]);
++      const { data: subs } = await client
++        .from("task_subtasks").select("id, title, completed, position")
++        .eq("task_id", String(args.task_id)).order("position");
++      return { ...enriched, subtasks: subs || [] };
++    },
++  },
++  {
++    name: "create_task",
++    description:
++      "Create a task. Title is required. The current user becomes the creator. Optionally assign users and set due date / priority / department.",
++    inputSchema: objectSchema(
++      {
++        title: { type: "string" },
++        description: { type: "string" },
++        status: { type: "string", enum: STATUSES, description: "Default 'todo'." },
++        priority: { type: "string", enum: PRIORITIES, description: "Default 'medium'." },
++        due_date: { type: "string", description: "ISO date (YYYY-MM-DD)." },
++        department_id: {
++          type: "string",
++          description: "Department UUID. Defaults to your own department if omitted.",
++        },
++        assignee_ids: { type: "array", items: { type: "string" }, description: "User UUIDs to assign." },
++      },
++      ["title"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      // Default department + org to the creator's own. Required because a
++      // department_manager may only create tasks within a department they manage,
++      // so a task with no department fails RLS for non-admin/HR users.
++      const { data: profile } = await client
++        .from("profiles").select("department_id, organization_id").eq("id", userId).maybeSingle();
++      const departmentId = args.department_id ? String(args.department_id) : (profile?.department_id ?? null);
++
++      const { data: task, error } = await client
++        .from("tasks")
++        .insert({
++          title: String(args.title),
++          description: args.description ? String(args.description) : null,
++          status: args.status ? String(args.status) : "todo",
++          priority: args.priority ? String(args.priority) : "medium",
++          due_date: args.due_date ? String(args.due_date) : null,
++          department_id: departmentId,
++          organization_id: profile?.organization_id ?? null,
++          created_by: userId,
++        })
++        .select("*")
++        .single();
++      if (error) {
++        throw new Error(
++          `${error.message}. If you are a department manager, the task must be in a department you manage; ` +
++          `employees cannot create tasks.`,
++        );
++      }
++
++      const assigneeIds = Array.isArray(args.assignee_ids) ? (args.assignee_ids as string[]) : [];
++      if (assigneeIds.length > 0) {
++        const { error: aErr } = await client
++          .from("task_assignees")
++          .insert(assigneeIds.map((uid) => ({ task_id: task.id, user_id: uid })));
++        if (aErr) throw new Error(`Task created but assignment failed: ${aErr.message}`);
++      }
++      const [enriched] = await enrich(client, [task]);
++      return enriched;
++    },
++  },
++  {
++    name: "update_task",
++    description: "Update fields on a task (title, description, status, priority, due_date, department_id).",
++    inputSchema: objectSchema(
++      {
++        task_id: { type: "string" },
++        title: { type: "string" },
++        description: { type: "string" },
++        status: { type: "string", enum: STATUSES },
++        priority: { type: "string", enum: PRIORITIES },
++        due_date: { type: "string", description: "ISO date, or empty string to clear." },
++        department_id: { type: "string" },
++      },
++      ["task_id"],
++    ),
++    handler: async ({ client }, args) => {
++      const patch: Record<string, unknown> = {};
++      if (args.title !== undefined) patch.title = String(args.title);
++      if (args.description !== undefined) patch.description = String(args.description) || null;
++      if (args.status !== undefined) {
++        patch.status = String(args.status);
++        patch.completed_at = args.status === "done" ? new Date().toISOString() : null;
++      }
++      if (args.priority !== undefined) patch.priority = String(args.priority);
++      if (args.due_date !== undefined) patch.due_date = String(args.due_date) || null;
++      if (args.department_id !== undefined) patch.department_id = String(args.department_id) || null;
++      if (Object.keys(patch).length === 0) throw new Error("No fields to update");
++
++      const { data, error } = await client
++        .from("tasks").update(patch).eq("id", String(args.task_id)).select("*").maybeSingle();
++      if (error) throw new Error(error.message);
++      if (!data) throw new Error("Task not found or not allowed to update");
++      const [enriched] = await enrich(client, [data]);
++      return enriched;
++    },
++  },
++  {
++    name: "complete_task",
++    description: "Mark a task as done.",
++    inputSchema: objectSchema({ task_id: { type: "string" } }, ["task_id"]),
++    handler: async ({ client }, args) => {
++      const { data, error } = await client
++        .from("tasks")
++        .update({ status: "done", completed_at: new Date().toISOString() })
++        .eq("id", String(args.task_id)).select("id, title, status").maybeSingle();
++      if (error) throw new Error(error.message);
++      if (!data) throw new Error("Task not found or not allowed");
++      return data;
++    },
++  },
++  {
++    name: "delete_task",
++    description: "Delete a task permanently.",
++    inputSchema: objectSchema({ task_id: { type: "string" } }, ["task_id"]),
++    handler: async ({ client }, args) => {
++      const { error } = await client.from("tasks").delete().eq("id", String(args.task_id));
++      if (error) throw new Error(error.message);
++      return { deleted: true, task_id: args.task_id };
++    },
++  },
++  {
++    name: "add_subtask",
++    description: "Add a subtask (checklist item) to a task.",
++    inputSchema: objectSchema(
++      { task_id: { type: "string" }, title: { type: "string" } },
++      ["task_id", "title"],
++    ),
++    handler: async ({ client }, args) => {
++      const { data: existing } = await client
++        .from("task_subtasks").select("position").eq("task_id", String(args.task_id))
++        .order("position", { ascending: false }).limit(1);
++      const position = (existing?.[0]?.position ?? -1) + 1;
++      const { data, error } = await client
++        .from("task_subtasks")
++        .insert({ task_id: String(args.task_id), title: String(args.title), position })
++        .select("id, title, completed, position").single();
++      if (error) throw new Error(error.message);
++      return data;
++    },
++  },
++  {
++    name: "toggle_subtask",
++    description: "Set a subtask's completed state.",
++    inputSchema: objectSchema(
++      { subtask_id: { type: "string" }, completed: { type: "boolean" } },
++      ["subtask_id", "completed"],
++    ),
++    handler: async ({ client }, args) => {
++      const { data, error } = await client
++        .from("task_subtasks").update({ completed: Boolean(args.completed) })
++        .eq("id", String(args.subtask_id)).select("id, title, completed").maybeSingle();
++      if (error) throw new Error(error.message);
++      if (!data) throw new Error("Subtask not found or not allowed");
++      return data;
++    },
++  },
++];
+diff --git a/supabase/functions/mcp-server/tools/types.ts b/supabase/functions/mcp-server/tools/types.ts
+new file mode 100644
+index 0000000..953c4f0
+--- /dev/null
++++ b/supabase/functions/mcp-server/tools/types.ts
+@@ -0,0 +1,48 @@
++import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
++
++/** Identity + RLS-scoped client passed to every tool handler. */
++export interface ToolContext {
++  client: SupabaseClient;
++  userId: string;
++  email: string;
++  organizationId: string | null;
++  /** The user's Supabase session JWT — for calling other edge functions (e.g. firebase-upload). */
++  accessToken: string;
++}
++
++export interface McpTool {
++  name: string;
++  description: string;
++  /** JSON Schema for the tool arguments. */
++  inputSchema: Record<string, unknown>;
++  /** Returns any JSON-serializable value; the server wraps it as text content. */
++  handler: (ctx: ToolContext, args: Record<string, unknown>) => Promise<unknown>;
++}
++
++/** Small helper for an object JSON Schema. */
++export function objectSchema(
++  properties: Record<string, unknown>,
++  required: string[] = [],
++): Record<string, unknown> {
++  return { type: "object", properties, required, additionalProperties: false };
++}
++
++/**
++ * Translate a Supabase/Postgres error into a clear message. RLS denials (code 42501
++ * or "row-level security" / "permission denied") become a friendly permission message
++ * naming the action, instead of leaking a raw database error.
++ */
++export function permissionError(
++  err: { code?: string; message?: string } | null,
++  action: string,
++): Error {
++  const msg = err?.message || "Unknown error";
++  const isRls =
++    err?.code === "42501" || /row-level security|permission denied|not authorized/i.test(msg);
++  if (isRls) {
++    return new Error(
++      `You don't have permission to ${action}. Your role doesn't allow this — ask an admin/MD or the relevant manager.`,
++    );
++  }
++  return new Error(msg);
++}
+diff --git a/supabase/functions/mcp-server/tools/workflows.ts b/supabase/functions/mcp-server/tools/workflows.ts
+new file mode 100644
+index 0000000..3942851
+--- /dev/null
++++ b/supabase/functions/mcp-server/tools/workflows.ts
+@@ -0,0 +1,498 @@
++import { type McpTool, objectSchema, permissionError } from "./types.ts";
++
++const PRIORITIES = ["low", "medium", "high", "urgent"];
++
++export const workflowTools: McpTool[] = [
++  {
++    name: "list_workflows",
++    description:
++      "List workflows visible to the current user (those they raised, are assigned a stage in, or can see by role).",
++    inputSchema: objectSchema({
++      status: { type: "string", description: "Filter by workflow status (e.g. active, completed)." },
++      limit: { type: "number", description: "Max rows (default 50, max 200)." },
++    }),
++    handler: async ({ client }, args) => {
++      let q = client
++        .from("workflows")
++        .select("id, title, description, status, priority, current_stage_position, raised_by, raised_by_department_id, created_at, completed_at")
++        .order("created_at", { ascending: false });
++      if (args.status) q = q.eq("status", String(args.status));
++      q = q.limit(Math.min(Number(args.limit) || 50, 200));
++      const { data, error } = await q;
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++  {
++    name: "get_workflow",
++    description: "Get a workflow with its ordered stages.",
++    inputSchema: objectSchema({ workflow_id: { type: "string" } }, ["workflow_id"]),
++    handler: async ({ client }, args) => {
++      const { data: wf, error } = await client
++        .from("workflows").select("*").eq("id", String(args.workflow_id)).maybeSingle();
++      if (error) throw new Error(error.message);
++      if (!wf) throw new Error("Workflow not found or not accessible");
++      const { data: stages, error: sErr } = await client
++        .from("workflow_stages")
++        .select("id, name, position, status, assignee_user_id, is_decision, is_terminal, decision, tat_hours, started_at, completed_at, notes")
++        .eq("workflow_id", String(args.workflow_id))
++        .order("position");
++      if (sErr) throw new Error(sErr.message);
++      return { ...wf, stages: stages || [] };
++    },
++  },
++  {
++    name: "advance_workflow_stage",
++    description:
++      "Complete the current stage of a workflow and move it forward. For decision stages, provide a decision ('yes' or 'no'). Optionally attach a note.",
++    inputSchema: objectSchema(
++      {
++        workflow_id: { type: "string" },
++        decision: { type: "string", enum: ["yes", "no"], description: "Required for decision stages." },
++        note: { type: "string" },
++      },
++      ["workflow_id"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      const { data: wf, error: wfErr } = await client
++        .from("workflows").select("id, current_stage_position, status").eq("id", String(args.workflow_id)).maybeSingle();
++      if (wfErr) throw new Error(wfErr.message);
++      if (!wf) throw new Error("Workflow not found or not accessible");
++
++      const { data: stage, error: stErr } = await client
++        .from("workflow_stages").select("*")
++        .eq("workflow_id", wf.id).eq("position", wf.current_stage_position).maybeSingle();
++      if (stErr) throw new Error(stErr.message);
++      if (!stage) throw new Error("Current stage not found");
++
++      const now = new Date().toISOString();
++      const decision = args.decision ? String(args.decision) : null;
++      if (stage.is_decision && !decision) throw new Error("This stage requires a decision ('yes' or 'no')");
++
++      const { error: updStageErr } = await client
++        .from("workflow_stages")
++        .update({
++          status: "completed",
++          completed_at: now,
++          completed_by: userId,
++          decision,
++          notes: args.note ? String(args.note) : stage.notes,
++        })
++        .eq("id", stage.id);
++      if (updStageErr) throw new Error(updStageErr.message);
++
++      // Record the transition (RLS permitting).
++      await client.from("workflow_stage_events").insert({
++        workflow_id: wf.id,
++        stage_id: stage.id,
++        actor_id: userId,
++        event_type: "completed",
++        to_value: decision,
++        note: args.note ? String(args.note) : null,
++      }).then(() => {}, () => {});
++
++      // Determine next position: decision branches use yes/no_next_position.
++      let nextPosition: number | null;
++      if (stage.is_terminal) {
++        nextPosition = null;
++      } else if (stage.is_decision) {
++        nextPosition = decision === "yes" ? stage.yes_next_position : stage.no_next_position;
++        if (nextPosition == null) nextPosition = stage.position + 1;
++      } else {
++        nextPosition = stage.position + 1;
++      }
++
++      let workflowStatus = wf.status;
++      if (nextPosition == null) {
++        workflowStatus = "completed";
++        await client.from("workflows")
++          .update({ status: "completed", completed_at: now }).eq("id", wf.id);
++      } else {
++        const { data: next } = await client
++          .from("workflow_stages").select("id").eq("workflow_id", wf.id).eq("position", nextPosition).maybeSingle();
++        await client.from("workflows").update({ current_stage_position: nextPosition }).eq("id", wf.id);
++        if (next) {
++          await client.from("workflow_stages")
++            .update({ status: "in_progress", started_at: now }).eq("id", next.id);
++        }
++      }
++
++      return {
++        workflow_id: wf.id,
++        completed_stage: stage.name,
++        decision,
++        next_stage_position: nextPosition,
++        workflow_status: workflowStatus,
++      };
++    },
++  },
++  {
++    name: "create_workflow",
++    description:
++      "Create (raise) a new workflow with an ordered list of stages. Any signed-in user can raise a workflow. The first stage starts in progress.",
++    inputSchema: objectSchema(
++      {
++        title: { type: "string" },
++        description: { type: "string" },
++        priority: { type: "string", enum: PRIORITIES, description: "Default 'medium'." },
++        stages: {
++          type: "array",
++          description: "Ordered stages. At least one required.",
++          items: {
++            type: "object",
++            properties: {
++              name: { type: "string" },
++              tat_hours: { type: "number", description: "Turnaround target in hours. Default 24." },
++              owner_department_id: { type: "string", description: "Department responsible for this stage." },
++              assignee_user_id: { type: "string", description: "User responsible for this stage." },
++              is_decision: { type: "boolean", description: "Stage is a yes/no decision." },
++              is_terminal: { type: "boolean", description: "Final stage (ends the workflow)." },
++            },
++            required: ["name"],
++          },
++        },
++      },
++      ["title", "stages"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      const stages = Array.isArray(args.stages) ? (args.stages as Record<string, unknown>[]) : [];
++      if (stages.length === 0) throw new Error("At least one stage is required");
++
++      const { data: profile } = await client
++        .from("profiles").select("department_id").eq("id", userId).maybeSingle();
++
++      const { data: wf, error } = await client
++        .from("workflows")
++        .insert({
++          title: String(args.title),
++          description: args.description ? String(args.description) : null,
++          priority: args.priority ? String(args.priority) : "medium",
++          raised_by: userId,
++          raised_by_department_id: profile?.department_id ?? null,
++          current_stage_position: 1,
++          status: "active",
++        })
++        .select("*")
++        .single();
++      if (error) throw new Error(error.message);
++
++      const now = new Date().toISOString();
++      const stageRows = stages.map((s, i) => ({
++        workflow_id: wf.id,
++        position: i + 1,
++        name: String(s.name),
++        tat_hours: s.tat_hours !== undefined ? Number(s.tat_hours) : 24,
++        owner_department_id: s.is_terminal ? null : (s.owner_department_id ? String(s.owner_department_id) : null),
++        assignee_user_id: s.is_terminal ? null : (s.assignee_user_id ? String(s.assignee_user_id) : null),
++        is_decision: Boolean(s.is_decision),
++        is_terminal: Boolean(s.is_terminal),
++        status: i === 0 ? "in_progress" : "pending",
++        started_at: i === 0 ? now : null,
++      }));
++      const { data: inserted, error: stErr } = await client
++        .from("workflow_stages").insert(stageRows).select("id, name, position, status");
++      if (stErr) throw new Error(`Workflow created but stages failed: ${stErr.message}`);
++
++      return { id: wf.id, title: wf.title, status: wf.status, stages: inserted || [] };
++    },
++  },
++  {
++    name: "list_workflow_templates",
++    description: "List available workflow templates that can be launched into a workflow.",
++    inputSchema: objectSchema({}),
++    handler: async ({ client }) => {
++      const { data, error } = await client
++        .from("workflow_templates")
++        .select("id, name, description, category, active")
++        .eq("active", true)
++        .order("name");
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++  {
++    name: "create_workflow_from_template",
++    description: "Launch a workflow from an existing template, copying its stages.",
++    inputSchema: objectSchema(
++      {
++        template_id: { type: "string" },
++        title: { type: "string", description: "Optional title; defaults to the template name." },
++        priority: { type: "string", enum: PRIORITIES, description: "Default 'medium'." },
++      },
++      ["template_id"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      const templateId = String(args.template_id);
++      const { data: tpl, error: tErr } = await client
++        .from("workflow_templates").select("id, name, description").eq("id", templateId).maybeSingle();
++      if (tErr) throw new Error(tErr.message);
++      if (!tpl) throw new Error("Template not found or not accessible");
++
++      const { data: tplStages, error: tsErr } = await client
++        .from("workflow_template_stages")
++        .select("name, position, default_tat_hours, owner_department_id, default_assignee_user_id, is_decision, is_terminal, yes_next_position, no_next_position, outcome_label")
++        .eq("template_id", templateId)
++        .order("position");
++      if (tsErr) throw new Error(tsErr.message);
++      if (!tplStages || tplStages.length === 0) throw new Error("Template has no stages");
++
++      const { data: profile } = await client
++        .from("profiles").select("department_id").eq("id", userId).maybeSingle();
++      const { data: wf, error } = await client
++        .from("workflows")
++        .insert({
++          template_id: templateId,
++          title: args.title ? String(args.title) : tpl.name,
++          description: tpl.description,
++          priority: args.priority ? String(args.priority) : "medium",
++          raised_by: userId,
++          raised_by_department_id: profile?.department_id ?? null,
++          current_stage_position: 1,
++          status: "active",
++        })
++        .select("*")
++        .single();
++      if (error) throw new Error(error.message);
++
++      const now = new Date().toISOString();
++      const stageRows = tplStages.map((s, i) => ({
++        workflow_id: wf.id,
++        position: i + 1,
++        name: s.name,
++        tat_hours: s.default_tat_hours,
++        owner_department_id: s.is_terminal ? null : s.owner_department_id,
++        assignee_user_id: s.is_terminal ? null : s.default_assignee_user_id,
++        is_decision: s.is_decision,
++        is_terminal: s.is_terminal,
++        yes_next_position: s.is_decision ? s.yes_next_position : null,
++        no_next_position: s.is_decision ? s.no_next_position : null,
++        outcome_label: s.is_terminal ? s.outcome_label : null,
++        status: i === 0 ? "in_progress" : "pending",
++        started_at: i === 0 ? now : null,
++      }));
++      const { error: stErr } = await client.from("workflow_stages").insert(stageRows);
++      if (stErr) throw new Error(`Workflow created but stages failed: ${stErr.message}`);
++
++      return { id: wf.id, title: wf.title, status: wf.status, stage_count: stageRows.length };
++    },
++  },
++  {
++    name: "update_workflow",
++    description: "Update a workflow's title, description, priority, or status.",
++    inputSchema: objectSchema(
++      {
++        workflow_id: { type: "string" },
++        title: { type: "string" },
++        description: { type: "string" },
++        priority: { type: "string", enum: PRIORITIES },
++        status: { type: "string", description: "e.g. active, on_hold, completed, cancelled." },
++      },
++      ["workflow_id"],
++    ),
++    handler: async ({ client }, args) => {
++      const patch: Record<string, unknown> = {};
++      if (args.title !== undefined) patch.title = String(args.title);
++      if (args.description !== undefined) patch.description = String(args.description) || null;
++      if (args.priority !== undefined) patch.priority = String(args.priority);
++      if (args.status !== undefined) patch.status = String(args.status);
++      if (Object.keys(patch).length === 0) throw new Error("No fields to update");
++      const { data, error } = await client
++        .from("workflows").update(patch).eq("id", String(args.workflow_id)).select("id, title, status, priority").maybeSingle();
++      if (error) throw permissionError(error, "update this workflow");
++      if (!data) throw new Error("Workflow not found or not allowed");
++      return data;
++    },
++  },
++  {
++    name: "delete_workflow",
++    description: "Delete a workflow and its stages/history. Admin/MD only.",
++    inputSchema: objectSchema({ workflow_id: { type: "string" } }, ["workflow_id"]),
++    handler: async ({ client }, args) => {
++      const { error } = await client.rpc("delete_workflow_cascade", { _workflow_id: String(args.workflow_id) });
++      if (error) throw permissionError(error, "delete this workflow");
++      return { deleted: true, workflow_id: args.workflow_id };
++    },
++  },
++  {
++    name: "list_workflow_comments",
++    description: "List comments on a workflow's stages.",
++    inputSchema: objectSchema({ workflow_id: { type: "string" } }, ["workflow_id"]),
++    handler: async ({ client }, args) => {
++      const { data, error } = await client
++        .from("workflow_stage_comments")
++        .select("id, stage_id, author_id, body, created_at")
++        .eq("workflow_id", String(args.workflow_id))
++        .order("created_at", { ascending: true });
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++  {
++    name: "add_workflow_comment",
++    description: "Add a comment to a workflow stage. You must be part of the workflow.",
++    inputSchema: objectSchema(
++      { workflow_id: { type: "string" }, stage_id: { type: "string" }, body: { type: "string" } },
++      ["workflow_id", "stage_id", "body"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      const { data, error } = await client
++        .from("workflow_stage_comments")
++        .insert({
++          workflow_id: String(args.workflow_id),
++          stage_id: String(args.stage_id),
++          author_id: userId,
++          body: String(args.body),
++        })
++        .select("id, body, created_at")
++        .single();
++      if (error) throw permissionError(error, "comment on this workflow");
++      return data;
++    },
++  },
++  {
++    name: "request_workflow_help",
++    description:
++      "Flag a workflow stage as needing help / escalation (optionally mention a user and add a note). " +
++      "Allowed for the stage assignee, the owning department's manager, or an admin/MD.",
++    inputSchema: objectSchema(
++      {
++        workflow_id: { type: "string" },
++        stage_id: { type: "string", description: "Stage to flag. Defaults to the current stage." },
++        note: { type: "string" },
++        mention_user_id: { type: "string", description: "User to notify." },
++      },
++      ["workflow_id"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      let stageId = args.stage_id ? String(args.stage_id) : null;
++      if (!stageId) {
++        const { data: wf } = await client
++          .from("workflows").select("current_stage_position").eq("id", String(args.workflow_id)).maybeSingle();
++        const pos = wf?.current_stage_position ?? 1;
++        const { data: st } = await client
++          .from("workflow_stages").select("id").eq("workflow_id", String(args.workflow_id)).eq("position", pos).maybeSingle();
++        stageId = st?.id ?? null;
++      }
++      if (!stageId) throw new Error("Could not resolve a stage to flag");
++      const { data, error } = await client
++        .from("workflow_stages")
++        .update({
++          help_requested_by: userId,
++          help_requested_at: new Date().toISOString(),
++          help_requested_note: args.note ? String(args.note) : null,
++          help_mention_user_id: args.mention_user_id ? String(args.mention_user_id) : null,
++        })
++        .eq("id", stageId)
++        .select("id, name, help_requested_at")
++        .maybeSingle();
++      if (error) throw permissionError(error, "request help on this stage");
++      if (!data) throw new Error("Stage not found or not allowed");
++      return data;
++    },
++  },
++  {
++    name: "list_workflow_fields",
++    description: "List the custom field values attached to a workflow.",
++    inputSchema: objectSchema({ workflow_id: { type: "string" } }, ["workflow_id"]),
++    handler: async ({ client }, args) => {
++      const { data, error } = await client
++        .from("workflow_field_values")
++        .select("id, field_key, label, value")
++        .eq("workflow_id", String(args.workflow_id));
++      if (error) throw new Error(error.message);
++      return data || [];
++    },
++  },
++  {
++    name: "set_workflow_field",
++    description:
++      "Set a custom field value on a workflow (creates or updates by field_key). " +
++      "Allowed for the workflow's raiser or an admin/MD.",
++    inputSchema: objectSchema(
++      {
++        workflow_id: { type: "string" },
++        field_key: { type: "string" },
++        label: { type: "string" },
++        value: { type: "string" },
++      },
++      ["workflow_id", "field_key", "value"],
++    ),
++    handler: async ({ client }, args) => {
++      const workflowId = String(args.workflow_id);
++      const fieldKey = String(args.field_key);
++      const { data: existing } = await client
++        .from("workflow_field_values").select("id").eq("workflow_id", workflowId).eq("field_key", fieldKey).maybeSingle();
++      if (existing) {
++        const { data, error } = await client
++          .from("workflow_field_values")
++          .update({ value: String(args.value), label: args.label ? String(args.label) : undefined })
++          .eq("id", existing.id).select("id, field_key, label, value").maybeSingle();
++        if (error) throw permissionError(error, "set fields on this workflow");
++        return data;
++      }
++      const { data, error } = await client
++        .from("workflow_field_values")
++        .insert({ workflow_id: workflowId, field_key: fieldKey, label: args.label ? String(args.label) : fieldKey, value: String(args.value) })
++        .select("id, field_key, label, value").single();
++      if (error) throw permissionError(error, "set fields on this workflow");
++      return data;
++    },
++  },
++  {
++    name: "create_workflow_template",
++    description:
++      "Create a reusable workflow template with ordered stages. Requires admin/MD or a department manager.",
++    inputSchema: objectSchema(
++      {
++        name: { type: "string" },
++        description: { type: "string" },
++        category: { type: "string", description: "Default 'General'." },
++        stages: {
++          type: "array",
++          description: "Ordered template stages.",
++          items: {
++            type: "object",
++            properties: {
++              name: { type: "string" },
++              default_tat_hours: { type: "number", description: "Default 24." },
++              owner_department_id: { type: "string" },
++              is_decision: { type: "boolean" },
++              is_terminal: { type: "boolean" },
++            },
++            required: ["name"],
++          },
++        },
++      },
++      ["name", "stages"],
++    ),
++    handler: async ({ client, userId }, args) => {
++      const stages = Array.isArray(args.stages) ? (args.stages as Record<string, unknown>[]) : [];
++      if (stages.length === 0) throw new Error("At least one stage is required");
++      const { data: tpl, error } = await client
++        .from("workflow_templates")
++        .insert({
++          name: String(args.name),
++          description: args.description ? String(args.description) : null,
++          category: args.category ? String(args.category) : "General",
++          created_by: userId,
++          active: true,
++        })
++        .select("*")
++        .single();
++      if (error) throw permissionError(error, "create a workflow template");
++
++      const stageRows = stages.map((s, i) => ({
++        template_id: tpl.id,
++        position: i + 1,
++        name: String(s.name),
++        default_tat_hours: s.default_tat_hours !== undefined ? Number(s.default_tat_hours) : 24,
++        owner_department_id: s.is_terminal ? null : (s.owner_department_id ? String(s.owner_department_id) : null),
++        is_decision: Boolean(s.is_decision),
++        is_terminal: Boolean(s.is_terminal),
++      }));
++      const { error: stErr } = await client.from("workflow_template_stages").insert(stageRows);
++      if (stErr) throw permissionError(stErr, "add stages to this template");
++      return { id: tpl.id, name: tpl.name, stage_count: stageRows.length };
++    },
++  },
++];
+diff --git a/supabase/migrations/20260613120000_mcp_access_tokens.sql b/supabase/migrations/20260613120000_mcp_access_tokens.sql
+new file mode 100644
+index 0000000..65fe408
+--- /dev/null
++++ b/supabase/migrations/20260613120000_mcp_access_tokens.sql
+@@ -0,0 +1,59 @@
++-- Personal Access Tokens for the MCP server (external AI clients connecting in).
++-- Each token belongs to one user; the MCP server resolves token -> user and runs
++-- every query under that user's RLS scope. Only the SHA-256 hash is stored.
++
++CREATE TABLE IF NOT EXISTS public.mcp_access_tokens (
++  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
++  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
++  organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
++  name TEXT NOT NULL,
++  token_hash TEXT NOT NULL,
++  token_prefix TEXT NOT NULL,
++  last_used_at TIMESTAMPTZ,
++  expires_at TIMESTAMPTZ,
++  revoked_at TIMESTAMPTZ,
++  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
++);
++
++-- One active token per hash (revoked tokens may share the slot once cleared).
++CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_tokens_hash_active
++  ON public.mcp_access_tokens (token_hash)
++  WHERE revoked_at IS NULL;
++
++CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user_active
++  ON public.mcp_access_tokens (user_id)
++  WHERE revoked_at IS NULL;
++
++ALTER TABLE public.mcp_access_tokens ENABLE ROW LEVEL SECURITY;
++
++-- Users manage only their own tokens. token_hash is never sent to the client on
++-- read (the UI selects explicit columns), and is written only by the issuing
++-- edge function via the service role (which bypasses RLS).
++DROP POLICY IF EXISTS "Users read own mcp tokens" ON public.mcp_access_tokens;
++CREATE POLICY "Users read own mcp tokens" ON public.mcp_access_tokens
++  FOR SELECT TO authenticated
++  USING (auth.uid() = user_id);
++
++DROP POLICY IF EXISTS "Users revoke own mcp tokens" ON public.mcp_access_tokens;
++CREATE POLICY "Users revoke own mcp tokens" ON public.mcp_access_tokens
++  FOR UPDATE TO authenticated
++  USING (auth.uid() = user_id)
++  WITH CHECK (auth.uid() = user_id);
++
++DROP POLICY IF EXISTS "Users delete own mcp tokens" ON public.mcp_access_tokens;
++CREATE POLICY "Users delete own mcp tokens" ON public.mcp_access_tokens
++  FOR DELETE TO authenticated
++  USING (auth.uid() = user_id);
++
++-- Bump last_used_at without exposing the row to the caller. SECURITY DEFINER so
++-- the MCP server can call it through a user-scoped client after validating the PAT.
++CREATE OR REPLACE FUNCTION public.mark_mcp_token_used(_token_id UUID)
++RETURNS void
++LANGUAGE sql
++SECURITY DEFINER
++SET search_path = public
++AS $$
++  UPDATE public.mcp_access_tokens
++  SET last_used_at = now()
++  WHERE id = _token_id;
++$$;
+diff --git a/supabase/migrations/20260614120000_google_user_integrations.sql b/supabase/migrations/20260614120000_google_user_integrations.sql
+new file mode 100644
+index 0000000..a65fbcd
+--- /dev/null
++++ b/supabase/migrations/20260614120000_google_user_integrations.sql
+@@ -0,0 +1,113 @@
++-- User-level Google Workspace integration.
++-- Calendar access is per-user: each TaskFlow user connects their own Google
++-- account, and synced events remain visible only to that same Supabase user.
++
++CREATE TABLE IF NOT EXISTS public.user_google_connections (
++  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
++  organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
++  google_email TEXT NOT NULL,
++  google_sub TEXT,
++  scope TEXT NOT NULL DEFAULT '',
++  access_token_ciphertext TEXT,
++  refresh_token_ciphertext TEXT,
++  expires_at TIMESTAMPTZ,
++  calendar_sync_enabled BOOLEAN NOT NULL DEFAULT TRUE,
++  gmail_tasks_enabled BOOLEAN NOT NULL DEFAULT FALSE,
++  last_calendar_sync_at TIMESTAMPTZ,
++  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
++  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
++);
++
++CREATE INDEX IF NOT EXISTS idx_user_google_connections_org
++  ON public.user_google_connections (organization_id);
++
++CREATE TABLE IF NOT EXISTS public.google_oauth_states (
++  state TEXT PRIMARY KEY,
++  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
++  organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
++  redirect_to TEXT,
++  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
++  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '10 minutes')
++);
++
++CREATE INDEX IF NOT EXISTS idx_google_oauth_states_user
++  ON public.google_oauth_states (user_id);
++
++CREATE TABLE IF NOT EXISTS public.google_calendar_events (
++  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
++  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
++  organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
++  google_calendar_id TEXT NOT NULL DEFAULT 'primary',
++  google_event_id TEXT NOT NULL,
++  title TEXT NOT NULL,
++  description TEXT,
++  location TEXT,
++  html_link TEXT,
++  hangout_link TEXT,
++  start_at TIMESTAMPTZ,
++  end_at TIMESTAMPTZ,
++  start_date DATE,
++  end_date DATE,
++  is_all_day BOOLEAN NOT NULL DEFAULT FALSE,
++  status TEXT NOT NULL DEFAULT 'confirmed',
++  organizer_email TEXT,
++  attendees JSONB NOT NULL DEFAULT '[]'::jsonb,
++  raw_event JSONB NOT NULL DEFAULT '{}'::jsonb,
++  synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
++  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
++  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
++  UNIQUE (user_id, google_calendar_id, google_event_id)
++);
++
++CREATE INDEX IF NOT EXISTS idx_google_calendar_events_user_start_at
++  ON public.google_calendar_events (user_id, start_at);
++
++CREATE INDEX IF NOT EXISTS idx_google_calendar_events_user_start_date
++  ON public.google_calendar_events (user_id, start_date);
++
++ALTER TABLE public.user_google_connections ENABLE ROW LEVEL SECURITY;
++ALTER TABLE public.google_oauth_states ENABLE ROW LEVEL SECURITY;
++ALTER TABLE public.google_calendar_events ENABLE ROW LEVEL SECURITY;
++
++DROP POLICY IF EXISTS "Users read own google connection" ON public.user_google_connections;
++CREATE POLICY "Users read own google connection"
++  ON public.user_google_connections FOR SELECT TO authenticated
++  USING (auth.uid() = user_id);
++
++DROP POLICY IF EXISTS "Users delete own google connection" ON public.user_google_connections;
++CREATE POLICY "Users delete own google connection"
++  ON public.user_google_connections FOR DELETE TO authenticated
++  USING (auth.uid() = user_id);
++
++-- Writes are performed by Edge Functions with the service role so token fields
++-- are never accepted from browser clients.
++
++DROP POLICY IF EXISTS "Users read own google calendar events" ON public.google_calendar_events;
++CREATE POLICY "Users read own google calendar events"
++  ON public.google_calendar_events FOR SELECT TO authenticated
++  USING (auth.uid() = user_id);
++
++DROP POLICY IF EXISTS "Users delete own google calendar events" ON public.google_calendar_events;
++CREATE POLICY "Users delete own google calendar events"
++  ON public.google_calendar_events FOR DELETE TO authenticated
++  USING (auth.uid() = user_id);
++
++-- OAuth states are intentionally service-role only: the browser receives only
++-- the opaque state string inside the Google consent URL.
++
++CREATE OR REPLACE FUNCTION public.touch_google_connection_updated_at()
++RETURNS TRIGGER
++LANGUAGE plpgsql
++AS $$
++BEGIN
++  NEW.updated_at = now();
++  RETURN NEW;
++END;
++$$;
++
++DROP TRIGGER IF EXISTS trg_google_connections_updated_at ON public.user_google_connections;
++CREATE TRIGGER trg_google_connections_updated_at
++  BEFORE UPDATE ON public.user_google_connections
++  FOR EACH ROW
++  EXECUTE FUNCTION public.touch_google_connection_updated_at();
++
