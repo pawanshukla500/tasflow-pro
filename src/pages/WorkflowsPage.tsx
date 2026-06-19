@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { WorkflowHealth } from "@/components/WorkflowHealth";
+import { ExtendWorkflowTatDialog } from "@/components/ExtendWorkflowTatDialog";
 import { formatDateIST } from "@/lib/time";
 
 interface Department { id: string; name: string; color: string; }
@@ -98,6 +99,11 @@ const isOverdue = (s: WorkflowStage) => {
   if (s.status !== "in_progress" || !s.started_at) return false;
   const elapsedMs = Date.now() - new Date(s.started_at).getTime();
   return elapsedMs > s.tat_hours * 3600 * 1000;
+};
+
+const stageDeadline = (s: WorkflowStage) => {
+  if (!s.started_at) return null;
+  return new Date(new Date(s.started_at).getTime() + s.tat_hours * 3600 * 1000);
 };
 
 interface SortableStageProps {
@@ -332,6 +338,7 @@ const WorkflowsPage = () => {
   const [newAttLabel, setNewAttLabel] = useState("");
   const [newAttUrl, setNewAttUrl] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [showExtendTat, setShowExtendTat] = useState(false);
 
   const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
   const [expandedWf, setExpandedWf] = useState<string | null>(null);
@@ -809,6 +816,14 @@ const WorkflowsPage = () => {
   };
 
   const currentOpenStage = openStageId ? workflows.flatMap((w) => w.stages).find((s) => s.id === openStageId) : null;
+  const currentOpenWorkflow = currentOpenStage
+    ? workflows.find((w) => w.id === currentOpenStage.workflow_id)
+    : null;
+  const canExtendCurrentStage = !!currentOpenStage && (
+    isAdminOrMD
+    || currentOpenStage.assignee_user_id === user?.id
+    || currentOpenWorkflow?.raised_by === user?.id
+  ) && ["in_progress", "blocked"].includes(currentOpenStage.status);
 
   // Workflows are restricted to MD/Admin and Department Managers only.
   // Employees do not see this page even if they navigate to /workflows directly.
@@ -1394,6 +1409,28 @@ const WorkflowsPage = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {currentOpenStage && (
+              <div className={`rounded-lg border p-3 text-xs ${isOverdue(currentOpenStage) ? "border-destructive/40 bg-destructive/5" : "bg-muted/20"}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="font-medium text-foreground">Stage deadline</p>
+                    <p className="text-muted-foreground mt-0.5">
+                      TAT: {currentOpenStage.tat_hours}h
+                      {currentOpenStage.started_at && (
+                        <> · Due by {stageDeadline(currentOpenStage)?.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</>
+                      )}
+                      {isOverdue(currentOpenStage) && <span className="text-destructive font-medium ml-1">· OVERDUE</span>}
+                    </p>
+                  </div>
+                  {canExtendCurrentStage && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setShowExtendTat(true)}>
+                      <Clock className="h-3.5 w-3.5 mr-1" />
+                      Extend
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
             {currentOpenStage?.is_decision && (
               <div className="border-2 border-primary/30 rounded-lg p-3 bg-primary/5 space-y-2">
                 <Label className="text-xs font-semibold">Decision required to advance *</Label>
@@ -1491,6 +1528,22 @@ const WorkflowsPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {currentOpenStage && currentOpenWorkflow && (
+        <ExtendWorkflowTatDialog
+          stageId={currentOpenStage.id}
+          stageName={currentOpenStage.name}
+          workflowTitle={currentOpenWorkflow.title}
+          currentTatHours={currentOpenStage.tat_hours}
+          maxHours={isAdminOrMD || currentOpenWorkflow.raised_by === user?.id ? 720 : 168}
+          open={showExtendTat}
+          onOpenChange={setShowExtendTat}
+          onExtended={() => {
+            fetchAll();
+            setShowExtendTat(false);
+          }}
+        />
+      )}
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteTemplateId} onOpenChange={(o) => !o && setDeleteTemplateId(null)}>

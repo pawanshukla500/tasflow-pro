@@ -4,9 +4,12 @@ import {
   canApproveOrRejectReview,
   canDeleteTask,
   canEditTaskMetadata,
+  canExtendTaskDueDate,
   canReviewTask,
   canSubmitForReview,
   isTaskAssignee,
+  maxTaskDueDateExtension,
+  minTaskDueDateExtension,
 } from "@/lib/taskPermissions";
 import type { TaskRow } from "@/hooks/useTasks";
 
@@ -124,4 +127,39 @@ describe("taskPermissions", () => {
       expect(isTaskAssignee(t, "u2")).toBe(false);
     });
   });
+
+  describe("canExtendTaskDueDate", () => {
+    it("allows assignees and creator on active tasks", () => {
+      const t = task({
+        id: "1",
+        title: "T",
+        due_date: "2026-06-20",
+        created_by: "creator-1",
+        assignees: [{ user_id: "u1", name: "U" }],
+      });
+      expect(canExtendTaskDueDate(t, "u1", false)).toBe(true);
+      expect(canExtendTaskDueDate(t, "creator-1", false)).toBe(true);
+      expect(canExtendTaskDueDate(t, "stranger", false)).toBe(false);
+      expect(canExtendTaskDueDate(t, "stranger", true)).toBe(true);
+    });
+
+    it("blocks extension on completed tasks", () => {
+      const t = task({ id: "1", title: "T", status: "done", assignees: [{ user_id: "u1", name: "U" }] });
+      expect(canExtendTaskDueDate(t, "u1", false)).toBe(false);
+    });
+  });
+
+  describe("due date extension bounds", () => {
+    it("computes min and max extension dates", () => {
+      const t = task({ id: "1", title: "T", due_date: "2026-06-10" });
+      const min = minTaskDueDateExtension(t);
+      const max = maxTaskDueDateExtension(t);
+      expect(formatYmd(min)).toBe("2026-06-11");
+      expect(formatYmd(max)).toBe("2026-07-10");
+    });
+  });
 });
+
+function formatYmd(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
