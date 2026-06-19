@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { X, CalendarIcon, ShieldCheck, Send, CheckCircle, XCircle } from "lucide-react";
+import { X, CalendarIcon, ShieldCheck, Send, CheckCircle, XCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,10 +18,12 @@ import type { TaskRow } from "@/hooks/useTasks";
 import TaskAttachments from "@/components/TaskAttachments";
 import SubtaskEditor, { type SubtaskDraft } from "@/components/SubtaskEditor";
 import TaskReviewDialog from "@/components/TaskReviewDialog";
+import { ExtendTaskDueDateDialog } from "@/components/ExtendTaskDueDateDialog";
 import {
   allowedStatusesForUser,
   canApproveOrRejectReview,
   canEditTaskMetadata,
+  canExtendTaskDueDate,
   canSubmitForReview,
   TASK_STATUS_LABELS,
 } from "@/lib/taskPermissions";
@@ -44,6 +46,7 @@ const priorityColorMap: Record<Priority, string> = {
 const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
   const { user, isAdminOrMD, managedDepartments } = useAuth();
   const canEdit = canEditTaskMetadata(task, user?.id, isAdminOrMD);
+  const canExtendDue = canExtendTaskDueDate(task, user?.id, isAdminOrMD);
   const statusOptions = allowedStatusesForUser(task, user?.id, isAdminOrMD, managedDepartments || []);
 
   const [title, setTitle] = useState(task.title);
@@ -61,18 +64,25 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [users, setUsers] = useState<{ id: string; name: string; department_id: string | null }[]>([]);
   const [subtasks, setSubtasks] = useState<SubtaskDraft[]>([]);
+  const [showExtendDue, setShowExtendDue] = useState(false);
+  const [displayDueDate, setDisplayDueDate] = useState(task.due_date);
+  const [extensionHistory, setExtensionHistory] = useState<
+    { old_due_date: string | null; new_due_date: string; reason: string; created_at: string }[]
+  >([]);
 
   useEffect(() => {
     Promise.all([
       supabase.from("departments").select("id, name").order("name"),
       supabase.from("profiles").select("id, name, department_id").eq("active", true).order("name"),
       supabase.from("task_subtasks").select("id, title, completed, position").eq("task_id", task.id).order("position"),
-    ]).then(([d, u, st]) => {
+      supabase.from("task_due_date_events").select("old_due_date, new_due_date, reason, created_at").eq("task_id", task.id).order("created_at", { ascending: false }).limit(5),
+    ]).then(([d, u, st, ext]) => {
       setDepartments(d.data || []);
       setUsers(u.data || []);
       setSubtasks((st.data || []).map((s) => ({ id: s.id, title: s.title, completed: s.completed })));
+      setExtensionHistory(ext.data || []);
     });
-  }, [task.id]);
+  }, [task.id, displayDueDate]);
 
   const handleSave = async () => {
     if (!canEdit) {
@@ -320,7 +330,15 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
                     </PopoverContent>
                   </Popover>
                 ) : (
-                  <Input value={task.due_date || "—"} disabled />
+                  <div className="space-y-2">
+                    <Input value={displayDueDate || "—"} disabled />
+                    {canExtendDue && task.status !== "done" && (
+                      <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => setShowExtendDue(true)}>
+                        <Clock className="h-3.5 w-3.5 mr-1.5" />
+                        Extend due date
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
               <div className="space-y-2">
@@ -335,6 +353,20 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
                 </Select>
               </div>
             </div>
+
+            {extensionHistory.length > 0 && (
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                <p className="text-xs font-medium text-foreground">Due date extension history</p>
+                {extensionHistory.map((e, i) => (
+                  <div key={i} className="text-[11px] text-muted-foreground border-t first:border-t-0 pt-2 first:pt-0">
+                    <span className="font-mono-num">{e.old_due_date || "—"}</span>
+                    {" → "}
+                    <span className="font-mono-num text-foreground">{e.new_due_date}</span>
+                    <span className="ml-1">· {e.reason}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {canEdit && (
               <>
@@ -442,6 +474,16 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
           }}
         />
       )}
+
+      <ExtendTaskDueDateDialog
+        task={{ ...task, due_date: displayDueDate }}
+        open={showExtendDue}
+        onOpenChange={setShowExtendDue}
+        onExtended={(newDueDate) => {
+          setDisplayDueDate(newDueDate);
+          onSaved?.();
+        }}
+      />
     </>
   );
 };

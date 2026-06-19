@@ -100,3 +100,32 @@ export function canApproveOrRejectReview(
 ): boolean {
   return task.status === "pending_review" && canReviewTask(task, userId, isAdminOrMD, managedDepartments);
 }
+
+/** Assignees may request a due-date extension when work is blocked or delayed. */
+export function canExtendTaskDueDate(
+  task: Pick<TaskRow, "status" | "due_date" | "assignees" | "created_by">,
+  userId?: string | null,
+  isAdminOrMD = false,
+): boolean {
+  if (!userId || task.status === "done") return false;
+  if (isAdminOrMD || task.created_by === userId) return true;
+  return isTaskAssignee(task, userId);
+}
+
+export function maxTaskDueDateExtension(task: Pick<TaskRow, "due_date">): Date {
+  const base = task.due_date ? new Date(task.due_date) : new Date();
+  const max = new Date(base);
+  max.setDate(max.getDate() + 30);
+  return max;
+}
+
+export function minTaskDueDateExtension(task: Pick<TaskRow, "due_date">): Date {
+  if (task.due_date) {
+    const min = new Date(task.due_date);
+    min.setDate(min.getDate() + 1);
+    return min;
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
