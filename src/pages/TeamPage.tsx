@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/edgeFunctions";
 import { sendPasswordResetEmail } from "@/lib/passwordReset";
 import { useToast } from "@/hooks/use-toast";
+import { shouldShowInPerformanceLeaderboard } from "@/lib/performanceVisibility";
 import { todayIST } from "@/lib/time";
 
 interface ProfileWithRole {
@@ -508,10 +509,16 @@ const TeamPage = () => {
               </Badge>
               <span className="text-xs text-muted-foreground w-28 text-center">{m.department_name || "—"}</span>
               <div className="w-16 flex items-center gap-1.5">
-                <div className="flex-1 h-1.5 bg-muted rounded-full">
-                  <div className={`h-full rounded-full ${m.performance_score >= 80 ? "bg-success" : m.performance_score >= 60 ? "bg-warning" : "bg-destructive"}`} style={{ width: `${m.performance_score}%` }} />
-                </div>
-                <span className="text-[10px] font-mono-num text-muted-foreground">{m.performance_score}%</span>
+                {shouldShowInPerformanceLeaderboard(m.roles) ? (
+                  <>
+                    <div className="flex-1 h-1.5 bg-muted rounded-full">
+                      <div className={`h-full rounded-full ${m.performance_score >= 80 ? "bg-success" : m.performance_score >= 60 ? "bg-warning" : "bg-destructive"}`} style={{ width: `${m.performance_score}%` }} />
+                    </div>
+                    <span className="text-[10px] font-mono-num text-muted-foreground">{m.performance_score}%</span>
+                  </>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground w-full text-center">—</span>
+                )}
               </div>
               <Badge variant={m.active ? "secondary" : "outline"} className="text-[10px]">
                 {m.active ? "Active" : "Inactive"}

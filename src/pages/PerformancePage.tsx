@@ -20,6 +20,12 @@ import { usePerformance } from "@/hooks/usePerformance";
 import { useTasks } from "@/hooks/useTasks";
 import { PerformanceBreakdown } from "@/components/PerformanceBreakdown";
 import { ExecutiveDashboard } from "@/components/ExecutiveDashboard";
+import { useUserRolesMap } from "@/hooks/useUserRolesMap";
+import {
+  filterPerformanceLeaderboardProfiles,
+  filterPerformanceMetrics,
+  shouldShowInPerformanceLeaderboard,
+} from "@/lib/performanceVisibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface KRA {
@@ -99,9 +105,11 @@ const PerformancePage = () => {
 
   useEffect(() => { fetchData(); }, []);
 
+  const rolesByUserId = useUserRolesMap();
+
   const teamMembers = useMemo(
-    () => filterProfiles(members),
-    [members, filterProfiles],
+    () => filterProfiles(members).filter((m) => shouldShowInPerformanceLeaderboard(rolesByUserId.get(m.id) ?? ["employee"])),
+    [members, filterProfiles, rolesByUserId],
   );
 
   const teamMemberIds = useMemo(
@@ -178,14 +186,24 @@ const PerformancePage = () => {
 
   const canSeeOthers = accessScope.canViewDeptPerformance;
 
+  const leaderboardProfiles = useMemo(
+    () => filterPerformanceLeaderboardProfiles(filterProfiles(allProfiles), rolesByUserId),
+    [allProfiles, filterProfiles, rolesByUserId],
+  );
+
   const scopedProfileIds = useMemo(() => {
     if (scope === "me") return user?.id ? [user.id] : [];
-    if (scope === "all") return filterProfiles(allProfiles).map((p) => p.id);
+    if (scope === "all") return leaderboardProfiles.map((p) => p.id);
     return [scope];
-  }, [scope, user?.id, allProfiles, filterProfiles]);
+  }, [scope, user?.id, leaderboardProfiles]);
 
   const { metrics: perfMetrics, loading: perfLoading } = usePerformance(
     scopedProfileIds.length ? scopedProfileIds : undefined,
+  );
+
+  const leaderboardMetrics = useMemo(
+    () => filterPerformanceMetrics(perfMetrics, rolesByUserId),
+    [perfMetrics, rolesByUserId],
   );
 
   const selectedMetrics = scope === "me"
@@ -238,8 +256,8 @@ const PerformancePage = () => {
           {accessScope.hasFullAccess && scope === "all" ? (
             <ExecutiveDashboard
               departments={departments}
-              profiles={filterProfiles(allProfiles)}
-              metrics={perfMetrics}
+              profiles={leaderboardProfiles}
+              metrics={leaderboardMetrics}
               tasks={tasks}
               workflows={workflows}
             />
@@ -266,12 +284,12 @@ const PerformancePage = () => {
               )}
               {accessScope.hasFullAccess && scope !== "all" && (
                 <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-sm">MD summary</CardTitle></CardHeader>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Organization summary</CardTitle></CardHeader>
                   <CardContent>
                     <ExecutiveDashboard
                       departments={departments}
-                      profiles={filterProfiles(allProfiles)}
-                      metrics={perfMetrics}
+                      profiles={leaderboardProfiles}
+                      metrics={leaderboardMetrics}
                       tasks={tasks}
                       workflows={workflows}
                       summaryOnly
@@ -279,11 +297,11 @@ const PerformancePage = () => {
                   </CardContent>
                 </Card>
               )}
-              {canSeeOthers && scope !== "me" && perfMetrics.length > 1 && (
+              {canSeeOthers && scope !== "me" && leaderboardMetrics.length > 1 && (
                 <Card className="md:col-span-2">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Team breakdown</CardTitle></CardHeader>
                   <CardContent className="grid sm:grid-cols-2 gap-4">
-                    {perfMetrics.map((m) => {
+                    {leaderboardMetrics.map((m) => {
                       const member = allProfiles.find((p) => p.id === m.user_id);
                       return (
                         <div key={m.user_id} className="border rounded-lg p-3">
