@@ -15,6 +15,8 @@ import { useAccessScope } from "@/hooks/useAccessScope";
 import { ScopeBanner } from "@/components/ScopeBanner";
 import { supabase } from "@/integrations/supabase/client";
 import { usePerformance } from "@/hooks/usePerformance";
+import { useUserRolesMap } from "@/hooks/useUserRolesMap";
+import { filterPerformanceLeaderboardProfiles } from "@/lib/performanceVisibility";
 import { useTasks } from "@/hooks/useTasks";
 import CreateTaskModal from "@/components/CreateTaskModal";
 import { PageHeader } from "@/components/PageHeader";
@@ -124,11 +126,16 @@ const Dashboard = () => {
   const today = todayIST();
   const firstName = user?.profile?.name?.split(" ")[0] || "User";
 
+  const rolesByUserId = useUserRolesMap();
   const scopedProfiles = useMemo(
     () => filterProfiles(profiles),
     [profiles, filterProfiles],
   );
-  const { metrics: perfMetrics } = usePerformance(scopedProfiles.map((p: { id: string }) => p.id));
+  const leaderboardProfiles = useMemo(
+    () => filterPerformanceLeaderboardProfiles(scopedProfiles, rolesByUserId),
+    [scopedProfiles, rolesByUserId],
+  );
+  const { metrics: perfMetrics } = usePerformance(leaderboardProfiles.map((p: { id: string }) => p.id));
 
   const scopedDepartments = useMemo(
     () => filterDepartments(departments),
@@ -252,7 +259,7 @@ const Dashboard = () => {
   const activeWorkflows = workflows.filter(w => w.status === "active");
   const topPerformers = useMemo(() => {
     const metricsByUser = new Map(perfMetrics.map((m) => [m.user_id, m]));
-    return scopedProfiles
+    return leaderboardProfiles
       .slice()
       .sort((a, b) => {
         const ma = metricsByUser.get(a.id);
@@ -263,7 +270,7 @@ const Dashboard = () => {
         return (mb?.performance_score ?? 0) - (ma?.performance_score ?? 0);
       })
       .slice(0, 5);
-  }, [scopedProfiles, perfMetrics]);
+  }, [leaderboardProfiles, perfMetrics]);
   const medals = ["🥇", "🥈", "🥉"];
   const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 

@@ -80,7 +80,7 @@ export function resolveAccessScope(user: AuthUser | null): AccessScope {
     canViewDeptPerformance: full || mgr || hr,
     canManageDepartments: full,
     canAccessAdminSettings: full,
-    canCreateTasks: full || mgr || hr,
+    canCreateTasks: true,
     primaryRole,
     primaryRoleLabel: primaryRole ? roleDisplayName(primaryRole) : "Team Member",
   };

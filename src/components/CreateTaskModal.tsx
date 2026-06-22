@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/edgeFunctions";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAccessScope } from "@/hooks/useAccessScope";
 import { toast } from "sonner";
 import SubtaskEditor, { type SubtaskDraft } from "@/components/SubtaskEditor";
 
@@ -69,7 +68,6 @@ function SectionCard({
 
 const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalProps) => {
   const { user } = useAuth();
-  const { filterProfiles } = useAccessScope();
   const [priority, setPriority] = useState<Priority>("medium");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -100,15 +98,15 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
     });
   }, []);
 
-  const scopedUsers = useMemo(() => filterProfiles(users), [users, filterProfiles]);
+  const assignableUsers = users;
 
   useEffect(() => {
     if (assignees.length === 0) return;
-    const primary = scopedUsers.find((u) => u.id === assignees[0]);
+    const primary = assignableUsers.find((u) => u.id === assignees[0]);
     if (primary?.department_id) setDeptId(primary.department_id);
-  }, [assignees, scopedUsers]);
+  }, [assignees, assignableUsers]);
 
-  const filteredUsers = scopedUsers.filter((u) =>
+  const filteredUsers = assignableUsers.filter((u) =>
     u.name.toLowerCase().includes(assigneeSearch.toLowerCase()),
   );
 
@@ -263,7 +261,7 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
               </div>
             </SectionCard>
 
-            <SectionCard icon={Users} title="Assignment" subtitle="Who will do this and which department?">
+            <SectionCard icon={Users} title="Assignment" subtitle="Assign to any active team member in your organization.">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label>Assign To *</Label>
@@ -368,7 +366,7 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
                     >
                       <SelectTrigger><SelectValue placeholder="Defaults to you" /></SelectTrigger>
                       <SelectContent>
-                        {scopedUsers.map((u) => (
+                        {assignableUsers.map((u) => (
                           <SelectItem key={u.id} value={u.id}>{u.name}{u.id === user?.id ? " (you)" : ""}</SelectItem>
                         ))}
                       </SelectContent>

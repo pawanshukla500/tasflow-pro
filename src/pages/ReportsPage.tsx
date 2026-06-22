@@ -12,6 +12,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { toast } from "sonner";
 import { formatDateIST } from "@/lib/time";
 import { usePerformance } from "@/hooks/usePerformance";
+import { useUserRolesMap } from "@/hooks/useUserRolesMap";
+import { filterPerformanceLeaderboardProfiles } from "@/lib/performanceVisibility";
 
 interface StageRow {
   id: string;
@@ -33,15 +35,20 @@ const ReportsPage = () => {
   const [stageRows, setStageRows] = useState<StageRow[]>([]);
   const [activeTab, setActiveTab] = useState("Overview");
 
+  const rolesByUserId = useUserRolesMap();
   const scopedProfiles = useMemo(() => filterProfiles(profiles), [profiles, filterProfiles]);
+  const leaderboardProfiles = useMemo(
+    () => filterPerformanceLeaderboardProfiles(scopedProfiles, rolesByUserId),
+    [scopedProfiles, rolesByUserId],
+  );
   const scopedDepartments = useMemo(() => filterDepartments(departments), [departments, filterDepartments]);
   const tasks = useMemo(() => filterTasks(allTasks, profiles), [allTasks, profiles, filterTasks]);
   const deptNames = useMemo(() => scopedDepartments.map((d: { name: string }) => d.name), [scopedDepartments]);
-  const { metrics: perfMetrics } = usePerformance(scopedProfiles.map((p: { id: string }) => p.id));
+  const { metrics: perfMetrics } = usePerformance(leaderboardProfiles.map((p: { id: string }) => p.id));
 
   const rankedProfiles = useMemo(() => {
     const metricsByUser = new Map(perfMetrics.map((m) => [m.user_id, m]));
-    return [...scopedProfiles].sort((a, b) => {
+    return [...leaderboardProfiles].sort((a, b) => {
       const ma = metricsByUser.get(a.id);
       const mb = metricsByUser.get(b.id);
       const aHas = ma?.has_sufficient_data ?? false;
@@ -49,7 +56,7 @@ const ReportsPage = () => {
       if (aHas !== bHas) return aHas ? -1 : 1;
       return (mb?.performance_score ?? 0) - (ma?.performance_score ?? 0);
     });
-  }, [scopedProfiles, perfMetrics]);
+  }, [leaderboardProfiles, perfMetrics]);
 
   useEffect(() => {
     const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
@@ -145,7 +152,7 @@ const ReportsPage = () => {
     } else {
       csv = [
         ["Name", "Position", "Score"].join(","),
-        ...scopedProfiles.map(p => [`"${p.name}"`, p.position || "", p.performance_score].join(","))
+        ...leaderboardProfiles.map(p => [`"${p.name}"`, p.position || "", p.performance_score].join(","))
       ].join("\n");
     }
     const blob = new Blob([csv], { type: "text/csv" });
@@ -313,7 +320,7 @@ const ReportsPage = () => {
       {(activeTab === "Performance" || activeTab === "Overview") && (
         <div className="bg-card rounded-lg border p-4">
           <h3 className="text-sm font-semibold text-foreground mb-3">Employee Performance</h3>
-          {scopedProfiles.length === 0 ? (
+          {rankedProfiles.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No team members yet</p>
           ) : (
             <div className="overflow-x-auto">
