@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { notificationActionToPath } from "@/lib/notificationNavigation";
 
 /** Real-time in-app alerts with sound for task/workflow/system notifications. */
 export default function ActivityNotifications() {
@@ -71,7 +72,7 @@ export default function ActivityNotifications() {
             action: n.action_url
               ? {
                   label: "Open",
-                  onClick: () => navigate(n.action_url!),
+                  onClick: () => navigate(notificationActionToPath(n.action_url!)),
                 }
               : undefined,
           });
@@ -88,7 +89,7 @@ export default function ActivityNotifications() {
               });
               browserN.onclick = () => {
                 window.focus();
-                if (n.action_url) navigate(n.action_url);
+                if (n.action_url) navigate(notificationActionToPath(n.action_url));
                 browserN.close();
               };
             } catch {

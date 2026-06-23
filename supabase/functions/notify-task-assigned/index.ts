@@ -104,13 +104,12 @@ Deno.serve(async (req) => {
     const errText = ok ? undefined : await resp.text().catch(() => 'unknown')
     results.push({ user_id: p.id, ok, error: errText })
 
-    const appUrl = (Deno.env.get('APP_URL') || 'https://task.youthnic.shop').replace(/\/$/, '')
     await createInAppNotification(supabase, {
       userId: p.id,
       type: 'task_assigned',
       title: 'New task assigned',
       body: `${assignedByName || 'Someone'} assigned you: ${task.title}`,
-      actionUrl: `${appUrl}/my-tasks?task=${taskId}`,
+      actionUrl: `/my-tasks?task=${taskId}`,
       metadata: { taskId, priority: task.priority },
     })
   }

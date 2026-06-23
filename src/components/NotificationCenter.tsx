@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { useInAppNotifications } from "@/hooks/useInAppNotifications";
 import { formatDateIST } from "@/lib/time";
+import { notificationActionToPath } from "@/lib/notificationNavigation";
 
 interface NotificationCenterProps {
   collapsed?: boolean;
@@ -16,7 +17,7 @@ export function NotificationCenter({ collapsed }: NotificationCenterProps) {
 
   const handleOpen = (id: string, url: string | null) => {
     markRead(id);
-    if (url) navigate(url);
+    if (url) navigate(notificationActionToPath(url));
   };
 
   return (
