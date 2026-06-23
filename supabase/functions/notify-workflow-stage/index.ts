@@ -166,7 +166,7 @@ Deno.serve(async (req) => {
     : stage.status === 'in_progress' ? 'In progress' : 'Pending'
 
   const deepLinkParams = new URLSearchParams({ wf: workflowId, stage: stageId })
-  const actionUrl = `${appUrl}/workflows?${deepLinkParams.toString()}`
+  const actionUrl = `/workflows?${deepLinkParams.toString()}`
 
   let inboxNotified = 0
   let emailsQueued = 0
