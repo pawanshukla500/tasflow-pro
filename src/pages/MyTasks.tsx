@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search, Download, Upload, ChevronDown, ChevronRight, Circle, CheckCircle2,
@@ -19,6 +19,7 @@ import TaskReviewDialog from "@/components/TaskReviewDialog";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAccessScope } from "@/hooks/useAccessScope";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { todayIST, formatDateIST } from "@/lib/time";
@@ -31,6 +32,12 @@ import {
   canSubmitForReview,
   TASK_STATUS_LABELS,
 } from "@/lib/taskPermissions";
+import {
+  filterMyTasksView,
+  myTasksTabCounts,
+  resolveSubjectUserId,
+  type MyTasksTab,
+} from "@/lib/myTasksView";
 
 const priorityColors: Record<string, string> = {
   critical: "#dc2626",
@@ -54,7 +61,7 @@ const MyTasks = () => {
   const [searchParams] = useSearchParams();
   const { tasks, loading, fetchTasks, updateTaskStatus, deleteTask } = useTasks();
   const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("assigned_to_me");
+  const [activeTab, setActiveTab] = useState<MyTasksTab>("assigned_to_me");
   const [collapsedSections, setCollapsedSections] = useState<string[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -62,10 +69,19 @@ const MyTasks = () => {
   const [completingTask, setCompletingTask] = useState<TaskRow | null>(null);
   const [reviewTask, setReviewTask] = useState<{ task: TaskRow; mode: "submit" | "approve" | "reject" } | null>(null);
   const { user, isAdminOrMD, isDeptManager, accessScope, managedDepartments } = useAuth();
+  const { filterTasks } = useAccessScope();
   const [search, setSearch] = useState("");
   const [userFilter, setUserFilter] = useState<string>("all");
-  const [filterableUsers, setFilterableUsers] = useState<{ id: string; name: string }[]>([]);
+  const [filterableUsers, setFilterableUsers] = useState<{ id: string; name: string; department_id?: string | null }[]>([]);
   const canFilterByUser = isAdminOrMD || isDeptManager;
+
+  const subjectUserId = resolveSubjectUserId(user?.id, canFilterByUser, userFilter);
+  const selectedMemberName = filterableUsers.find((member) => member.id === userFilter)?.name;
+
+  const visibleTasks = useMemo(
+    () => (canFilterByUser ? filterTasks(tasks, filterableUsers) : tasks),
+    [tasks, filterableUsers, canFilterByUser, filterTasks],
+  );
 
   useEffect(() => {
     const taskId = searchParams.get("task");
@@ -88,25 +104,32 @@ const MyTasks = () => {
         q = q.in("department_id", depts);
       }
       const { data } = await q;
-      setFilterableUsers((data || []).map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })));
+      setFilterableUsers((data || []).map((p: { id: string; name: string; department_id?: string | null }) => ({
+        id: p.id,
+        name: p.name,
+        department_id: p.department_id,
+      })));
     })();
   }, [canFilterByUser, isAdminOrMD, isDeptManager, user?.id]);
 
+  useEffect(() => {
+    if (canFilterByUser && userFilter !== "all") {
+      setActiveTab("assigned_to_me");
+    }
+  }, [userFilter, canFilterByUser]);
+
   const today = todayIST();
   const isAssignedToMe = (t: TaskRow) => !!user && t.assignees.some((a) => a.user_id === user.id);
-  const isAssignedByMe = (t: TaskRow) => !!user && t.created_by === user.id;
-  const isUnassigned = (t: TaskRow) => t.assignees.length === 0;
 
-  const filtered = tasks.filter((t) => {
-    if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
-    if (activeTab === "assigned_to_me" && !isAssignedToMe(t)) return false;
-    if (activeTab === "assigned_by_me" && !isAssignedByMe(t)) return false;
-    if (activeTab === "unassigned" && !isUnassigned(t)) return false;
-    if (canFilterByUser && userFilter !== "all") {
-      if (!t.assignees.some((a) => a.user_id === userFilter) && t.created_by !== userFilter) return false;
-    }
-    return true;
+  const filtered = filterMyTasksView(visibleTasks, {
+    activeTab,
+    search,
+    subjectUserId,
+    canFilterByUser,
+    userFilter,
   });
+
+  const tabCounts = myTasksTabCounts(visibleTasks, subjectUserId);
 
   const overdue = filtered.filter((t) => t.due_date && t.due_date < today && t.status !== "done");
   const dueToday = filtered.filter((t) => t.due_date === today && t.status !== "done");
@@ -115,10 +138,24 @@ const MyTasks = () => {
   const activeCount = overdue.length + dueToday.length + upcoming.length;
 
   const tabs = [
-    { id: "assigned_to_me", label: "Assigned to me", count: tasks.filter(isAssignedToMe).length, icon: User },
-    { id: "assigned_by_me", label: "Assigned by me", count: tasks.filter(isAssignedByMe).length, icon: ArrowRight },
-    { id: "unassigned", label: "Unassigned", count: tasks.filter(isUnassigned).length, icon: Inbox },
-    { id: "all", label: "All tasks", count: tasks.length, icon: ListTodo },
+    {
+      id: "assigned_to_me" as const,
+      label: userFilter !== "all" && canFilterByUser && selectedMemberName
+        ? `Assigned to ${selectedMemberName}`
+        : "Assigned to me",
+      count: tabCounts.assigned_to_me,
+      icon: User,
+    },
+    {
+      id: "assigned_by_me" as const,
+      label: userFilter !== "all" && canFilterByUser && selectedMemberName
+        ? `Assigned by ${selectedMemberName}`
+        : "Assigned by me",
+      count: tabCounts.assigned_by_me,
+      icon: ArrowRight,
+    },
+    { id: "unassigned" as const, label: "Unassigned", count: tabCounts.unassigned, icon: Inbox },
+    { id: "all" as const, label: "All tasks", count: tabCounts.all, icon: ListTodo },
   ];
 
   const sections = [
@@ -412,9 +449,14 @@ const MyTasks = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{isAdminOrMD ? "All team members" : "My team"}</SelectItem>
-              {filterableUsers.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-              ))}
+              {user?.id && (
+                <SelectItem value={user.id}>Me</SelectItem>
+              )}
+              {filterableUsers
+                .filter((member) => member.id !== user?.id)
+                .map((member) => (
+                  <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                ))}
             </SelectContent>
           </Select>
         )}
@@ -451,7 +493,9 @@ const MyTasks = () => {
               title="No tasks in this view"
               description={
                 activeTab === "assigned_to_me"
-                  ? "Tasks assigned to you will appear here. Create one or ask your team lead to assign work."
+                  ? userFilter !== "all" && canFilterByUser
+                    ? `No tasks assigned to ${selectedMemberName || "this team member"} yet.`
+                    : "Tasks assigned to you will appear here. Create one or ask your team lead to assign work."
                   : "Create a task to get started, or switch filters to see other tasks."
               }
               action={
