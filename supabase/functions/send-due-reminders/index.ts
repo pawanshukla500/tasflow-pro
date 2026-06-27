@@ -10,13 +10,11 @@ const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
-  // Internal cron function: invoked by pg_cron with the project anon key.
-  // verify_jwt = false at platform level; we accept any request that includes
-  // a Bearer token (cron always sends one) or our internal service-key header.
-  const _serviceKeyCheck = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-  const bearer = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
+  // Internal cron function: invoked by pg_cron with service role credentials only.
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   const internalKey = req.headers.get('x-internal-service-key') || ''
-  if (!bearer && internalKey !== _serviceKeyCheck) {
+  const bearer = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
+  if (internalKey !== serviceKey && bearer !== serviceKey) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

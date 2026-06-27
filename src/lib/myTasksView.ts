@@ -45,11 +45,24 @@ export function filterMyTasksView(
   });
 }
 
-export function myTasksTabCounts(tasks: TaskRow[], subjectUserId: string | null) {
+export function myTasksTabCounts(
+  tasks: TaskRow[],
+  subjectUserId: string | null,
+  options?: { canFilterByUser?: boolean; userFilter?: string },
+) {
+  const scopedTasks =
+    options?.canFilterByUser && options.userFilter && options.userFilter !== "all"
+      ? tasks.filter(
+          (task) =>
+            isTaskAssignedToUser(task, options.userFilter!) ||
+            isTaskAssignedByUser(task, options.userFilter!),
+        )
+      : tasks;
+
   return {
-    assigned_to_me: tasks.filter((task) => isTaskAssignedToUser(task, subjectUserId)).length,
-    assigned_by_me: tasks.filter((task) => isTaskAssignedByUser(task, subjectUserId)).length,
-    unassigned: tasks.filter((task) => task.assignees.length === 0).length,
-    all: tasks.length,
+    assigned_to_me: scopedTasks.filter((task) => isTaskAssignedToUser(task, subjectUserId)).length,
+    assigned_by_me: scopedTasks.filter((task) => isTaskAssignedByUser(task, subjectUserId)).length,
+    unassigned: scopedTasks.filter((task) => task.assignees.length === 0).length,
+    all: scopedTasks.length,
   };
 }

@@ -68,7 +68,7 @@ const MyTasks = () => {
   const [editingTask, setEditingTask] = useState<TaskRow | null>(null);
   const [completingTask, setCompletingTask] = useState<TaskRow | null>(null);
   const [reviewTask, setReviewTask] = useState<{ task: TaskRow; mode: "submit" | "approve" | "reject" } | null>(null);
-  const { user, isAdminOrMD, isDeptManager, accessScope, managedDepartments } = useAuth();
+  const { user, isAdminOrMD, isDeptManager, isHR, accessScope, managedDepartments } = useAuth();
   const { filterTasks } = useAccessScope();
   const [search, setSearch] = useState("");
   const [userFilter, setUserFilter] = useState<string>("all");
@@ -99,7 +99,11 @@ const MyTasks = () => {
     (async () => {
       let q = supabase.from("profiles").select("id, name, department_id").eq("active", true).order("name");
       if (!isAdminOrMD && isDeptManager) {
-        const depts = user.managedDepartments || [];
+        const depts = user.managedDepartments?.length
+          ? user.managedDepartments
+          : user.profile?.department_id
+            ? [user.profile.department_id]
+            : [];
         if (depts.length === 0) { setFilterableUsers([]); return; }
         q = q.in("department_id", depts);
       }
@@ -129,7 +133,7 @@ const MyTasks = () => {
     userFilter,
   });
 
-  const tabCounts = myTasksTabCounts(visibleTasks, subjectUserId);
+  const tabCounts = myTasksTabCounts(visibleTasks, subjectUserId, { canFilterByUser, userFilter });
 
   const overdue = filtered.filter((t) => t.due_date && t.due_date < today && t.status !== "done");
   const dueToday = filtered.filter((t) => t.due_date === today && t.status !== "done");
@@ -179,7 +183,7 @@ const MyTasks = () => {
     name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
   const handleStatusChange = async (task: TaskRow, newStatus: string) => {
-    if (newStatus === "done" && task.requires_review && !canEditTaskMetadata(task, user?.id, isAdminOrMD)) {
+    if (newStatus === "done" && task.requires_review && !canEditTaskMetadata(task, user?.id, isAdminOrMD, { isHR, managedDepartments: managedDepartments || [] })) {
       setReviewTask({ task, mode: "submit" });
       return;
     }
@@ -193,7 +197,7 @@ const MyTasks = () => {
       handleStatusChange(task, "todo");
       return;
     }
-    if (task.requires_review && isAssignedToMe(task) && !canEditTaskMetadata(task, user?.id, isAdminOrMD)) {
+    if (task.requires_review && isAssignedToMe(task) && !canEditTaskMetadata(task, user?.id, isAdminOrMD, { isHR, managedDepartments: managedDepartments || [] })) {
       setReviewTask({ task, mode: "submit" });
       return;
     }
@@ -213,7 +217,7 @@ const MyTasks = () => {
   const handleExport = () => {
     const csv = [
       ["Title", "Status", "Priority", "Due Date", "Department"].join(","),
-      ...tasks.map((t) =>
+      ...filtered.map((t) =>
         [`"${t.title}"`, statusLabels[t.status] || t.status, t.priority, t.due_date || "", t.department_name || ""].join(","),
       ),
     ].join("\n");
@@ -232,8 +236,8 @@ const MyTasks = () => {
     const isDueToday = task.due_date === today && task.status !== "done";
     const firstAssignee = task.assignees[0];
     const canDelete = canDeleteTask(task, user?.id, isAdminOrMD);
-    const canEdit = canEditTaskMetadata(task, user?.id, isAdminOrMD);
-    const allowedStatuses = allowedStatusesForUser(task, user?.id, isAdminOrMD, managedDepartments || []);
+    const canEdit = canEditTaskMetadata(task, user?.id, isAdminOrMD, { isHR, managedDepartments: managedDepartments || [] });
+    const allowedStatuses = allowedStatusesForUser(task, user?.id, isAdminOrMD, managedDepartments || [], { isHR });
     const showSubmitReview = canSubmitForReview(task, user?.id);
     const showReviewActions = canApproveOrRejectReview(task, user?.id, isAdminOrMD, managedDepartments || []);
 

@@ -192,9 +192,11 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
       }
 
       toast.success("Task created");
-      window.dispatchEvent(new CustomEvent("task:created", { detail: { taskId: task?.id } }));
       onCreated?.();
       onClose();
+      if (!pendingFiles.length) {
+        window.dispatchEvent(new CustomEvent("task:created", { detail: { taskId: task?.id } }));
+      }
     } catch (err: any) {
       toast.error(err.message || "Failed to create task");
     } finally {
@@ -332,7 +334,7 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
                     <SelectContent>
                       <SelectItem value="todo">To Do</SelectItem>
                       <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="in_review">In Review</SelectItem>
+                      <SelectItem value="pending_review">Pending Review</SelectItem>
                       <SelectItem value="done">Done</SelectItem>
                     </SelectContent>
                   </Select>

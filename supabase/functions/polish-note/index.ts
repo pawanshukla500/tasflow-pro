@@ -1,19 +1,12 @@
 // Polish scratch-note text with Gemini — correct English, preserve meaning.
 import { generateWithGoogleAi, getGoogleAiApiKey } from "../_shared/google-ai.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders, json, requireUser } from "../_shared/google-oauth.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get("Authorization") || "";
-    if (!authHeader.startsWith("Bearer ")) {
-      return json({ error: "Not authenticated" }, 401);
-    }
+    await requireUser(req);
 
     const { content } = await req.json();
     if (!content || typeof content !== "string" || !content.trim()) {
@@ -51,13 +44,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     const message = (e as Error).message || "Polish failed";
     console.error("polish-note error:", message);
-    return json({ error: message }, 500);
+    const status = message === "Unauthorized" ? 401 : 500;
+    return json({ error: message }, status);
   }
 });
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
