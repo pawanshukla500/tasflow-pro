@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -9,7 +9,6 @@ import { notificationActionToPath } from "@/lib/notificationNavigation";
 export default function ActivityNotifications() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const playAlert = useCallback(() => {
     try {
@@ -103,7 +102,7 @@ export default function ActivityNotifications() {
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [user?.id, navigate, location.pathname, playAlert]);
+  }, [user?.id, navigate, playAlert]);
 
   return null;
 }

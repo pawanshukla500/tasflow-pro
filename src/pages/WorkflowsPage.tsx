@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { GitBranch, Plus, Play, Edit, MoreHorizontal, Trash2, X, ChevronDown, ChevronRight, Paperclip, AlertCircle, CheckCircle2, Clock, GripVertical, GitFork, Flag, Search } from "lucide-react";
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
@@ -284,7 +284,7 @@ const SortableStage = ({ stage: s, index: i, allStages, departments, profiles, o
 };
 
 const WorkflowsPage = () => {
-  const { user, isAdminOrMD, isDeptManager } = useAuth();
+  const { user, isAdminOrMD, isDeptManager, managedDepartments } = useAuth();
   const canManageTemplates = isAdminOrMD || isDeptManager;
 
   const sensors = useSensors(
@@ -342,18 +342,18 @@ const WorkflowsPage = () => {
 
   const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
   const [expandedWf, setExpandedWf] = useState<string | null>(null);
+  const deepLinkHandled = useRef(false);
 
-  // Deep link from email: /workflows?wf=<id>
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const wfParam = params.get("wf");
-    if (wfParam) {
-      setExpandedWf(wfParam);
-      setTimeout(() => {
-        document.getElementById(`wf-${wfParam}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 400);
-    }
-  }, []);
+  const managedDeptIds = isDeptManager
+    ? (managedDepartments?.length
+      ? managedDepartments
+      : user?.profile?.department_id
+        ? [user.profile.department_id]
+        : [])
+    : [];
+
+  const managesWorkflowDepartment = (deptId: string | null | undefined) =>
+    !!deptId && managedDeptIds.includes(deptId);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -770,12 +770,11 @@ const WorkflowsPage = () => {
   // - Admin/MD: all workflows
   // - Dept manager: workflows that touch their department (or they raised)
   // - Employees: ONLY workflows where they are the explicit assignee on a stage (or raised it)
-  const userDeptIdForScope = user?.profile?.department_id || null;
   const userScoped = isAdminOrMD ? workflows : workflows.filter((w) => {
     if (w.raised_by === user?.id) return true;
     return w.stages.some((s) => {
       if (s.assignee_user_id === user?.id) return true;
-      if (isDeptManager && s.owner_department_id && s.owner_department_id === userDeptIdForScope) return true;
+      if (isDeptManager && managesWorkflowDepartment(s.owner_department_id)) return true;
       return false;
     });
   });
@@ -802,18 +801,47 @@ const WorkflowsPage = () => {
       .map((s) => ({ wf: w, stage: s }))
   );
 
-  const userDeptId = user?.profile?.department_id || null;
   const stagesForUser = (wfStages: WorkflowStage[]) => {
     if (isAdminOrMD) return wfStages;
     return wfStages.filter((s) => {
       if (s.is_terminal) return false;
-      // Employees: only their own assigned stages
       if (s.assignee_user_id === user?.id) return true;
-      // Dept managers: also see stages owned by their department
-      if (isDeptManager && s.owner_department_id && s.owner_department_id === userDeptId) return true;
+      if (isDeptManager && managesWorkflowDepartment(s.owner_department_id)) return true;
       return false;
     });
   };
+
+  const workflowsForTab = activeTab === "workflows"
+    ? visibleWorkflows.filter((w) => w.status === "active")
+    : visibleWorkflows;
+
+  useEffect(() => {
+    if (loading || deepLinkHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const wfParam = params.get("wf");
+    if (!wfParam) return;
+
+    const wf = workflows.find((w) => w.id === wfParam);
+    if (!wf) return;
+
+    deepLinkHandled.current = true;
+    setActiveTab("workflows");
+    setExpandedWf(wf.id);
+
+    const stageParam = params.get("stage");
+    if (stageParam) {
+      const stage = wf.stages.find((s) => s.id === stageParam);
+      if (stage) {
+        setOpenStageId(stage.id);
+        setStageNotes(stage.notes || "");
+        setStageAttachments(stage.attachments || []);
+      }
+    }
+
+    setTimeout(() => {
+      document.getElementById(`wf-${wfParam}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 300);
+  }, [loading, workflows]);
 
   const currentOpenStage = openStageId ? workflows.flatMap((w) => w.stages).find((s) => s.id === openStageId) : null;
   const currentOpenWorkflow = currentOpenStage
@@ -825,19 +853,7 @@ const WorkflowsPage = () => {
     || currentOpenWorkflow?.raised_by === user?.id
   ) && ["in_progress", "blocked"].includes(currentOpenStage.status);
 
-  // Workflows are restricted to MD/Admin and Department Managers only.
-  // Employees do not see this page even if they navigate to /workflows directly.
-  if (!isAdminOrMD && !isDeptManager) {
-    return (
-      <div className="p-6 max-w-2xl">
-        <h1 className="text-xl font-bold text-foreground">Workflows</h1>
-        <p className="text-sm text-muted-foreground mt-2">
-          You don't have access to workflows. Please contact your manager or admin if you believe this is a mistake.
-        </p>
-      </div>
-    );
-  }
-
+  // Employees and managers both use scoped workflow visibility above.
   return (
     <div className="p-6 max-w-6xl space-y-4">
       <div className="flex items-center justify-between">
@@ -855,7 +871,7 @@ const WorkflowsPage = () => {
       </div>
 
       <div className="flex gap-1 border-b">
-        {(["workflows", "health", "templates"] as const).map((tab) => (
+        {(canManageTemplates ? (["workflows", "health", "templates"] as const) : (["workflows"] as const)).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -999,13 +1015,13 @@ const WorkflowsPage = () => {
             )}
           </div>
 
-          {visibleWorkflows.length === 0 ? (
+          {workflowsForTab.length === 0 ? (
             <div className="text-center py-16">
               <p className="text-muted-foreground">{wfSearch ? "No workflows match your search." : "No active workflows. Launch one from a template."}</p>
             </div>
           ) : (
             <div className="bg-card rounded-lg border divide-y">
-              {visibleWorkflows.map((wf) => {
+              {workflowsForTab.map((wf) => {
                 const expanded = expandedWf === wf.id;
                 const overdueCount = wf.stages.filter(isOverdue).length;
                 const completedCount = wf.stages.filter((s) => s.status === "completed").length;

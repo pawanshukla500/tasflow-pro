@@ -44,10 +44,10 @@ const priorityColorMap: Record<Priority, string> = {
 };
 
 const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
-  const { user, isAdminOrMD, managedDepartments } = useAuth();
-  const canEdit = canEditTaskMetadata(task, user?.id, isAdminOrMD);
+  const { user, isAdminOrMD, isHR, managedDepartments } = useAuth();
+  const canEdit = canEditTaskMetadata(task, user?.id, isAdminOrMD, { isHR, managedDepartments: managedDepartments || [] });
   const canExtendDue = canExtendTaskDueDate(task, user?.id, isAdminOrMD);
-  const statusOptions = allowedStatusesForUser(task, user?.id, isAdminOrMD, managedDepartments || []);
+  const statusOptions = allowedStatusesForUser(task, user?.id, isAdminOrMD, managedDepartments || [], { isHR });
 
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || "");

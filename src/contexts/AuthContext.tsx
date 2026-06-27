@@ -261,7 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdminOrMD = hasFullAccess(roles);
   const isDeptManager = isDepartmentManager(roles);
   const isHR = isHRMember(roles);
-  const isOrgAdmin = isAdminOrMD || (user?.organization?.id ? true : false);
+  const isOrgAdmin = isAdminOrMD;
   const accessScope = resolveAccessScope(user);
   const canManageDept = (deptId: string) => isAdminOrMD || user?.managedDepartments.includes(deptId) || false;
 

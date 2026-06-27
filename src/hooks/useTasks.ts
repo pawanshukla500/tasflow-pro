@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface TaskRow {
@@ -38,9 +38,10 @@ export interface TaskRow {
 export function useTasks() {
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
 
-  const fetchTasks = useCallback(async () => {
-    setLoading(true);
+  const fetchTasks = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     try {
       const [tasksRes, assigneesRes, deptsRes, profilesRes, subtasksRes, attachmentsRes] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
@@ -50,6 +51,9 @@ export function useTasks() {
         supabase.from("task_subtasks").select("id, task_id, title, completed, position").order("position"),
         supabase.from("task_attachments").select("task_id"),
       ]);
+
+      if (tasksRes.error) throw tasksRes.error;
+      if (assigneesRes.error) throw assigneesRes.error;
 
       const depts = deptsRes.data || [];
       const profiles = profilesRes.data || [];
@@ -85,8 +89,11 @@ export function useTasks() {
       });
 
       setTasks(enriched);
+      hasLoadedRef.current = true;
+    } catch (error) {
+      console.error("Failed to load tasks:", error);
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, []);
 
@@ -98,10 +105,10 @@ export function useTasks() {
     const channel = supabase
       .channel("tasks-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => {
-        fetchTasks();
+        fetchTasks({ silent: hasLoadedRef.current });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "task_assignees" }, () => {
-        fetchTasks();
+        fetchTasks({ silent: hasLoadedRef.current });
       })
       .subscribe();
 
@@ -111,7 +118,7 @@ export function useTasks() {
   }, [fetchTasks]);
 
   useEffect(() => {
-    const handler = () => fetchTasks();
+    const handler = () => fetchTasks({ silent: true });
     window.addEventListener("task:created", handler);
     return () => window.removeEventListener("task:created", handler);
   }, [fetchTasks]);

@@ -1,4 +1,5 @@
 import type { TaskRow } from "@/hooks/useTasks";
+import { isTaskInReview } from "@/lib/taskStatus";
 
 export const TASK_STATUS_LABELS: Record<string, string> = {
   todo: "To Do",
@@ -33,11 +34,22 @@ export function canDeleteTask(
 }
 
 export function canEditTaskMetadata(
-  task: Pick<TaskRow, "created_by">,
+  task: Pick<TaskRow, "created_by" | "department_id">,
   userId?: string | null,
   isAdminOrMD = false,
+  options?: { isHR?: boolean; managedDepartments?: string[] },
 ): boolean {
-  return canDeleteTask(task, userId, isAdminOrMD);
+  if (!userId) return false;
+  if (isAdminOrMD || options?.isHR) return true;
+  if (task.created_by === userId) return true;
+  if (
+    task.department_id &&
+    options?.managedDepartments?.includes(task.department_id) &&
+    task.created_by === userId
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /** Who may approve/reject a pending review. */
@@ -61,12 +73,13 @@ export function allowedStatusesForUser(
   userId?: string | null,
   isAdminOrMD = false,
   managedDepartments: string[] = [],
+  options?: { isHR?: boolean },
 ): string[] {
-  if (canEditTaskMetadata(task, userId, isAdminOrMD)) {
+  if (canEditTaskMetadata(task, userId, isAdminOrMD, { isHR: options?.isHR, managedDepartments })) {
     return [...ALL_TASK_STATUSES];
   }
 
-  if (task.status === "pending_review" && canReviewTask(task, userId, isAdminOrMD, managedDepartments)) {
+  if (isTaskInReview(task.status) && canReviewTask(task, userId, isAdminOrMD, managedDepartments)) {
     return ["pending_review", "in_progress", "todo", "blocked", "done"];
   }
 
@@ -87,7 +100,7 @@ export function canSubmitForReview(
   return (
     !!task.requires_review &&
     isTaskAssignee(task, userId) &&
-    task.status !== "pending_review" &&
+    !isTaskInReview(task.status) &&
     task.status !== "done"
   );
 }
@@ -98,7 +111,7 @@ export function canApproveOrRejectReview(
   isAdminOrMD = false,
   managedDepartments: string[] = [],
 ): boolean {
-  return task.status === "pending_review" && canReviewTask(task, userId, isAdminOrMD, managedDepartments);
+  return isTaskInReview(task.status) && canReviewTask(task, userId, isAdminOrMD, managedDepartments);
 }
 
 /** Assignees may request a due-date extension when work is blocked or delayed. */
