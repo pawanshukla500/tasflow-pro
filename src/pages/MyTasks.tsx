@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search, Download, Upload, ChevronDown, ChevronRight, Circle, CheckCircle2,
@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useTasks, TaskRow } from "@/hooks/useTasks";
 import CreateTaskModal from "@/components/CreateTaskModal";
 import EditTaskModal from "@/components/EditTaskModal";
-import ImportTasksModal from "@/components/ImportTasksModal";
 import CompleteTaskDialog from "@/components/CompleteTaskDialog";
 import TaskReviewDialog from "@/components/TaskReviewDialog";
 import { PageHeader } from "@/components/PageHeader";
@@ -38,6 +37,8 @@ import {
   resolveSubjectUserId,
   type MyTasksTab,
 } from "@/lib/myTasksView";
+
+const ImportTasksModal = lazy(() => import("@/components/ImportTasksModal"));
 
 const priorityColors: Record<string, string> = {
   critical: "#dc2626",
@@ -542,7 +543,11 @@ const MyTasks = () => {
       </div>
 
       {showCreate && <CreateTaskModal onClose={() => setShowCreate(false)} onCreated={fetchTasks} />}
-      {showImport && <ImportTasksModal onClose={() => setShowImport(false)} onImported={fetchTasks} />}
+      {showImport && (
+        <Suspense fallback={null}>
+          <ImportTasksModal onClose={() => setShowImport(false)} onImported={fetchTasks} />
+        </Suspense>
+      )}
       {editingTask && <EditTaskModal task={editingTask} onClose={() => setEditingTask(null)} onSaved={fetchTasks} />}
       {completingTask && (
         <CompleteTaskDialog
