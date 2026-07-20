@@ -88,7 +88,7 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
               <img src="/youthnic-logo.png" alt="TaskFlow Pro" className="w-full h-full object-contain" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground truncate">TaskFlow Pro</p>
+              <p className="text-sm font-display font-bold text-foreground truncate tracking-tight">TaskFlow Pro</p>
               <p className="text-[10px] text-muted-foreground truncate">
                 {user?.organization?.name || "Enterprise Workspace"}
               </p>
@@ -142,7 +142,7 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
         {navItems.map((group, gi) => (
           <div key={gi}>
             {group.group && !isCollapsed && (
-              <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-[0.16em] px-2.5 mb-1.5">{group.group}</p>
+              <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-widest px-2.5 mb-1.5">{group.group}</p>
             )}
             <div className="space-y-0.5 stagger-children">
               {group.items.filter((item) => {
