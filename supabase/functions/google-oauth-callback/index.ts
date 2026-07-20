@@ -5,6 +5,7 @@ import {
   fetchGoogleUserInfo,
   adminClient,
 } from "../_shared/google-oauth.ts";
+import { normalizeAppRedirect } from "../_shared/safe-redirect.ts";
 
 function redirect(path: string) {
   return new Response(null, { status: 302, headers: { Location: path, ...corsHeaders } });
@@ -14,7 +15,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const appUrl = Deno.env.get("APP_URL") || Deno.env.get("VITE_APP_URL") || "";
-  const fallback = `${appUrl}/settings?tab=integrations`;
+  const fallback = `${appUrl.replace(/\/$/, "")}/settings?tab=integrations`;
 
   try {
     const url = new URL(req.url);
@@ -68,7 +69,7 @@ Deno.serve(async (req) => {
     }, { onConflict: "user_id" });
     if (upsertErr) throw upsertErr;
 
-    const target = stateRow.redirect_to || fallback;
+    const target = normalizeAppRedirect(stateRow.redirect_to, appUrl);
     const separator = target.includes("?") ? "&" : "?";
     return redirect(`${target}${separator}google=connected`);
   } catch (err) {
@@ -76,4 +77,3 @@ Deno.serve(async (req) => {
     return redirect(`${fallback}&google=error&reason=${reason}`);
   }
 });
-

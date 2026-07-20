@@ -67,17 +67,21 @@ export const workflowTools: McpTool[] = [
       const decision = args.decision ? String(args.decision) : null;
       if (stage.is_decision && !decision) throw new Error("This stage requires a decision ('yes' or 'no')");
 
-      const { error: updStageErr } = await client
+      const { data: updatedStage, error: updStageErr } = await client
         .from("workflow_stages")
         .update({
           status: "completed",
           completed_at: now,
           completed_by: userId,
           decision,
-          notes: args.note ? String(args.note) : stage.notes,
+          notes: args.note ? String(args.note).slice(0, 5000) : stage.notes,
         })
-        .eq("id", stage.id);
+        .eq("id", stage.id)
+        .select("id")
+        .maybeSingle();
       if (updStageErr) throw new Error(updStageErr.message);
+      // If RLS blocked the update, zero rows return — do not advance the workflow.
+      if (!updatedStage) throw new Error("Not authorized to complete the current stage");
 
       // Record the transition (RLS permitting).
       await client.from("workflow_stage_events").insert({
@@ -86,7 +90,7 @@ export const workflowTools: McpTool[] = [
         actor_id: userId,
         event_type: "completed",
         to_value: decision,
-        note: args.note ? String(args.note) : null,
+        note: args.note ? String(args.note).slice(0, 2000) : null,
       }).then(() => {}, () => {});
 
       // Determine next position: decision branches use yes/no_next_position.

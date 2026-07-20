@@ -87,7 +87,7 @@ export async function bridgeFirebaseToSupabase(
 /**
  * Register an organization via the register-organization edge function.
  * Runs with the service role so it can atomically create the org, mark the
- * creator as org admin, and grant the system_admin role — RLS (correctly)
+ * creator as org admin, and grant managing_director — RLS (correctly)
  * blocks a client from self-assigning roles, so this must be server-side.
  */
 export async function registerOrganizationViaEdge(

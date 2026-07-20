@@ -1,13 +1,18 @@
 // Creates a new team member without signing in the admin's browser.
 // Authorization: caller must be admin/MD or department_manager.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
-import { ensureFirebaseAuthUser } from "../_shared/firebase-admin-auth.ts";
+import { createFirebaseAuthUser } from "../_shared/firebase-admin-auth.ts";
 import { renderAndSendEmail } from "../_shared/render-and-send-email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MIN_PASSWORD_LEN = 8;
+const MAX_NAME_LEN = 120;
+const MAX_FIELD_LEN = 200;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -43,6 +48,9 @@ Deno.serve(async (req) => {
     const { data: callerProfile } = await admin
       .from("profiles").select("organization_id").eq("id", user.id).maybeSingle();
     const callerOrgId = callerProfile?.organization_id ?? null;
+    if (!callerOrgId) {
+      return json({ error: "Caller is not associated with an organization" }, 403);
+    }
 
     const body = await req.json();
     let {
@@ -54,10 +62,34 @@ Deno.serve(async (req) => {
       return json({ error: "name, email, password required" }, 400);
     }
 
+    name = String(name).trim().slice(0, MAX_NAME_LEN);
+    if (!name) return json({ error: "name is required" }, 400);
+
     email = String(email).replace(/[\u200B-\u200D\uFEFF\s]/g, "").toLowerCase();
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRe.test(email)) {
+    if (!emailRe.test(email) || email.length > MAX_FIELD_LEN) {
       return json({ error: `Invalid email format: "${email}"` }, 400);
+    }
+
+    password = String(password);
+    if (password.length < MIN_PASSWORD_LEN || password.length > 128) {
+      return json({ error: `Password must be ${MIN_PASSWORD_LEN}–128 characters` }, 400);
+    }
+
+    if (mobile_no != null) mobile_no = String(mobile_no).trim().slice(0, 40) || null;
+    if (position != null) position = String(position).trim().slice(0, MAX_FIELD_LEN) || null;
+
+    if (department_id) {
+      if (typeof department_id !== "string" || !UUID_RE.test(department_id)) {
+        return json({ error: "Invalid department_id" }, 400);
+      }
+      const { data: dept } = await admin
+        .from("departments")
+        .select("id")
+        .eq("id", department_id)
+        .eq("organization_id", callerOrgId)
+        .maybeSingle();
+      if (!dept) return json({ error: "Invalid department for your organization" }, 400);
     }
 
     const MANAGER_ROLES = ["employee", "department_manager"];
@@ -79,13 +111,31 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Firebase Auth user (required — login is Firebase-first)
+    if (Array.isArray(managed_departments)) {
+      for (const dId of managed_departments) {
+        if (typeof dId !== "string" || !UUID_RE.test(dId)) {
+          return json({ error: "Invalid managed_departments entry" }, 400);
+        }
+        const { data: dept } = await admin
+          .from("departments")
+          .select("id")
+          .eq("id", dId)
+          .eq("organization_id", callerOrgId)
+          .maybeSingle();
+        if (!dept) return json({ error: "Invalid managed department for your organization" }, 400);
+      }
+    }
+
+    // Firebase Auth user — create only; never overwrite an existing account's password
     let firebaseCreated = false;
     try {
-      const fb = await ensureFirebaseAuthUser(email, password, name);
+      const fb = await createFirebaseAuthUser(email, password, name);
       firebaseCreated = fb.created;
     } catch (e) {
       const msg = (e as Error).message || "";
+      if (msg.includes("EMAIL_EXISTS")) {
+        return json({ error: "A user with this email already exists" }, 409);
+      }
       if (msg.includes("Service account") || msg.includes("client_email")) {
         return json({
           error: "Firebase service account not configured. Run: node scripts/upload-firebase-secret.mjs",
@@ -94,7 +144,6 @@ Deno.serve(async (req) => {
       return json({ error: `Firebase account setup failed: ${msg}` }, 400);
     }
 
-    let newUserId: string | undefined;
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email,
       password,
@@ -102,22 +151,18 @@ Deno.serve(async (req) => {
       user_metadata: { name },
     });
     if (createErr) {
-      console.log("createUser failed, attempting recovery:", createErr.message);
-      const { data: list, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-      if (listErr) return json({ error: `createUser failed: ${createErr.message}` }, 400);
-      const existing = list?.users?.find(
-        (u: { email?: string }) => (u.email || "").toLowerCase() === email,
-      );
-      if (!existing) return json({ error: createErr.message }, 400);
-      newUserId = existing.id;
-      const { error: updErr } = await admin.auth.admin.updateUserById(newUserId, {
-        password, email_confirm: true, user_metadata: { name },
-      });
-      if (updErr) console.log("updateUserById warning:", updErr.message);
-    } else {
-      newUserId = created.user?.id;
+      // Never recover by resetting an existing user's password (account takeover).
+      if (
+        createErr.message?.toLowerCase().includes("already") ||
+        createErr.message?.toLowerCase().includes("registered") ||
+        createErr.message?.toLowerCase().includes("exists")
+      ) {
+        return json({ error: "A user with this email already exists" }, 409);
+      }
+      return json({ error: createErr.message }, 400);
     }
 
+    const newUserId = created.user?.id;
     if (!newUserId) return json({ error: "User creation failed" }, 500);
 
     await admin.from("profiles").upsert({

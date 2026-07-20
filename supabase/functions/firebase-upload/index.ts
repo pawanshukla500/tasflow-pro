@@ -118,10 +118,39 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+    const ALLOWED_TYPES = new Set([
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "image/gif",
+      "application/pdf",
+      "text/plain",
+      "text/csv",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ]);
+
+    if (file.size > MAX_BYTES) {
+      return new Response(JSON.stringify({ error: "File too large (max 10 MB)" }), {
+        status: 413,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const mimeType = file.type || "application/octet-stream";
+    if (!ALLOWED_TYPES.has(mimeType)) {
+      return new Response(JSON.stringify({ error: "Unsupported file type" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const rawFolder = (form.get("folder") as string) || "uploads";
     const folder = safeName(rawFolder).replace(/_/g, "-") || "uploads";
     const filename = safeName((form.get("filename") as string) || file.name || "upload");
-    const mimeType = file.type || "application/octet-stream";
     const objectPath = `${folder}/${userId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}-${filename}`;
 
     const accessToken = await getAccessToken(sa);

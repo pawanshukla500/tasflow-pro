@@ -35,10 +35,10 @@ export async function listMcpTokens(): Promise<McpToken[]> {
 /** Issue a new token. The raw value is returned ONCE — show it, then it's gone. */
 export async function issueMcpToken(
   name: string,
-  expiresInDays?: number,
+  expiresInDays: number,
 ): Promise<{ token: string; record: McpToken }> {
   return invokeEdgeFunction("issue-mcp-token", {
-    body: { name, ...(expiresInDays ? { expiresInDays } : {}) },
+    body: { name, expiresInDays },
   });
 }
 

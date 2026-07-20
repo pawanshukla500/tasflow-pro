@@ -100,23 +100,30 @@ export async function verifyPasswordResetToken(
   return { valid: true, email: data.email };
 }
 
+/**
+ * Atomically consume a reset token (mark used_at in the same UPDATE that selects it)
+ * to prevent concurrent reuse.
+ */
 export async function consumePasswordResetToken(
   admin: SupabaseClient,
   rawToken: string,
 ): Promise<{ email: string; tokenId: string } | null> {
   const tokenHash = await hashToken(rawToken);
+  const now = new Date().toISOString();
   const { data } = await admin
     .from("password_reset_tokens")
-    .select("id, email")
+    .update({ used_at: now })
     .eq("token_hash", tokenHash)
     .is("used_at", null)
-    .gt("expires_at", new Date().toISOString())
+    .gt("expires_at", now)
+    .select("id, email")
     .maybeSingle();
 
   if (!data) return null;
   return { email: data.email, tokenId: data.id };
 }
 
+/** @deprecated Prefer consumePasswordResetToken which marks used atomically. */
 export async function markTokenUsed(admin: SupabaseClient, tokenId: string): Promise<void> {
   await admin
     .from("password_reset_tokens")

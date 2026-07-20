@@ -12,10 +12,15 @@ Deno.serve(async (req) => {
 
   try {
     const { idToken } = await req.json();
-    if (!idToken) return json({ error: "idToken required" }, 400);
+    if (!idToken || typeof idToken !== "string") {
+      return json({ error: "idToken required" }, 400);
+    }
 
     const firebaseUser = await verifyFirebaseIdToken(idToken);
     if (!firebaseUser.email) return json({ error: "Firebase account must have an email" }, 400);
+    if (!firebaseUser.emailVerified) {
+      return json({ error: "Verified Firebase email required" }, 401);
+    }
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -24,32 +29,55 @@ Deno.serve(async (req) => {
     const email = firebaseUser.email.toLowerCase();
     let supabaseUserId: string | undefined;
 
-    const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    const existing = list?.users?.find((u) => (u.email || "").toLowerCase() === email);
+    // Prefer binding by firebase_uid so email collisions cannot hijack accounts.
+    const { data: byFirebaseUid } = await admin
+      .from("profiles")
+      .select("id, email, firebase_uid")
+      .eq("firebase_uid", firebaseUser.uid)
+      .maybeSingle();
 
-    if (existing) {
-      supabaseUserId = existing.id;
-      await admin.auth.admin.updateUserById(supabaseUserId, {
-        user_metadata: {
-          name: firebaseUser.name || existing.user_metadata?.name,
-          firebase_uid: firebaseUser.uid,
-        },
-      });
+    if (byFirebaseUid?.id) {
+      supabaseUserId = byFirebaseUid.id;
     } else {
-      const tempPassword = crypto.randomUUID() + crypto.randomUUID();
-      const { data: created, error: createErr } = await admin.auth.admin.createUser({
-        email,
-        password: tempPassword,
-        email_confirm: true,
-        user_metadata: {
-          name: firebaseUser.name || email.split("@")[0],
-          firebase_uid: firebaseUser.uid,
-        },
-      });
-      if (createErr || !created.user) {
-        return json({ error: createErr?.message || "Failed to create Supabase user" }, 400);
+      const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+      const existing = list?.users?.find((u) => (u.email || "").toLowerCase() === email);
+
+      if (existing) {
+        const { data: profile } = await admin
+          .from("profiles")
+          .select("firebase_uid")
+          .eq("id", existing.id)
+          .maybeSingle();
+
+        if (profile?.firebase_uid && profile.firebase_uid !== firebaseUser.uid) {
+          return json({
+            error: "This email is already linked to a different Firebase account",
+          }, 403);
+        }
+
+        supabaseUserId = existing.id;
+        await admin.auth.admin.updateUserById(supabaseUserId, {
+          user_metadata: {
+            name: firebaseUser.name || existing.user_metadata?.name,
+            firebase_uid: firebaseUser.uid,
+          },
+        });
+      } else {
+        const tempPassword = crypto.randomUUID() + crypto.randomUUID();
+        const { data: created, error: createErr } = await admin.auth.admin.createUser({
+          email,
+          password: tempPassword,
+          email_confirm: true,
+          user_metadata: {
+            name: firebaseUser.name || email.split("@")[0],
+            firebase_uid: firebaseUser.uid,
+          },
+        });
+        if (createErr || !created.user) {
+          return json({ error: createErr?.message || "Failed to create Supabase user" }, 400);
+        }
+        supabaseUserId = created.user.id;
       }
-      supabaseUserId = created.user.id;
     }
 
     await admin.from("profiles").upsert({

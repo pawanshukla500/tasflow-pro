@@ -7,6 +7,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const MAX_ASSIGNEES = 50
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
@@ -17,6 +20,7 @@ Deno.serve(async (req) => {
   // Authenticate the caller via JWT (allow internal service-key bypass for server-to-server calls)
   const isInternal = req.headers.get('x-internal-service-key') === serviceKey
   let callerId: string | null = null
+  let callerName: string | null = null
   if (!isInternal) {
     const authHeader = req.headers.get('Authorization')
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null
@@ -28,16 +32,33 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
     callerId = authData.user.id
+    const { data: callerProfile } = await supabase
+      .from('profiles')
+      .select('name')
+      .eq('id', callerId)
+      .maybeSingle()
+    callerName = callerProfile?.name || authData.user.email || 'Someone'
   }
 
-  let body: any
+  let body: Record<string, unknown>
   try { body = await req.json() } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: corsHeaders })
   }
 
-  const { taskId, assigneeUserIds, assignedByName } = body
-  if (!taskId || !Array.isArray(assigneeUserIds) || assigneeUserIds.length === 0) {
+  const taskId = typeof body.taskId === 'string' ? body.taskId.trim() : ''
+  const assigneeUserIds = Array.isArray(body.assigneeUserIds) ? body.assigneeUserIds : null
+  if (!taskId || !UUID_RE.test(taskId) || !assigneeUserIds || assigneeUserIds.length === 0) {
     return new Response(JSON.stringify({ error: 'taskId and assigneeUserIds required' }), {
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+  if (assigneeUserIds.length > MAX_ASSIGNEES) {
+    return new Response(JSON.stringify({ error: `At most ${MAX_ASSIGNEES} assignees per request` }), {
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+  if (!assigneeUserIds.every((id) => typeof id === 'string' && UUID_RE.test(id))) {
+    return new Response(JSON.stringify({ error: 'assigneeUserIds must be valid UUIDs' }), {
       status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
@@ -61,9 +82,33 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Only notify users who are actually assigned to this task and share the task's org (IDOR).
+  const { data: validAssignees } = await supabase
+    .from('task_assignees')
+    .select('user_id')
+    .eq('task_id', taskId)
+    .in('user_id', assigneeUserIds as string[])
 
-  const { data: profiles } = await supabase
-    .from('profiles').select('id, name, email').in('id', assigneeUserIds)
+  const assignedIds = new Set((validAssignees || []).map((a) => a.user_id))
+  if (assignedIds.size === 0) {
+    return new Response(JSON.stringify({ results: [], message: 'No matching assignees on this task' }), {
+      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
+  let profileQuery = supabase
+    .from('profiles')
+    .select('id, name, email, organization_id')
+    .in('id', [...assignedIds])
+
+  if (task.organization_id) {
+    profileQuery = profileQuery.eq('organization_id', task.organization_id)
+  }
+
+  const { data: profiles } = await profileQuery
+  const assignedByName = callerName || (typeof body.assignedByName === 'string'
+    ? body.assignedByName.slice(0, 120)
+    : 'Someone')
 
   const results = []
   for (const p of profiles || []) {
@@ -75,8 +120,6 @@ Deno.serve(async (req) => {
       continue
     }
 
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const resp = await fetch(`${supabaseUrl}/functions/v1/send-transactional-email`, {
       method: 'POST',
       headers: {
@@ -108,7 +151,7 @@ Deno.serve(async (req) => {
       userId: p.id,
       type: 'task_assigned',
       title: 'New task assigned',
-      body: `${assignedByName || 'Someone'} assigned you: ${task.title}`,
+      body: `${assignedByName} assigned you: ${task.title}`,
       actionUrl: `/my-tasks?task=${taskId}`,
       metadata: { taskId, priority: task.priority },
     })

@@ -35,7 +35,7 @@ export function McpTokensPanel() {
   const [tokens, setTokens] = useState<McpToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
-  const [expiry, setExpiry] = useState("never");
+  const [expiry, setExpiry] = useState("90");
   const [creating, setCreating] = useState(false);
   const [newToken, setNewToken] = useState<string | null>(null);
 
@@ -62,11 +62,11 @@ export function McpTokensPanel() {
     }
     setCreating(true);
     try {
-      const days = expiry === "never" ? undefined : Number(expiry);
+      const days = Number(expiry);
       const { token } = await issueMcpToken(name.trim(), days);
       setNewToken(token);
       setName("");
-      setExpiry("never");
+      setExpiry("90");
       await refresh();
       toast.success("Token created — copy it now, it won't be shown again");
     } catch (err) {
@@ -201,10 +201,9 @@ export function McpTokensPanel() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="never">Never</SelectItem>
+                <SelectItem value="7">7 days</SelectItem>
                 <SelectItem value="30">30 days</SelectItem>
                 <SelectItem value="90">90 days</SelectItem>
-                <SelectItem value="365">1 year</SelectItem>
               </SelectContent>
             </Select>
           </div>
