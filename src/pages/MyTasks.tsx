@@ -60,7 +60,7 @@ const statusColors: Record<string, string> = {
 
 const MyTasks = () => {
   const [searchParams] = useSearchParams();
-  const { tasks, loading, fetchTasks, updateTaskStatus, deleteTask } = useTasks();
+  const { tasks, loading, loadingMore, fetchTasks, updateTaskStatus, deleteTask, hasMore, loadMore, total } = useTasks();
   const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<MyTasksTab>("assigned_to_me");
   const [collapsedSections, setCollapsedSections] = useState<string[]>([]);
@@ -541,6 +541,18 @@ const MyTasks = () => {
             })
         )}
       </div>
+
+      {hasMore && (
+        <div className="flex flex-col items-center gap-2 pt-2">
+          <p className="text-xs text-muted-foreground">
+            Showing {tasks.length}
+            {typeof total === "number" ? ` of ${total}` : ""} tasks
+          </p>
+          <Button variant="outline" size="sm" onClick={() => void loadMore()} disabled={loading || loadingMore}>
+            {loadingMore ? "Loading…" : "Load more tasks"}
+          </Button>
+        </div>
+      )}
 
       {showCreate && <CreateTaskModal onClose={() => setShowCreate(false)} onCreated={fetchTasks} />}
       {showImport && (

@@ -1,101 +1,90 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  fetchTasksPage,
+  fetchTasksBounded,
+  TASK_PAGE_SIZE,
+  type TaskRow,
+} from "@/lib/tasksApi";
 
-export interface TaskRow {
-  id: string;
-  title: string;
-  description: string | null;
-  status: string;
-  priority: string;
-  due_date: string | null;
-  start_date: string | null;
-  department_id: string | null;
-  created_by: string | null;
-  completed_at: string | null;
-  created_at: string;
-  updated_at: string;
-  department_name?: string;
-  department_color?: string;
-  assignees: { user_id: string; name: string }[];
-  creator_name?: string;
-  comment_count?: number;
-  attachment_count?: number;
-  frequency?: string;
-  recurrence_parent_id?: string | null;
-  subtasks?: { id: string; title: string; completed: boolean }[];
-  subtask_done?: number;
-  subtask_total?: number;
-  requires_review?: boolean;
-  reviewer_user_id?: string | null;
-  review_note?: string | null;
-  submitted_for_review_at?: string | null;
-  reviewed_at?: string | null;
-  reviewed_by?: string | null;
-  completed_on_time?: boolean | null;
-  days_late?: number;
-}
+export type { TaskRow };
 
-export function useTasks() {
+export type UseTasksOptions = {
+  /** Initial page size (default 50, max 100). */
+  pageSize?: number;
+  /**
+   * When true (default), load pages in bounded chunks up to `boundedMax`
+   * so dashboards work without a single unbounded SELECT *.
+   */
+  autoLoadBounded?: boolean;
+  boundedMax?: number;
+};
+
+export function useTasks(options: UseTasksOptions = {}) {
+  const pageSize = options.pageSize ?? TASK_PAGE_SIZE;
+  const autoLoadBounded = options.autoLoadBounded ?? true;
+  const boundedMax = options.boundedMax ?? 300;
+
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState<number | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const hasLoadedRef = useRef(false);
+  const fetchGen = useRef(0);
 
-  const fetchTasks = useCallback(async (options?: { silent?: boolean }) => {
-    if (!options?.silent) setLoading(true);
+  const fetchTasks = useCallback(async (opts?: { silent?: boolean }) => {
+    const gen = ++fetchGen.current;
+    if (!opts?.silent) setLoading(true);
     try {
-      const [tasksRes, assigneesRes, deptsRes, profilesRes, subtasksRes, attachmentsRes] = await Promise.all([
-        supabase.from("tasks").select("*").order("created_at", { ascending: false }),
-        supabase.from("task_assignees").select("task_id, user_id"),
-        supabase.from("departments").select("id, name, color"),
-        supabase.from("profiles").select("id, name"),
-        supabase.from("task_subtasks").select("id, task_id, title, completed, position").order("position"),
-        supabase.from("task_attachments").select("task_id"),
-      ]);
-
-      if (tasksRes.error) throw tasksRes.error;
-      if (assigneesRes.error) throw assigneesRes.error;
-
-      const depts = deptsRes.data || [];
-      const profiles = profilesRes.data || [];
-      const assignees = assigneesRes.data || [];
-      const allSubtasks = subtasksRes.error ? [] : (subtasksRes.data || []);
-      const allAttachments = attachmentsRes.error ? [] : (attachmentsRes.data || []);
-
-      const enriched: TaskRow[] = (tasksRes.data || []).map((t) => {
-        const dept = depts.find((d) => d.id === t.department_id);
-        const taskAssignees = assignees
-          .filter((a) => a.task_id === t.id)
-          .map((a) => {
-            const p = profiles.find((p) => p.id === a.user_id);
-            return { user_id: a.user_id, name: p?.name || "Unknown" };
-          });
-        const creator = profiles.find((p) => p.id === t.created_by);
-        const subtasks = allSubtasks
-          .filter((s) => s.task_id === t.id)
-          .map((s) => ({ id: s.id, title: s.title, completed: s.completed }));
-        const subtask_done = subtasks.filter((s) => s.completed).length;
-        return {
-          ...t,
-          department_name: dept?.name,
-          department_color: dept?.color,
-          assignees: taskAssignees,
-          creator_name: creator?.name,
-          comment_count: 0,
-          attachment_count: allAttachments.filter((a) => a.task_id === t.id).length,
-          subtasks,
-          subtask_done,
-          subtask_total: subtasks.length,
-        };
-      });
-
-      setTasks(enriched);
+      if (autoLoadBounded) {
+        const { tasks: rows, total: boundedTotal, hasMore: more } =
+          await fetchTasksBounded(boundedMax);
+        if (gen !== fetchGen.current) return;
+        setTasks(rows);
+        setPage(Math.ceil(rows.length / pageSize) || 1);
+        setTotal(boundedTotal);
+        setHasMore(more);
+      } else {
+        const result = await fetchTasksPage({ page: 1, limit: pageSize });
+        if (gen !== fetchGen.current) return;
+        setTasks(result.tasks);
+        setPage(1);
+        setTotal(result.total);
+        setHasMore(result.hasMore);
+      }
       hasLoadedRef.current = true;
     } catch (error) {
       console.error("Failed to load tasks:", error);
     } finally {
-      if (!options?.silent) setLoading(false);
+      if (!opts?.silent && gen === fetchGen.current) setLoading(false);
     }
-  }, []);
+  }, [autoLoadBounded, boundedMax, pageSize]);
+
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const result = await fetchTasksPage({ page: nextPage, limit: pageSize });
+      setTasks((prev) => {
+        const seen = new Set(prev.map((t) => t.id));
+        const merged = [...prev];
+        for (const t of result.tasks) {
+          if (!seen.has(t.id)) merged.push(t);
+        }
+        return merged;
+      });
+      setPage(nextPage);
+      setTotal(result.total);
+      setHasMore(result.hasMore);
+    } catch (error) {
+      console.error("Failed to load more tasks:", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [hasMore, loadingMore, page, pageSize]);
 
   useEffect(() => {
     fetchTasks();
@@ -142,10 +131,33 @@ export function useTasks() {
   };
 
   const deleteTask = async (taskId: string) => {
+    // DB trigger scrub_task_dependency_refs removes this id from other tasks'
+    // blocked_by / depends_on arrays before the row is deleted.
     const { error } = await supabase.from("tasks").delete().eq("id", taskId);
-    if (!error) setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    if (!error) {
+      setTasks((prev) =>
+        prev
+          .filter((t) => t.id !== taskId)
+          .map((t) => ({
+            ...t,
+            blocked_by: (t.blocked_by || []).filter((id) => id !== taskId),
+            depends_on: (t.depends_on || []).filter((id) => id !== taskId),
+          })),
+      );
+    }
     return error;
   };
 
-  return { tasks, loading, fetchTasks, updateTaskStatus, deleteTask };
+  return {
+    tasks,
+    loading,
+    loadingMore,
+    hasMore,
+    total,
+    page,
+    fetchTasks,
+    loadMore,
+    updateTaskStatus,
+    deleteTask,
+  };
 }
