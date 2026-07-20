@@ -1016,6 +1016,8 @@ export type Database = {
           status: string
           title: string
           updated_at: string
+          blocked_by: string[]
+          depends_on: string[]
         }
         Insert: {
           completed_at?: string | null
@@ -1035,6 +1037,8 @@ export type Database = {
           status?: string
           title: string
           updated_at?: string
+          blocked_by?: string[]
+          depends_on?: string[]
         }
         Update: {
           completed_at?: string | null
@@ -1054,6 +1058,8 @@ export type Database = {
           status?: string
           title?: string
           updated_at?: string
+          blocked_by?: string[]
+          depends_on?: string[]
         }
         Relationships: [
           {
@@ -1068,6 +1074,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_created_by_profiles_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
