@@ -118,7 +118,7 @@ const Login = () => {
         <div className="absolute bottom-10 -left-20 w-72 h-72 rounded-full bg-white/10 blur-3xl animate-float [animation-delay:2s]" />
         <div className="relative z-10 flex items-center gap-3 animate-in fade-in slide-in-from-left-4 duration-700">
           <div className="w-12 h-12 rounded-2xl bg-white/95 flex items-center justify-center p-2 shadow-xl">
-            <img src="/youthnic-logo.png" alt="TaskFlow Pro" className="w-full h-full object-contain" />
+            <img src="/youthnic-logo.svg" width={48} height={48} decoding="async" alt="TaskFlow Pro" className="w-full h-full object-contain" />
           </div>
           <div>
             <p className="font-bold text-xl tracking-tight">TaskFlow Pro</p>
@@ -156,7 +156,7 @@ const Login = () => {
         <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="lg:hidden flex flex-col items-center mb-8">
             <div className="w-16 h-16 rounded-2xl bg-white border shadow-sm flex items-center justify-center p-2 mb-3 animate-pop animate-float [animation-duration:4s]">
-              <img src="/youthnic-logo.png" alt="TaskFlow Pro" className="w-full h-full object-contain" />
+              <img src="/youthnic-logo.svg" width={48} height={48} decoding="async" alt="TaskFlow Pro" className="w-full h-full object-contain" />
             </div>
             <h1 className="text-xl font-bold animate-rise [animation-delay:120ms]">TaskFlow Pro</h1>
           </div>

@@ -85,7 +85,7 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
         {!isCollapsed && (
           <>
             <div className="w-9 h-9 rounded-xl bg-white border flex items-center justify-center shrink-0 overflow-hidden p-1 shadow-sm">
-              <img src="/youthnic-logo.png" alt="TaskFlow Pro" className="w-full h-full object-contain" />
+              <img src="/youthnic-logo.svg" alt="TaskFlow Pro" className="w-full h-full object-contain" width={40} height={40} decoding="async" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-display font-bold text-foreground truncate tracking-tight">TaskFlow Pro</p>
@@ -190,7 +190,7 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
         )}>
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center text-xs font-semibold shrink-0 overflow-hidden ring-2 ring-background shadow-sm">
             {user?.profile?.avatar_url ? (
-              <img src={user.profile.avatar_url} alt="" className="h-full w-full object-cover" />
+              <img src={user.profile.avatar_url} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
             ) : (
               user?.profile?.name ? getInitials(user.profile.name) : "?"
             )}

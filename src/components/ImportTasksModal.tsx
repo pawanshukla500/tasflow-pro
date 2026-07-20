@@ -1,6 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import * as XLSX from "xlsx";
-import ExcelJS from "exceljs";
 import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +6,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { formatDateIST } from "@/lib/time";
+
+// exceljs (~23MB) and xlsx (~7MB) are loaded on demand — never in the initial bundle.
+type XlsxModule = typeof import("xlsx");
+let xlsxModule: XlsxModule | null = null;
+async function loadXlsx(): Promise<XlsxModule> {
+  if (!xlsxModule) xlsxModule = await import("xlsx");
+  return xlsxModule;
+}
 
 interface Props { onClose: () => void; onImported?: () => void; }
 interface ParsedRow {
@@ -41,7 +47,7 @@ const findColumn = (headers: string[], aliases: string[]) => {
   return -1;
 };
 
-const parseDate = (val: any): string | null => {
+const parseDate = (val: any, XLSX: XlsxModule): string | null => {
   if (!val && val !== 0) return null;
   // Excel serial number
   if (typeof val === "number") {
@@ -100,6 +106,7 @@ export default function ImportTasksModal({ onClose, onImported }: Props) {
   }, []);
 
   const downloadTemplate = async () => {
+    const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook();
     wb.creator = "TaskFlow Pro";
     const ws = wb.addWorksheet("Tasks");
@@ -163,6 +170,7 @@ export default function ImportTasksModal({ onClose, onImported }: Props) {
     setParsing(true);
     setFileName(file.name);
     try {
+      const XLSX = await loadXlsx();
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array", cellDates: false });
       const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -194,7 +202,7 @@ export default function ImportTasksModal({ onClose, onImported }: Props) {
         const description = cDescription >= 0 ? String(r[cDescription] || "").trim() : "";
         const concernedRaw = cConcerned >= 0 ? String(r[cConcerned] || "").trim() : "";
         const emailRaw = cEmail >= 0 ? String(r[cEmail] || "").trim() : "";
-        const dueDate = cDue >= 0 ? parseDate(r[cDue]) : null;
+        const dueDate = cDue >= 0 ? parseDate(r[cDue], XLSX) : null;
 
         const names = splitNames(concernedRaw);
         const emails = splitEmails(emailRaw);

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, lazy, Suspense } from "react";
 import { Plus, Target, Trash2, TrendingUp, Users as UsersIcon, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,6 @@ import { formatDateIST } from "@/lib/time";
 import { usePerformance } from "@/hooks/usePerformance";
 import { useTasks } from "@/hooks/useTasks";
 import { PerformanceBreakdown } from "@/components/PerformanceBreakdown";
-import { ExecutiveDashboard } from "@/components/ExecutiveDashboard";
 import { useUserRolesMap } from "@/hooks/useUserRolesMap";
 import {
   filterPerformanceLeaderboardProfiles,
@@ -27,6 +26,10 @@ import {
   shouldShowInPerformanceLeaderboard,
 } from "@/lib/performanceVisibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const ExecutiveDashboard = lazy(() =>
+  import("@/components/ExecutiveDashboard").then((m) => ({ default: m.ExecutiveDashboard })),
+);
 
 interface KRA {
   id: string; user_id: string; title: string; description: string | null;
@@ -254,13 +257,15 @@ const PerformancePage = () => {
 
         <TabsContent value="analytics" className="space-y-4 mt-4">
           {accessScope.hasFullAccess && scope === "all" ? (
-            <ExecutiveDashboard
-              departments={departments}
-              profiles={leaderboardProfiles}
-              metrics={leaderboardMetrics}
-              tasks={tasks}
-              workflows={workflows}
-            />
+            <Suspense fallback={<p className="text-sm text-muted-foreground">Loading analytics…</p>}>
+              <ExecutiveDashboard
+                departments={departments}
+                profiles={leaderboardProfiles}
+                metrics={leaderboardMetrics}
+                tasks={tasks}
+                workflows={workflows}
+              />
+            </Suspense>
           ) : (
             <div className="grid md:grid-cols-2 gap-4">
               {perfLoading ? (
@@ -286,14 +291,16 @@ const PerformancePage = () => {
                 <Card>
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Organization summary</CardTitle></CardHeader>
                   <CardContent>
-                    <ExecutiveDashboard
-                      departments={departments}
-                      profiles={leaderboardProfiles}
-                      metrics={leaderboardMetrics}
-                      tasks={tasks}
-                      workflows={workflows}
-                      summaryOnly
-                    />
+                    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+                      <ExecutiveDashboard
+                        departments={departments}
+                        profiles={leaderboardProfiles}
+                        metrics={leaderboardMetrics}
+                        tasks={tasks}
+                        workflows={workflows}
+                        summaryOnly
+                      />
+                    </Suspense>
                   </CardContent>
                 </Card>
               )}

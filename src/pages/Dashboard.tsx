@@ -588,7 +588,7 @@ const Dashboard = () => {
                     <div key={u.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted/40 transition-colors">
                       <span className="w-6 text-center text-sm">{medals[i] || <span className="text-[11px] text-muted-foreground font-mono-num">{i + 1}</span>}</span>
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center text-[10px] font-bold ring-2 ring-background shadow-sm">
-                        {u.avatar_url ? <img src={u.avatar_url} alt="" className="w-full h-full rounded-full object-cover" /> : getInitials(u.name)}
+              {u.avatar_url ? <img src={u.avatar_url} alt="" className="w-full h-full rounded-full object-cover" loading="lazy" decoding="async" /> : getInitials(u.name)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-foreground truncate">{u.name}</p>

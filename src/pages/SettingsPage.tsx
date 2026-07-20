@@ -365,7 +365,7 @@ const SettingsPage = () => {
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold relative overflow-hidden">
               {user?.profile?.avatar_url ? (
-                <img src={user.profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                <img src={user.profile.avatar_url} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
               ) : (
                 getInitials(user?.profile?.name || "U")
               )}

@@ -6,7 +6,7 @@ export function AppLoadingScreen({ message = "Loading your workspace…" }: { me
       <div className="relative animate-float">
         <div className="absolute inset-0 rounded-2xl bg-primary/20 animate-ping [animation-duration:2s]" />
         <div className="relative w-16 h-16 rounded-2xl bg-white border shadow-lg flex items-center justify-center p-2 animate-pop">
-          <img src="/youthnic-logo.png" alt="" className="w-full h-full object-contain" />
+          <img src="/youthnic-logo.svg" alt="" className="w-full h-full object-contain" width={48} height={48} decoding="async" />
         </div>
         <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary flex items-center justify-center shadow-md">
           <Loader2 className="w-3.5 h-3.5 text-primary-foreground animate-spin" />

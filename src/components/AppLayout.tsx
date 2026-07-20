@@ -54,7 +54,7 @@ const AppLayout = () => {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <img src="/youthnic-logo.png" alt="" className="w-7 h-7 object-contain" />
+            <img src="/youthnic-logo.svg" alt="" className="w-7 h-7 object-contain" width={28} height={28} decoding="async" />
             <span className="font-display font-bold text-sm tracking-tight truncate">TaskFlow Pro</span>
           </div>
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowSearch(true)}>
