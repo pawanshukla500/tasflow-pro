@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 /** Identity + RLS-scoped client passed to every tool handler. */
 export interface ToolContext {

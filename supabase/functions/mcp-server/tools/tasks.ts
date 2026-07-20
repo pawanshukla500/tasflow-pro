@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { type McpTool, objectSchema, type ToolContext } from "./types.ts";
 
 const STATUSES = ["todo", "in_progress", "in_review", "done", "blocked"];

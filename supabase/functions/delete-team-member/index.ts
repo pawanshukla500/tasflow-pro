@@ -1,7 +1,7 @@
 // Deletes a team member's auth account + profile data.
 // Authorization: caller must be admin/MD, OR a department manager of the target user's department.
 // Target must belong to the same organization (IDOR prevention).
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

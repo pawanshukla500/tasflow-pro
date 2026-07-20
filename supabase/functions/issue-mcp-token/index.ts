@@ -1,7 +1,7 @@
 // Issues a Personal Access Token for the MCP server.
 // Authorization: caller must be a signed-in user (Supabase access token). The
 // token is generated and hashed server-side; the raw value is returned ONCE.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { generatePat } from "../_shared/mcp-auth.ts";
 
 const corsHeaders = {

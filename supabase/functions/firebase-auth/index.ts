@@ -1,5 +1,5 @@
 // Bridges Firebase Authentication → Supabase session for Postgres RLS (auth.uid()).
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { verifyFirebaseIdToken } from "../_shared/firebase-admin.ts";
 
 const corsHeaders = {
