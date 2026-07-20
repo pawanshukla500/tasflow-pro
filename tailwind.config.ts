@@ -14,9 +14,37 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
-        display: ["Plus Jakarta Sans", "Inter", "system-ui", "sans-serif"],
+        // Body / UI — Manrope (readable geometric sans)
+        sans: ["Manrope", "system-ui", "sans-serif"],
+        // Headings / brand — Plus Jakarta Sans
+        display: ["Plus Jakarta Sans", "Manrope", "system-ui", "sans-serif"],
         mono: ["DM Mono", "ui-monospace", "monospace"],
+      },
+      // Only ship 400 / 500 / 700 — map Tailwind's 600 "semibold" → 700
+      fontWeight: {
+        normal: "400",
+        medium: "500",
+        semibold: "700",
+        bold: "700",
+      },
+      fontSize: {
+        xs: ["0.75rem", { lineHeight: "1.5", letterSpacing: "0.01em" }],
+        sm: ["0.875rem", { lineHeight: "1.5", letterSpacing: "0" }],
+        base: ["1rem", { lineHeight: "1.625", letterSpacing: "0" }],
+        lg: ["1.125rem", { lineHeight: "1.55", letterSpacing: "-0.01em" }],
+        xl: ["1.25rem", { lineHeight: "1.4", letterSpacing: "-0.015em" }],
+        "2xl": ["1.5rem", { lineHeight: "1.3", letterSpacing: "-0.02em" }],
+        "3xl": ["1.875rem", { lineHeight: "1.2", letterSpacing: "-0.025em" }],
+        "4xl": ["2.25rem", { lineHeight: "1.15", letterSpacing: "-0.03em" }],
+      },
+      letterSpacing: {
+        tighter: "-0.03em",
+        tight: "-0.02em",
+        snug: "-0.01em",
+        normal: "0",
+        wide: "0.04em",
+        wider: "0.08em",
+        widest: "0.14em",
       },
       colors: {
         border: "hsl(var(--border))",

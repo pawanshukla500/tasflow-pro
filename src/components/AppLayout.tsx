@@ -55,7 +55,7 @@ const AppLayout = () => {
           </Button>
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <img src="/youthnic-logo.png" alt="" className="w-7 h-7 object-contain" />
-            <span className="font-semibold text-sm truncate">TaskFlow Pro</span>
+            <span className="font-display font-bold text-sm tracking-tight truncate">TaskFlow Pro</span>
           </div>
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowSearch(true)}>
             Search

@@ -21,8 +21,8 @@ export function AuthShell({ title, subtitle, children }: AuthShellProps) {
             <img src="/youthnic-logo.svg" alt="TaskFlow Pro" className="w-full h-full object-contain" />
           </div>
           <div>
-            <p className="font-bold text-xl tracking-tight">TaskFlow Pro</p>
-            <p className="text-sm opacity-80">Enterprise SaaS Platform</p>
+            <p className="font-display font-bold text-xl tracking-tight">TaskFlow Pro</p>
+            <p className="text-sm leading-normal opacity-80">Enterprise SaaS Platform</p>
           </div>
         </div>
         <div className="relative z-10 space-y-6 max-w-lg">
@@ -30,8 +30,8 @@ export function AuthShell({ title, subtitle, children }: AuthShellProps) {
             <Shield className="w-4 h-4" />
             Secure account recovery
           </div>
-          <h2 className="text-4xl font-bold leading-tight tracking-tight">Your workspace, protected.</h2>
-          <p className="opacity-90 text-lg leading-relaxed">
+          <h2 className="font-display text-4xl font-bold leading-tight tracking-tighter">Your workspace, protected.</h2>
+          <p className="opacity-90 text-lg leading-relaxed tracking-normal">
             Reset links open on TaskFlow Pro — same branded experience as the rest of your app.
           </p>
         </div>
@@ -44,14 +44,14 @@ export function AuthShell({ title, subtitle, children }: AuthShellProps) {
             <div className="w-16 h-16 rounded-2xl bg-white border shadow-sm flex items-center justify-center p-2 mb-3">
               <img src="/youthnic-logo.svg" alt="TaskFlow Pro" className="w-full h-full object-contain" />
             </div>
-            <h1 className="text-xl font-bold">TaskFlow Pro</h1>
+            <h1 className="font-display text-xl font-bold tracking-tight">TaskFlow Pro</h1>
           </div>
           <div className="mb-8">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
               <Lock className="h-5 w-5 text-primary" />
             </div>
-            <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
-            <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+            <h2 className="font-display text-2xl font-bold tracking-tight">{title}</h2>
+            <p className="text-page-desc mt-1.5">{subtitle}</p>
           </div>
           {children}
         </div>
