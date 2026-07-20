@@ -5,7 +5,7 @@
 // user-scoped Supabase session (same magic-link technique as firebase-auth) and
 // run every tool query through it, so Postgres RLS does the enforcement.
 
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

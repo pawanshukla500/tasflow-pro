@@ -1,7 +1,7 @@
 // Upload a file to Firebase Storage (Google Cloud Storage) using a service account.
 // Expects multipart/form-data with field "file" and optional "filename" and "folder".
 // Returns { url, name, path } on success.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { loadServiceAccount } from "../_shared/load-service-account.ts";
 
 const corsHeaders = {

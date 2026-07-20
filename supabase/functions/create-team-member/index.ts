@@ -1,6 +1,6 @@
 // Creates a new team member without signing in the admin's browser.
 // Authorization: caller must be admin/MD or department_manager.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.74.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { createFirebaseAuthUser } from "../_shared/firebase-admin-auth.ts";
 import { renderAndSendEmail } from "../_shared/render-and-send-email.ts";
 
