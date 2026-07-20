@@ -13,13 +13,26 @@ const EMBED = `
   task_subtasks ( id, title, completed, position )
 `.replace(/\s+/g, " ").trim();
 
-const EMBED_FALLBACK = `
+const EMBED_FALLBACKS = [
+  EMBED,
+  `
+  id, title, description, status, priority, due_date, start_date,
+  department_id, created_by, completed_at, created_at,
+  blocked_by, depends_on,
+  departments ( id, name ),
+  task_assignees ( user_id ),
+  task_subtasks ( id, title, completed, position )
+`.replace(/\s+/g, " ").trim(),
+  `
   id, title, description, status, priority, due_date, start_date,
   department_id, created_by, completed_at, created_at,
   departments ( id, name ),
   task_assignees ( user_id ),
   task_subtasks ( id, title, completed, position )
-`.replace(/\s+/g, " ").trim();
+`.replace(/\s+/g, " ").trim(),
+];
+
+const EMBED_FALLBACK = EMBED_FALLBACKS[EMBED_FALLBACKS.length - 1];
 
 function mapRow(t: Record<string, unknown>) {
   const dept = t.departments as { name?: string } | null;
@@ -56,15 +69,16 @@ async function listEmbedded(
   apply: (q: ReturnType<SupabaseClient["from"]>) => ReturnType<SupabaseClient["from"]>,
   limit: number,
 ) {
-  // deno-lint-ignore no-explicit-any
-  let q: any = client.from("tasks").select(EMBED).order("created_at", { ascending: false }).limit(limit);
-  q = apply(q);
-  let { data, error } = await q;
-  if (error) {
+  let data: unknown = null;
+  let error: { message: string } | null = null;
+
+  for (const select of EMBED_FALLBACKS) {
     // deno-lint-ignore no-explicit-any
-    let q2: any = client.from("tasks").select(EMBED_FALLBACK).order("created_at", { ascending: false }).limit(limit);
-    q2 = apply(q2);
-    ({ data, error } = await q2);
+    let q: any = client.from("tasks").select(select).order("created_at", { ascending: false }).limit(limit);
+    q = apply(q);
+    ({ data, error } = await q);
+    if (!error) break;
+    if (!/could not find|does not exist|PGRST200|42703|relationship/i.test(error.message)) break;
   }
   if (error) throw new Error(error.message);
 
