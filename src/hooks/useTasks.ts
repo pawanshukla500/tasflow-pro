@@ -162,7 +162,15 @@ export function useTasks(options: UseTasksOptions = {}) {
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    retry: 1,
   });
+
+  useEffect(() => {
+    if (query.isError) {
+      console.error("Failed to load tasks:", query.error);
+      toast.error("Failed to load tasks — check your connection or database schema");
+    }
+  }, [query.isError, query.error]);
 
   const scheduleInvalidate = useCallback(() => {
     if (invalidateTimer.current) clearTimeout(invalidateTimer.current);

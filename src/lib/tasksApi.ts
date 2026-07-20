@@ -114,37 +114,49 @@ function embedCount(rows: { count?: number; id?: string }[] | null | undefined):
   return rows.length;
 }
 
-const TASK_EMBED_SELECT = `
+const CORE_COLS = `
   id, title, description, status, priority, due_date, start_date,
   department_id, created_by, completed_at, created_at, updated_at,
   frequency, recurrence_parent_id,
   requires_review, reviewer_user_id, review_note,
   submitted_for_review_at, reviewed_at, reviewed_by,
-  completed_on_time, days_late,
-  blocked_by, depends_on, organization_id,
-  departments ( id, name, color ),
-  task_assignees ( user_id, profiles ( id, name ) ),
-  task_subtasks ( id, title, completed, position ),
-  task_attachments ( count ),
-  task_comments ( count ),
-  creator:profiles!tasks_created_by_profiles_fkey ( id, name )
+  completed_on_time, days_late, organization_id
 `.replace(/\s+/g, " ").trim();
 
-/** Fallback select when creator FK alias is unavailable. */
-const TASK_EMBED_SELECT_FALLBACK = `
-  id, title, description, status, priority, due_date, start_date,
-  department_id, created_by, completed_at, created_at, updated_at,
-  frequency, recurrence_parent_id,
-  requires_review, reviewer_user_id, review_note,
-  submitted_for_review_at, reviewed_at, reviewed_by,
-  completed_on_time, days_late,
-  blocked_by, depends_on, organization_id,
+const DEPS_COLS = `blocked_by, depends_on`;
+
+const EMBEDS_WITH_PROFILE = `
   departments ( id, name, color ),
   task_assignees ( user_id, profiles ( id, name ) ),
   task_subtasks ( id, title, completed, position ),
   task_attachments ( count ),
   task_comments ( count )
 `.replace(/\s+/g, " ").trim();
+
+const EMBEDS_NO_PROFILE = `
+  departments ( id, name, color ),
+  task_assignees ( user_id ),
+  task_subtasks ( id, title, completed, position ),
+  task_attachments ( count ),
+  task_comments ( count )
+`.replace(/\s+/g, " ").trim();
+
+const CREATOR_EMBED = `creator:profiles!tasks_created_by_profiles_fkey ( id, name )`;
+
+/**
+ * Progressive selects — production may not have applied the deps migration
+ * or assignee→profiles FKs yet. Try richest shape first, then degrade.
+ */
+const TASK_SELECT_CANDIDATES = [
+  `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}, ${CREATOR_EMBED}`,
+  `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}`,
+  `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_NO_PROFILE}`,
+  `${CORE_COLS}, ${EMBEDS_WITH_PROFILE}, ${CREATOR_EMBED}`,
+  `${CORE_COLS}, ${EMBEDS_WITH_PROFILE}`,
+  `${CORE_COLS}, ${EMBEDS_NO_PROFILE}`,
+  `${CORE_COLS}, departments ( id, name, color ), task_assignees ( user_id )`,
+  CORE_COLS,
+];
 
 export function mapEmbeddedTask(row: NestedTask): TaskRow {
   const subtasks = (row.task_subtasks || [])
@@ -194,9 +206,45 @@ export function mapEmbeddedTask(row: NestedTask): TaskRow {
   };
 }
 
+function isRecoverableSelectError(message: string): boolean {
+  return /could not find|does not exist|PGRST204|PGRST200|42703|relationship/i.test(message);
+}
+
+async function hydrateAssigneeAndCreatorNames(tasks: TaskRow[]): Promise<TaskRow[]> {
+  const missingIds = [
+    ...new Set(
+      tasks.flatMap((t) => {
+        const ids: string[] = [];
+        if (t.created_by && !t.creator_name) ids.push(t.created_by);
+        for (const a of t.assignees) {
+          if (!a.name || a.name === "Unknown") ids.push(a.user_id);
+        }
+        return ids;
+      }),
+    ),
+  ];
+  if (missingIds.length === 0) return tasks;
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, name")
+    .in("id", missingIds);
+  const byId = new Map((profiles || []).map((p) => [p.id, p.name]));
+
+  return tasks.map((t) => ({
+    ...t,
+    creator_name: t.creator_name || (t.created_by ? byId.get(t.created_by) : undefined),
+    assignees: t.assignees.map((a) => ({
+      ...a,
+      name: a.name !== "Unknown" ? a.name : byId.get(a.user_id) || "Unknown",
+    })),
+  }));
+}
+
 /**
  * Single-query task page with eager-loaded assignees, department (project),
- * subtasks, attachments, and comments — no client-side N+1 fan-out.
+ * subtasks, attachments, and comments — degrades if deps migration / FKs
+ * are not yet applied on the remote database.
  */
 export async function fetchTasksPage(
   options: FetchTasksPageOptions = {},
@@ -219,7 +267,6 @@ export async function fetchTasksPage(
     if (options.departmentId) q = q.eq("department_id", options.departmentId);
 
     if (options.cursorCreatedAt && options.cursorId) {
-      // Keyset pagination: (created_at, id) < cursor
       q = q.or(
         `created_at.lt.${options.cursorCreatedAt},and(created_at.eq.${options.cursorCreatedAt},id.lt.${options.cursorId})`,
       );
@@ -230,34 +277,23 @@ export async function fetchTasksPage(
     return q;
   };
 
-  let { data, error, count } = await buildQuery(TASK_EMBED_SELECT);
-  if (error && /tasks_created_by_profiles_fkey|could not find/i.test(error.message)) {
-    ({ data, error, count } = await buildQuery(TASK_EMBED_SELECT_FALLBACK));
+  let data: unknown = null;
+  let error: { message: string } | null = null;
+  let count: number | null = null;
+
+  for (const select of TASK_SELECT_CANDIDATES) {
+    const result = await buildQuery(select);
+    data = result.data;
+    error = result.error;
+    count = typeof result.count === "number" ? result.count : null;
+    if (!error) break;
+    if (!isRecoverableSelectError(error.message)) break;
   }
+
   if (error) throw error;
 
   let tasks = ((data || []) as unknown as NestedTask[]).map(mapEmbeddedTask);
-
-  // If creator embed missing, resolve names in one batched query (still O(1) round-trips).
-  const missingCreatorIds = [
-    ...new Set(
-      tasks
-        .filter((t) => t.created_by && !t.creator_name)
-        .map((t) => t.created_by as string),
-    ),
-  ];
-  if (missingCreatorIds.length > 0) {
-    const { data: creators } = await supabase
-      .from("profiles")
-      .select("id, name")
-      .in("id", missingCreatorIds);
-    const byId = new Map((creators || []).map((p) => [p.id, p.name]));
-    tasks = tasks.map((t) =>
-      t.created_by && !t.creator_name
-        ? { ...t, creator_name: byId.get(t.created_by) || t.creator_name }
-        : t,
-    );
-  }
+  tasks = await hydrateAssigneeAndCreatorNames(tasks);
 
   const total = typeof count === "number" ? count : null;
   const last = tasks[tasks.length - 1];
