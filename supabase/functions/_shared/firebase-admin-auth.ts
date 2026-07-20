@@ -46,7 +46,36 @@ export async function lookupFirebaseUserByEmail(
   return { uid: user.localId as string, email: (user.email as string) || email };
 }
 
-/** Create or update a Firebase Auth user with the admin password (required for login). */
+/**
+ * Create a Firebase Auth user. Fails if the email already exists — does NOT
+ * overwrite passwords (prevents cross-tenant account takeover via invites).
+ */
+export async function createFirebaseAuthUser(
+  email: string,
+  password: string,
+  displayName?: string,
+): Promise<{ created: true; uid?: string }> {
+  const lookup = await adminIdentityFetch("accounts:lookup", { email: [email] });
+  if (lookup.ok && lookup.data?.users?.[0]?.localId) {
+    throw new Error("EMAIL_EXISTS");
+  }
+
+  const create = await adminIdentityFetch("accounts", {
+    email,
+    password,
+    displayName: displayName || email.split("@")[0],
+    emailVerified: true,
+    disabled: false,
+  });
+  if (!create.ok) {
+    const msg = create.data?.error?.message || JSON.stringify(create.data);
+    if (msg.includes("EMAIL_EXISTS")) throw new Error("EMAIL_EXISTS");
+    throw new Error(msg);
+  }
+  return { created: true, uid: create.data?.localId as string | undefined };
+}
+
+/** Create or update a Firebase Auth user with the admin password (password-reset / admin flows). */
 export async function ensureFirebaseAuthUser(
   email: string,
   password: string,

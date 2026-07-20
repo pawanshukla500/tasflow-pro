@@ -12,42 +12,33 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+/** Uniform public response — avoids account enumeration via response shape. */
+function publicOk() {
+  return json({
+    ok: true,
+    message: "If that email is registered, a reset link was sent.",
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { email } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const email = body?.email;
     if (!email || typeof email !== "string") {
       return json({ error: "email is required" }, 400);
     }
 
     const normalized = email.replace(/[\u200B-\u200D\uFEFF\s]/g, "").trim().toLowerCase();
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRe.test(normalized)) {
+    if (!emailRe.test(normalized) || normalized.length > 254) {
       return json({ error: "Invalid email format" }, 400);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(supabaseUrl, serviceKey);
-
-    const authHeader = req.headers.get("Authorization") || "";
-    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    if (token && token !== Deno.env.get("SUPABASE_ANON_KEY")) {
-      const { data: userData } = await admin.auth.getUser(token);
-      if (userData?.user) {
-        const uid = userData.user.id;
-        const [{ data: isAdmin }, { data: mgrRows }] = await Promise.all([
-          admin.rpc("is_admin_or_md", { _user_id: uid }),
-          admin.from("department_managers").select("id").eq("user_id", uid).limit(1),
-        ]);
-        const isManager = Array.isArray(mgrRows) && mgrRows.length > 0;
-        const isSelf = userData.user.email?.toLowerCase() === normalized;
-        if (!isAdmin && !isManager && !isSelf) {
-          return json({ error: "Not authorized to reset password for this user" }, 403);
-        }
-      }
-    }
 
     let firebaseUser: { uid: string; email: string } | null;
     try {
@@ -63,7 +54,7 @@ Deno.serve(async (req) => {
     }
 
     if (!firebaseUser) {
-      return json({ ok: true, message: "If that email is registered, a reset link was sent." });
+      return publicOk();
     }
 
     const appUrl = Deno.env.get("APP_URL") || "https://task.youthnic.shop";
@@ -76,7 +67,10 @@ Deno.serve(async (req) => {
       tokenId = created.tokenId;
     } catch (e) {
       const msg = (e as Error).message || "";
-      return json({ error: msg }, msg.includes("recently") ? 429 : 500);
+      // Throttle: still return uniform success to avoid enumeration via 429.
+      if (msg.includes("recently")) return publicOk();
+      console.error("password-reset token error:", msg);
+      return publicOk();
     }
 
     const { data: profile } = await admin
@@ -96,22 +90,16 @@ Deno.serve(async (req) => {
     });
 
     if (!mail.sent) {
-      return json({ error: mail.error || "Failed to send reset email via Resend" }, 500);
+      console.error("password-reset email failed:", mail.error);
+      return publicOk();
     }
 
     await markTokenEmailSent(admin, tokenId);
 
-    return json({
-      ok: true,
-      emailSent: true,
-      message: "Password reset email sent.",
-      branded: true,
-      subject: mail.subject,
-      messageId: mail.messageId,
-      version: "v7-token-resend",
-    });
+    return publicOk();
   } catch (e) {
-    return json({ error: (e as Error).message }, 500);
+    console.error("send-password-reset error:", (e as Error).message);
+    return publicOk();
   }
 });
 

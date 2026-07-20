@@ -20,6 +20,12 @@ Deno.serve(async (req) => {
 
     const firebaseUser = await verifyFirebaseIdToken(idToken);
     if (!firebaseUser.email) return json({ error: "Email required" }, 400);
+    if (!firebaseUser.emailVerified) {
+      return json({ error: "Verified Firebase email required" }, 401);
+    }
+
+    const orgNameTrimmed = String(orgName).trim().slice(0, 120);
+    if (!orgNameTrimmed) return json({ error: "orgName is required" }, 400);
 
     const email = firebaseUser.email.toLowerCase();
     const emailDomain = email.split("@")[1];
@@ -58,21 +64,21 @@ Deno.serve(async (req) => {
       return json({ error: "You already belong to an organization" }, 400);
     }
 
-    const slug = String(orgName)
+    const slug = orgNameTrimmed
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
       .slice(0, 48) + "-" + crypto.randomUUID().slice(0, 6);
 
     const { data: org, error: orgErr } = await admin.from("organizations").insert({
-      name: orgName,
+      name: orgNameTrimmed,
       slug,
-      domain: domain ? String(domain).toLowerCase().replace(/^@/, "") : emailDomain,
+      domain: domain ? String(domain).toLowerCase().replace(/^@/, "").slice(0, 120) : emailDomain,
       domain_type: domainType === "public" ? "public" : "custom",
       allow_public_email: !!allowPublicEmail,
       created_by: userId,
       settings: {
-        branding: { name: orgName },
+        branding: { name: orgNameTrimmed },
         email: { daily_digest_enabled: true, digest_hour_ist: 8 },
       },
     }).select("id, name, slug, domain").single();
@@ -93,8 +99,10 @@ Deno.serve(async (req) => {
       is_org_admin: true,
     });
 
+    // Org creator is managing_director within their tenant. Platform-wide
+    // system_admin must not be self-assigned (cross-tenant privilege escalation).
     await admin.from("user_roles").delete().eq("user_id", userId);
-    await admin.from("user_roles").insert({ user_id: userId, role: "system_admin" });
+    await admin.from("user_roles").insert({ user_id: userId, role: "managing_director" });
 
     await admin.from("audit_logs").insert({
       organization_id: org.id,
@@ -102,7 +110,7 @@ Deno.serve(async (req) => {
       action: "organization.created",
       entity_type: "organization",
       entity_id: org.id,
-      metadata: { name: orgName, domain: org.domain },
+      metadata: { name: orgNameTrimmed, domain: org.domain },
     });
 
     return json({ success: true, organization: org, userId });

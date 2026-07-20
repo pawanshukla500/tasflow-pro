@@ -9,6 +9,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const MIN_EXPIRY_DAYS = 1;
+const MAX_EXPIRY_DAYS = 90;
+const MAX_NAME_LEN = 80;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -29,12 +33,14 @@ Deno.serve(async (req) => {
     const user = userData.user;
 
     const body = await req.json().catch(() => ({}));
-    const name = String(body?.name || "").trim() || "AI client";
+    const name = String(body?.name || "AI client").trim().slice(0, MAX_NAME_LEN) || "AI client";
     const expiresInDays = Number(body?.expiresInDays);
-    const expiresAt =
-      Number.isFinite(expiresInDays) && expiresInDays > 0
-        ? new Date(Date.now() + expiresInDays * 86400_000).toISOString()
-        : null;
+    if (!Number.isInteger(expiresInDays) || expiresInDays < MIN_EXPIRY_DAYS || expiresInDays > MAX_EXPIRY_DAYS) {
+      return json({
+        error: `expiresInDays must be an integer between ${MIN_EXPIRY_DAYS} and ${MAX_EXPIRY_DAYS}`,
+      }, 400);
+    }
+    const expiresAt = new Date(Date.now() + expiresInDays * 86400_000).toISOString();
 
     const { data: profile } = await admin
       .from("profiles").select("organization_id").eq("id", user.id).maybeSingle();

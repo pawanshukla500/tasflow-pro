@@ -2,15 +2,25 @@
 import { generateWithGoogleAi, getGoogleAiApiKey } from "../_shared/google-ai.ts";
 import { corsHeaders, json, requireUser } from "../_shared/google-oauth.ts";
 
+const MAX_CONTENT_CHARS = 8000;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     await requireUser(req);
 
-    const { content } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const content = body?.content;
     if (!content || typeof content !== "string" || !content.trim()) {
       return json({ error: "content is required" }, 400);
+    }
+
+    const trimmed = content.trim();
+    if (trimmed.length > MAX_CONTENT_CHARS) {
+      return json({
+        error: `content must be ${MAX_CONTENT_CHARS} characters or less`,
+      }, 400);
     }
 
     if (!getGoogleAiApiKey()) {
@@ -21,7 +31,7 @@ Deno.serve(async (req) => {
     }
 
     const prompt =
-      `You are a helpful writing assistant. Fix grammar, spelling, and clarity in the following note while keeping the original meaning and tone. Return ONLY the corrected text — no quotes, no explanation, no markdown fences.\n\nNote:\n${content.trim()}`;
+      `You are a helpful writing assistant. Fix grammar, spelling, and clarity in the following note while keeping the original meaning and tone. Return ONLY the corrected text — no quotes, no explanation, no markdown fences.\n\nNote:\n${trimmed}`;
 
     const { text, model } = await generateWithGoogleAi({
       prompt,
@@ -39,7 +49,7 @@ Deno.serve(async (req) => {
     return json({
       polished,
       source: model,
-      changed: polished !== content.trim(),
+      changed: polished !== trimmed,
     });
   } catch (e) {
     const message = (e as Error).message || "Polish failed";

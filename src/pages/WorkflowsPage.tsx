@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { WorkflowHealth } from "@/components/WorkflowHealth";
 import { ExtendWorkflowTatDialog } from "@/components/ExtendWorkflowTatDialog";
 import { formatDateIST } from "@/lib/time";
+import { safeExternalUrl } from "@/lib/safeUrl";
 
 interface Department { id: string; name: string; color: string; }
 interface Profile { id: string; name: string; email: string; department_id: string | null; }
@@ -682,8 +683,9 @@ const WorkflowsPage = () => {
 
   const addAttachment = () => {
     if (!newAttLabel.trim() || !newAttUrl.trim()) return toast.error("Label and URL required");
-    try { new URL(newAttUrl); } catch { return toast.error("Invalid URL"); }
-    setStageAttachments((prev) => [...prev, { label: newAttLabel.trim(), url: newAttUrl.trim() }]);
+    const safeUrl = safeExternalUrl(newAttUrl);
+    if (!safeUrl) return toast.error("Only http(s) URLs are allowed");
+    setStageAttachments((prev) => [...prev, { label: newAttLabel.trim().slice(0, 120), url: safeUrl }]);
     setNewAttLabel(""); setNewAttUrl("");
   };
 
@@ -1491,7 +1493,7 @@ const WorkflowsPage = () => {
                   {stageAttachments.map((a, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs border rounded p-2">
                       <Paperclip className="h-3 w-3 text-muted-foreground" />
-                      <a href={a.url} target="_blank" rel="noreferrer" className="text-primary hover:underline flex-1 truncate">{a.label}</a>
+                      <a href={safeExternalUrl(a.url) || undefined} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex-1 truncate">{a.label}</a>
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setStageAttachments((p) => p.filter((_, idx) => idx !== i))}>
                         <X className="h-3 w-3" />
                       </Button>

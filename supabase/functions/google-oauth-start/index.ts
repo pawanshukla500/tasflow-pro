@@ -1,4 +1,5 @@
 import { calendarScopes, corsHeaders, json, requireUser, requiredEnv } from "../_shared/google-oauth.ts";
+import { normalizeAppRedirect } from "../_shared/safe-redirect.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -6,7 +7,8 @@ Deno.serve(async (req) => {
   try {
     const { admin, user } = await requireUser(req);
     const body = await req.json().catch(() => ({}));
-    const redirectTo = typeof body?.redirectTo === "string" ? body.redirectTo : null;
+    const appUrl = Deno.env.get("APP_URL") || Deno.env.get("VITE_APP_URL") || "";
+    const redirectTo = normalizeAppRedirect(body?.redirectTo, appUrl);
 
     const { data: profile } = await admin
       .from("profiles")
@@ -42,4 +44,3 @@ Deno.serve(async (req) => {
     return json({ error: message }, status);
   }
 });
-

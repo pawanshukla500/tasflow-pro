@@ -3,6 +3,7 @@ export async function verifyFirebaseIdToken(idToken: string): Promise<{
   uid: string;
   email?: string;
   name?: string;
+  emailVerified: boolean;
 }> {
   const apiKey = Deno.env.get("FIREBASE_WEB_API_KEY") || Deno.env.get("VITE_FIREBASE_API_KEY");
   if (!apiKey) throw new Error("FIREBASE_WEB_API_KEY not configured");
@@ -28,5 +29,6 @@ export async function verifyFirebaseIdToken(idToken: string): Promise<{
     uid: user.localId,
     email: user.email,
     name: user.displayName,
+    emailVerified: user.emailVerified === true,
   };
 }

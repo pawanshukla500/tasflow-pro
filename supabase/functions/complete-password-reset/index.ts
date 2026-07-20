@@ -3,7 +3,6 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { ensureFirebaseAuthUser } from "../_shared/firebase-admin-auth.ts";
 import {
   consumePasswordResetToken,
-  markTokenUsed,
   verifyPasswordResetToken,
 } from "../_shared/password-reset-tokens.ts";
 
@@ -37,10 +36,11 @@ Deno.serve(async (req) => {
       return json({ valid: true, email: result.email });
     }
 
-    if (password.length < 6) {
-      return json({ error: "Password must be at least 6 characters" }, 400);
+    if (password.length < 8 || password.length > 128) {
+      return json({ error: "Password must be 8–128 characters" }, 400);
     }
 
+    // Consume token first (atomic) so concurrent requests cannot reuse it.
     const record = await consumePasswordResetToken(admin, rawToken);
     if (!record) {
       return json({ error: "Invalid or expired reset link" }, 400);
@@ -63,8 +63,6 @@ Deno.serve(async (req) => {
       }
       return json({ error: msg }, 500);
     }
-
-    await markTokenUsed(admin, record.tokenId);
 
     return json({ ok: true, message: "Password updated successfully." });
   } catch (e) {

@@ -58,7 +58,7 @@ Team page: `src/pages/TeamPage.tsx` (department required for HOD & Team Member)
 ```env
 VITE_SUPABASE_URL=https://nekdjoquirhecmejuoba.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=<anon key — SET>
-VITE_FIREBASE_API_KEY=AIzaSyDR8Yzd58za5h0wlcj-EJp4MdBInPnLePU
+VITE_FIREBASE_API_KEY=<Firebase web API key — SET>
 VITE_FIREBASE_AUTH_DOMAIN=taskflow-pro-by-vb-exports.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=taskflow-pro-by-vb-exports
 SUPABASE_SERVICE_ROLE_KEY=<MUST SET — still REPLACE_ME in .env>
