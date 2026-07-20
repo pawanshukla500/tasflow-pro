@@ -126,8 +126,9 @@ const Board = () => {
     if (newStatus === "done" && task.due_date && task.due_date < today) {
       toast.info("Late completion will be recorded and may affect performance score.");
     }
+    // Optimistic: column moves immediately; hook reverts + toasts on API failure.
     const err = await updateTaskStatus(taskId, newStatus);
-    if (err) toast.error(err.message || "Failed to move task");
+    if (err) return;
   };
 
   const handleStatusChange = async (task: TaskRow, newStatus: string) => {
@@ -139,8 +140,8 @@ const Board = () => {
       toast.info("Late completion recorded — performance score updated.");
     }
     const err = await updateTaskStatus(task.id, newStatus);
-    if (err) toast.error(err.message || "Failed to update status");
-    else toast.success(`Moved to ${statusLabels[newStatus] || newStatus}`);
+    if (err) return;
+    toast.success(`Moved to ${statusLabels[newStatus] || newStatus}`);
   };
 
   const handleDelete = async (task: TaskRow) => {
@@ -149,8 +150,8 @@ const Board = () => {
       return;
     }
     const err = await deleteTask(task.id);
-    if (err) toast.error(err.message || "Failed to delete task");
-    else toast.success("Task deleted");
+    if (err) return;
+    toast.success("Task deleted");
   };
 
   if (loading) {

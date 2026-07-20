@@ -188,9 +188,10 @@ const MyTasks = () => {
       setReviewTask({ task, mode: "submit" });
       return;
     }
+    // Optimistic: list updates immediately; hook reverts + toasts on API failure.
     const err = await updateTaskStatus(task.id, newStatus);
-    if (err) toast.error(err.message || "Failed to update status");
-    else toast.success(`Status updated to ${statusLabels[newStatus] || newStatus}`);
+    if (err) return;
+    toast.success(`Status updated to ${statusLabels[newStatus] || newStatus}`);
   };
 
   const handleCompleteClick = (task: TaskRow) => {
@@ -211,8 +212,8 @@ const MyTasks = () => {
 
   const handleDelete = async (taskId: string) => {
     const err = await deleteTask(taskId);
-    if (err) toast.error("Failed to delete task");
-    else toast.success("Task deleted");
+    if (err) return;
+    toast.success("Task deleted");
   };
 
   const handleExport = () => {
