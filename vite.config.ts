@@ -29,7 +29,12 @@ export default defineConfig(({ mode }) => ({
         // Keep heavy libs out of the initial entry chunk so route/code-splitting works.
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
-          if (id.includes("recharts") || id.includes("d3-")) return "vendor-charts";
+          // Do NOT put recharts/d3 into a shared vendor-charts chunk.
+          // That split creates a circular TDZ init
+          // ("Cannot access 'X' before initialization") and whitescreens
+          // the entire app because the entry incorrectly binds shared utils
+          // (e.g. clsx/cva) through the charts chunk. Let Vite keep recharts
+          // inside the lazy Dashboard/Reports route chunks instead.
           if (id.includes("firebase")) return "vendor-firebase";
           if (id.includes("@supabase")) return "vendor-supabase";
           if (id.includes("@dnd-kit")) return "vendor-dnd";
