@@ -34,7 +34,17 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const ActivityNotifications = lazy(() => import("./components/ActivityNotifications"));
 const ChatNotifications = lazy(() => import("./components/ChatNotifications"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Prefer cached data when switching routes (Board ↔ My Tasks ↔ Dashboard).
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 function RouteFallback() {
   return <AppLoadingScreen message="Loading…" />;
