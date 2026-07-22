@@ -409,10 +409,9 @@ const MyTasks = () => {
       />
 
       {/* Compact KPI strip — one row, no heavy cards */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm border-b border-border/60 pb-3">
-        {kpis.map((k, i) => (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm border-b border-border/60 pb-3">
+        {kpis.map((k) => (
           <div key={k.label} className="inline-flex items-baseline gap-1.5">
-            {i > 0 && <span className="text-border mr-2 hidden sm:inline">|</span>}
             <span className={cn("font-mono-num font-semibold tabular-nums", k.tone)}>{k.value}</span>
             <span className="text-xs text-muted-foreground">{k.label}</span>
           </div>
