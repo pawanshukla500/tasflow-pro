@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { GitBranch, Plus, Play, Edit, MoreHorizontal, Trash2, X, ChevronDown, ChevronRight, Paperclip, AlertCircle, CheckCircle2, Clock, GripVertical, GitFork, Flag, Search } from "lucide-react";
-import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import {
+  GitBranch, Plus, Play, Edit, MoreHorizontal, Trash2, X, ChevronDown, ChevronRight,
+  Paperclip, AlertCircle, CheckCircle2, Clock, GitFork, Flag, Search, Activity, LayoutTemplate,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
@@ -17,8 +17,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { WorkflowHealth } from "@/components/WorkflowHealth";
 import { ExtendWorkflowTatDialog } from "@/components/ExtendWorkflowTatDialog";
+import { WorkflowTemplateDialog, type EditableTemplate } from "@/components/workflows/WorkflowTemplateDialog";
+import { PageHeader } from "@/components/PageHeader";
 import { formatDateIST } from "@/lib/time";
 import { safeExternalUrl } from "@/lib/safeUrl";
+import { cn } from "@/lib/utils";
 
 interface Department { id: string; name: string; color: string; }
 interface Profile { id: string; name: string; email: string; department_id: string | null; }
@@ -107,202 +110,9 @@ const stageDeadline = (s: WorkflowStage) => {
   return new Date(new Date(s.started_at).getTime() + s.tat_hours * 3600 * 1000);
 };
 
-interface SortableStageProps {
-  stage: TemplateStage;
-  index: number;
-  allStages: TemplateStage[];
-  departments: Department[];
-  profiles: Profile[];
-  onChange: (id: string, patch: Partial<TemplateStage>) => void;
-  onRemove: (id: string) => void;
-}
-
-const SortableStage = ({ stage: s, index: i, allStages, departments, profiles, onChange, onRemove }: SortableStageProps) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: s.id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-  const deptMembers = profiles.filter((p) => p.department_id === s.owner_department_id);
-  // Other stages this branch can jump to
-  const branchTargets = allStages.filter((x) => x.id !== s.id);
-  return (
-    <div ref={setNodeRef} style={style} className={`border rounded-lg p-3 space-y-2 bg-card ${s.is_decision ? "border-primary/40" : ""} ${s.is_terminal ? "border-success/40 bg-success/5" : ""}`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="cursor-grab active:cursor-grabbing touch-none text-muted-foreground hover:text-foreground"
-            {...attributes}
-            {...listeners}
-            aria-label="Drag to reorder"
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
-          <span className="text-xs font-semibold text-muted-foreground">Stage {i + 1}</span>
-          {s.is_decision && <Badge variant="outline" className="text-[10px] gap-1"><GitFork className="h-2.5 w-2.5" />Decision</Badge>}
-          {s.is_terminal && <Badge variant="outline" className="text-[10px] gap-1 border-success text-success"><Flag className="h-2.5 w-2.5" />End</Badge>}
-        </div>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onRemove(s.id)}>
-          <X className="h-3 w-3" />
-        </Button>
-      </div>
-      <Input value={s.name} onChange={(e) => onChange(s.id, { name: e.target.value })} placeholder="Stage name *" />
-
-      {!s.is_terminal && (
-        <>
-          <div className="grid grid-cols-2 gap-2">
-            <Select value={s.owner_department_id || "none"} onValueChange={(v) => onChange(s.id, { owner_department_id: v === "none" ? null : v, default_assignee_user_id: null })}>
-              <SelectTrigger><SelectValue placeholder="Owner department" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">— No default —</SelectItem>
-                {departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select
-              value={s.default_assignee_user_id || "any"}
-              onValueChange={(v) => onChange(s.id, { default_assignee_user_id: v === "any" ? null : v })}
-              disabled={!s.owner_department_id}
-            >
-              <SelectTrigger><SelectValue placeholder="Default team member" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Any dept member</SelectItem>
-                {deptMembers.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              min={1}
-              value={s.default_tat_hours}
-              onChange={(e) => onChange(s.id, { default_tat_hours: parseInt(e.target.value) || 1 })}
-              placeholder="TAT hours"
-              className="w-32"
-            />
-            <span className="text-xs text-muted-foreground">hours TAT</span>
-          </div>
-          <Textarea value={s.description || ""} onChange={(e) => onChange(s.id, { description: e.target.value })} rows={2} placeholder="What happens in this stage" />
-          <label className="flex items-center gap-2 text-xs cursor-pointer">
-            <input
-              type="checkbox"
-              checked={s.escalate_on_breach}
-              onChange={(e) => onChange(s.id, { escalate_on_breach: e.target.checked })}
-              className="rounded"
-            />
-            <span className="text-muted-foreground">Escalate to MD/Admin if TAT is breached</span>
-          </label>
-        </>
-      )}
-
-      <div className="border-t pt-2 space-y-2">
-        <div className="flex flex-wrap gap-3 text-xs">
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={s.is_decision}
-              disabled={s.is_terminal}
-              onChange={(e) => onChange(s.id, { is_decision: e.target.checked })}
-              className="rounded"
-            />
-            <GitFork className="h-3 w-3" />
-            <span className="text-muted-foreground">Decision (YES / NO branch)</span>
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={s.is_terminal}
-              onChange={(e) => onChange(s.id, {
-                is_terminal: e.target.checked,
-                is_decision: e.target.checked ? false : s.is_decision,
-                yes_next_position: e.target.checked ? null : s.yes_next_position,
-                no_next_position: e.target.checked ? null : s.no_next_position,
-              })}
-              className="rounded"
-            />
-            <Flag className="h-3 w-3" />
-            <span className="text-muted-foreground">End stage (workflow finishes here)</span>
-          </label>
-        </div>
-
-        {s.is_terminal && (
-          <Input
-            value={s.outcome_label || ""}
-            onChange={(e) => onChange(s.id, { outcome_label: e.target.value })}
-            placeholder='Outcome label, e.g. "Successful" or "Unsuccessful"'
-            className="h-8 text-xs"
-          />
-        )}
-
-        {s.is_decision && !s.is_terminal && (
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-[11px] text-success">On YES → go to</Label>
-              <Select
-                value={s.yes_next_position?.toString() || "next"}
-                onValueChange={(v) => onChange(s.id, { yes_next_position: v === "next" ? null : parseInt(v) })}
-              >
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="next">Next stage in order</SelectItem>
-                  {branchTargets.map((t, idx) => {
-                    const realPos = allStages.findIndex((x) => x.id === t.id) + 1;
-                    return (
-                      <SelectItem key={t.id} value={realPos.toString()}>
-                        Stage {realPos}: {t.name || "(unnamed)"}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-[11px] text-destructive">On NO → go to</Label>
-              <Select
-                value={s.no_next_position?.toString() || "next"}
-                onValueChange={(v) => onChange(s.id, { no_next_position: v === "next" ? null : parseInt(v) })}
-              >
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="next">Next stage in order</SelectItem>
-                  {branchTargets.map((t) => {
-                    const realPos = allStages.findIndex((x) => x.id === t.id) + 1;
-                    return (
-                      <SelectItem key={t.id} value={realPos.toString()}>
-                        Stage {realPos}: {t.name || "(unnamed)"}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
 const WorkflowsPage = () => {
   const { user, isAdminOrMD, isDeptManager, managedDepartments } = useAuth();
   const canManageTemplates = isAdminOrMD || isDeptManager;
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const handleStageDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    setTplStages((prev) => {
-      const oldIndex = prev.findIndex((s) => s.id === active.id);
-      const newIndex = prev.findIndex((s) => s.id === over.id);
-      if (oldIndex < 0 || newIndex < 0) return prev;
-      return arrayMove(prev, oldIndex, newIndex).map((s, i) => ({ ...s, position: i + 1 }));
-    });
-  };
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -313,12 +123,8 @@ const WorkflowsPage = () => {
 
   // Template modal
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
-  const [tplName, setTplName] = useState("");
-  const [tplCategory, setTplCategory] = useState("Operations");
-  const [tplDescription, setTplDescription] = useState("");
-  const [tplStages, setTplStages] = useState<TemplateStage[]>([]);
-  const [tplFields, setTplFields] = useState<TemplateField[]>([]);
+  const [editingTemplate, setEditingTemplate] = useState<EditableTemplate | null>(null);
+  const [showRaisePicker, setShowRaisePicker] = useState(false);
 
   // Launch modal
   const [launchTemplate, setLaunchTemplate] = useState<Template | null>(null);
@@ -392,130 +198,38 @@ const WorkflowsPage = () => {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const resetTemplateForm = () => {
+  const openCreateTemplate = () => {
     setEditingTemplate(null);
-    setTplName(""); setTplCategory("Operations"); setTplDescription(""); setTplStages([]); setTplFields([]);
-  };
-
-  const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || `field_${Date.now()}`;
-  const addTemplateField = () => setTplFields((p) => [...p, { position: p.length + 1, label: "", field_key: "", field_type: "text", required: false }]);
-  const updateTplField = (idx: number, patch: Partial<TemplateField>) => setTplFields((p) => p.map((f, i) => i === idx ? { ...f, ...patch } : f));
-  const removeTplField = (idx: number) => setTplFields((p) => p.filter((_, i) => i !== idx));
-
-  const addTemplateStage = () => {
-    setTplStages((prev) => [...prev, {
-      id: crypto.randomUUID(),
-      position: prev.length + 1,
-      name: "",
-      description: "",
-      owner_department_id: null,
-      default_assignee_user_id: null,
-      default_tat_hours: 24,
-      escalate_on_breach: true,
-      is_decision: false,
-      yes_next_position: null,
-      no_next_position: null,
-      is_terminal: false,
-      outcome_label: null,
-    }]);
-  };
-
-  const updateTplStage = (id: string, patch: Partial<TemplateStage>) => {
-    setTplStages((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  };
-  const removeTplStage = (id: string) => {
-    setTplStages((prev) => prev.filter((s) => s.id !== id).map((s, i) => ({ ...s, position: i + 1 })));
-  };
-
-  const openEditTemplate = (t: Template) => {
-    setEditingTemplate(t);
-    setTplName(t.name);
-    setTplCategory(t.category);
-    setTplDescription(t.description || "");
-    setTplStages(t.stages.map((s) => ({
-      ...s,
-      is_decision: !!s.is_decision,
-      is_terminal: !!s.is_terminal,
-      yes_next_position: s.yes_next_position ?? null,
-      no_next_position: s.no_next_position ?? null,
-      outcome_label: s.outcome_label ?? null,
-    })));
-    setTplFields((t.fields || []).map((f, i) => ({ ...f, position: i + 1 })));
     setShowTemplateModal(true);
   };
 
-  const saveTemplate = async () => {
-    if (!tplName.trim()) return toast.error("Name is required");
-    if (tplStages.length === 0) return toast.error("Add at least one stage");
-    if (tplStages.some((s) => !s.name.trim())) return toast.error("All stages need a name");
-    if (tplStages.some((s) => s.is_terminal && !s.outcome_label?.trim())) {
-      return toast.error("End stages need an outcome label (e.g. Successful)");
-    }
-
-    const rows = tplStages.map((s, i) => ({
-      position: i + 1,
-      name: s.name,
-      description: s.description,
-      owner_department_id: s.is_terminal ? null : s.owner_department_id,
-      default_assignee_user_id: s.is_terminal ? null : s.default_assignee_user_id,
-      default_tat_hours: s.default_tat_hours,
-      escalate_on_breach: s.escalate_on_breach,
-      is_decision: s.is_decision,
-      yes_next_position: s.is_decision ? s.yes_next_position : null,
-      no_next_position: s.is_decision ? s.no_next_position : null,
-      is_terminal: s.is_terminal,
-      outcome_label: s.is_terminal ? s.outcome_label : null,
-    }));
-
-    // Build field rows with auto-generated keys for any blank ones
-    const seenKeys = new Set<string>();
-    const fieldRows = tplFields
-      .filter((f) => f.label.trim())
-      .map((f, i) => {
-        let key = (f.field_key || slugify(f.label)).trim();
-        if (!key) key = slugify(f.label);
-        let unique = key, n = 1;
-        while (seenKeys.has(unique)) { unique = `${key}_${++n}`; }
-        seenKeys.add(unique);
-        return {
-          position: i + 1,
-          label: f.label.trim(),
-          field_key: unique,
-          field_type: f.field_type,
-          required: f.required,
-        };
-      });
-
-    let templateId = editingTemplate?.id;
-    if (editingTemplate) {
-      await supabase.from("workflow_templates").update({
-        name: tplName, category: tplCategory, description: tplDescription,
-      }).eq("id", editingTemplate.id);
-      await supabase.from("workflow_template_stages").delete().eq("template_id", editingTemplate.id);
-      await supabase.from("workflow_template_stages").insert(rows.map((r) => ({ ...r, template_id: editingTemplate.id })));
-      toast.success("Template updated");
-    } else {
-      const { data, error } = await supabase.from("workflow_templates").insert({
-        name: tplName, category: tplCategory, description: tplDescription,
-        created_by: user?.id,
-      }).select().single();
-      if (error || !data) return toast.error(error?.message || "Failed to create");
-      templateId = data.id;
-      await supabase.from("workflow_template_stages").insert(rows.map((r) => ({ ...r, template_id: data.id })));
-      toast.success("Template created");
-    }
-    if (templateId) {
-      await supabase.from("workflow_template_fields").delete().eq("template_id", templateId);
-      if (fieldRows.length > 0) {
-        await supabase.from("workflow_template_fields").insert(fieldRows.map((r) => ({ ...r, template_id: templateId })));
-      }
-    }
-    setShowTemplateModal(false);
-    resetTemplateForm();
-    fetchAll();
+  const openEditTemplate = (t: Template) => {
+    setEditingTemplate({
+      id: t.id,
+      name: t.name,
+      description: t.description,
+      category: t.category,
+      stages: t.stages.map((s) => ({
+        id: s.id,
+        position: s.position,
+        name: s.name,
+        description: s.description || "",
+        owner_department_id: s.owner_department_id,
+        default_assignee_user_id: s.default_assignee_user_id,
+        default_tat_hours: s.default_tat_hours,
+        escalate_on_breach: s.escalate_on_breach,
+        is_decision: !!s.is_decision,
+        yes_next_position: s.yes_next_position ?? null,
+        no_next_position: s.no_next_position ?? null,
+        is_terminal: !!s.is_terminal,
+        outcome_label: s.outcome_label ?? null,
+      })),
+      fields: (t.fields || []).map((f, i) => ({ ...f, position: i + 1 })),
+    });
+    setShowTemplateModal(true);
   };
 
-  const deleteTemplate = async () => {
+    const deleteTemplate = async () => {
     if (!deleteTemplateId) return;
     const { error } = await supabase.from("workflow_templates").delete().eq("id", deleteTemplateId);
     if (error) return toast.error(error.message);
@@ -856,40 +570,89 @@ const WorkflowsPage = () => {
   ) && ["in_progress", "blocked"].includes(currentOpenStage.status);
 
   // Employees and managers both use scoped workflow visibility above.
+  const activeCount = visibleWorkflows.filter((w) => w.status === "active").length;
+  const tabs = canManageTemplates
+    ? ([
+        { id: "workflows" as const, label: "Active", count: activeCount, icon: GitBranch },
+        { id: "health" as const, label: "Health", count: null, icon: Activity },
+        { id: "templates" as const, label: "Templates", count: templates.length, icon: LayoutTemplate },
+      ])
+    : ([{ id: "workflows" as const, label: "Active", count: activeCount, icon: GitBranch }]);
+
   return (
-    <div className="p-6 max-w-6xl space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Workflows</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            End-to-end process tracking — procurement, QC, production handoff, and more.
-          </p>
+    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5">
+      <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card">
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 70% 80% at 0% 0%, hsl(var(--primary) / 0.14), transparent 55%), radial-gradient(ellipse 45% 60% at 100% 10%, hsl(142 71% 45% / 0.08), transparent 50%)",
+          }}
+        />
+        <div className="relative p-5 md:p-6">
+          <PageHeader
+            className="mb-0"
+            title="Workflows"
+            description="Run multi-stage processes with owners, TAT, and yes/no decisions — from purchase approvals to QC handoff."
+            actions={
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="bg-background/80"
+                  onClick={() => {
+                    if (templates.length === 0) {
+                      if (canManageTemplates) {
+                        setActiveTab("templates");
+                        openCreateTemplate();
+                      } else {
+                        toast.info("Ask an admin to create a workflow template first");
+                      }
+                      return;
+                    }
+                    if (templates.length === 1) openLaunch(templates[0]);
+                    else setShowRaisePicker(true);
+                  }}
+                >
+                  <Play className="h-4 w-4 mr-1.5" />New workflow
+                </Button>
+                {canManageTemplates && (
+                  <Button size="sm" onClick={openCreateTemplate}>
+                    <Plus className="h-4 w-4 mr-1.5" />Create template
+                  </Button>
+                )}
+              </div>
+            }
+          />
         </div>
-        {canManageTemplates && (
-          <Button size="sm" onClick={() => { resetTemplateForm(); setShowTemplateModal(true); }}>
-            <Plus className="h-4 w-4 mr-1" />Create Template
-          </Button>
-        )}
       </div>
 
-      <div className="flex gap-1 border-b">
-        {(canManageTemplates ? (["workflows", "health", "templates"] as const) : (["workflows"] as const)).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium transition-colors capitalize -mb-px border-b-2 ${
-              activeTab === tab
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab === "workflows"
-              ? `Active (${visibleWorkflows.filter((w) => w.status === "active").length})`
-              : tab === "health"
-              ? "Health"
-              : "Templates"}
-          </button>
-        ))}
+      <div className="flex flex-wrap gap-1.5 p-1 rounded-xl bg-muted/50 border border-border/50 w-fit max-w-full">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-all",
+                active
+                  ? "bg-background text-foreground shadow-sm border border-border/60"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {tab.label}
+              {tab.count != null && (
+                <span className={cn("font-mono-num text-[10px] opacity-70", active && "opacity-100")}>
+                  ({tab.count})
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
@@ -907,13 +670,17 @@ const WorkflowsPage = () => {
       {!loading && activeTab === "templates" && (
         <>
           {templates.length === 0 ? (
-            <div className="text-center py-16">
-              <GitBranch className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-              <p className="text-lg font-medium text-foreground">No workflow templates</p>
-              <p className="text-sm text-muted-foreground mt-1">Create a template to standardize a recurring process</p>
+            <div className="text-center py-16 rounded-2xl border border-dashed border-border/80 bg-muted/20">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <LayoutTemplate className="h-6 w-6" />
+              </div>
+              <p className="font-display text-lg font-semibold text-foreground">No templates yet</p>
+              <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+                Templates are reusable blueprints — define stages once, then raise workflows anytime.
+              </p>
               {canManageTemplates && (
-                <Button className="mt-4" onClick={() => { resetTemplateForm(); setShowTemplateModal(true); }}>
-                  <Plus className="h-4 w-4 mr-1" />Create Template
+                <Button className="mt-4" onClick={openCreateTemplate}>
+                  <Plus className="h-4 w-4 mr-1" />Create template
                 </Button>
               )}
             </div>
@@ -923,11 +690,11 @@ const WorkflowsPage = () => {
                 const decisions = wf.stages.filter((s) => s.is_decision).length;
                 const ends = wf.stages.filter((s) => s.is_terminal).length;
                 return (
-                  <div key={wf.id} className="bg-card rounded-lg border p-4 hover:shadow-md transition-shadow">
+                  <div key={wf.id} className="group bg-card rounded-2xl border border-border/70 p-4 hover:border-primary/30 hover:shadow-md transition-all">
                     <div className="flex items-start justify-between mb-2">
                       <div>
-                        <h3 className="text-sm font-semibold text-foreground">{wf.name}</h3>
-                        <Badge variant="secondary" className="text-[10px] mt-1">{wf.category}</Badge>
+                        <h3 className="text-sm font-semibold font-display text-foreground">{wf.name}</h3>
+                        <Badge variant="secondary" className="text-[10px] mt-1.5">{wf.category}</Badge>
                       </div>
                       {canManageTemplates && (
                         <DropdownMenu>
@@ -965,7 +732,7 @@ const WorkflowsPage = () => {
                       })}
                     </div>
                     <Button size="sm" className="w-full mt-4" onClick={() => openLaunch(wf)}>
-                      <Play className="h-3 w-3 mr-1" />Raise / Launch
+                      <Play className="h-3.5 w-3.5 mr-1.5" />Raise workflow
                     </Button>
                   </div>
                 );
@@ -1019,7 +786,29 @@ const WorkflowsPage = () => {
 
           {workflowsForTab.length === 0 ? (
             <div className="text-center py-16">
-              <p className="text-muted-foreground">{wfSearch ? "No workflows match your search." : "No active workflows. Launch one from a template."}</p>
+              <p className="text-muted-foreground">
+                {wfSearch
+                  ? "No workflows match your search."
+                  : "No active workflows yet. Raise one from a template to track a multi-stage process."}
+              </p>
+              {!wfSearch && (
+                <Button
+                  className="mt-4"
+                  onClick={() => {
+                    if (templates.length === 0) {
+                      if (canManageTemplates) {
+                        setActiveTab("templates");
+                        openCreateTemplate();
+                      } else toast.info("Ask an admin to create a template first");
+                      return;
+                    }
+                    if (templates.length === 1) openLaunch(templates[0]);
+                    else setShowRaisePicker(true);
+                  }}
+                >
+                  <Play className="h-4 w-4 mr-1.5" />Raise workflow
+                </Button>
+              )}
             </div>
           ) : (
             <div className="bg-card rounded-lg border divide-y">
@@ -1156,128 +945,77 @@ const WorkflowsPage = () => {
         </>
       )}
 
-      {/* Template Create/Edit Modal */}
-      <Dialog open={showTemplateModal} onOpenChange={(o) => { if (!o) { setShowTemplateModal(false); resetTemplateForm(); } }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingTemplate ? "Edit Template" : "Create Workflow Template"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Name *</Label>
-                <Input value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="e.g. Recruitment Process" />
-              </div>
-              <div className="space-y-2">
-                <Label>Category</Label>
-                <Input value={tplCategory} onChange={(e) => setTplCategory(e.target.value)} placeholder="Operations" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea value={tplDescription} onChange={(e) => setTplDescription(e.target.value)} rows={2} />
-            </div>
-            <div className="space-y-3">
-              <div>
-                <Label>Stages * (executed in order; mark Decision for YES/NO branches and End for outcomes)</Label>
-                {tplStages.length > 0 && (
-                  <p className="text-[11px] text-muted-foreground mt-1">Drag the <GripVertical className="inline h-3 w-3" /> handle to reorder. Set <GitFork className="inline h-3 w-3" /> Decision to branch, or <Flag className="inline h-3 w-3" /> End to finish the workflow with an outcome.</p>
-                )}
-              </div>
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleStageDragEnd}>
-                <SortableContext items={tplStages.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-3">
-                    {tplStages.map((s, i) => (
-                      <SortableStage
-                        key={s.id}
-                        stage={s}
-                        index={i}
-                        allStages={tplStages}
-                        departments={departments}
-                        profiles={profiles}
-                        onChange={updateTplStage}
-                        onRemove={removeTplStage}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
-              {tplStages.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-6 border-2 border-dashed rounded-lg">
-                  No stages yet. Click below to add your first stage.
-                </p>
-              )}
-              <button
-                type="button"
-                onClick={addTemplateStage}
-                className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-primary/40 hover:border-primary hover:bg-primary/5 rounded-lg text-sm font-medium text-primary transition-colors"
-              >
-                <Plus className="h-4 w-4" />Add Stage
-              </button>
-            </div>
+      <WorkflowTemplateDialog
+        open={showTemplateModal}
+        onOpenChange={setShowTemplateModal}
+        editing={editingTemplate}
+        departments={departments}
+        profiles={profiles}
+        userId={user?.id}
+        onSaved={fetchAll}
+      />
 
-            {/* Custom fields per template */}
-            <div className="space-y-2 border-t pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Custom fields at launch</Label>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Optional reference fields captured each time this workflow runs (e.g. Indent ID, Consignment No, PO Number).
-                  </p>
-                </div>
-              </div>
-              {tplFields.length > 0 && (
-                <div className="space-y-2">
-                  {tplFields.map((f, idx) => (
-                    <div key={idx} className="grid grid-cols-[1fr_120px_auto_auto] gap-2 items-center border rounded-md p-2">
-                      <Input
-                        value={f.label}
-                        onChange={(e) => updateTplField(idx, { label: e.target.value, field_key: f.field_key || slugify(e.target.value) })}
-                        placeholder="Field label (e.g. Indent ID)"
-                        className="h-8 text-xs"
-                      />
-                      <Select value={f.field_type} onValueChange={(v) => updateTplField(idx, { field_type: v as any })}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="text">Text</SelectItem>
-                          <SelectItem value="number">Number</SelectItem>
-                          <SelectItem value="date">Date</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer">
-                        <input type="checkbox" checked={f.required} onChange={(e) => updateTplField(idx, { required: e.target.checked })} />
-                        Required
-                      </label>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeTplField(idx)}>
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
+      <Dialog open={showRaisePicker} onOpenChange={setShowRaisePicker}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display">Raise a workflow</DialogTitle>
+            <DialogDescription>Choose a template to start a new process instance.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+            {templates.map((t) => (
               <button
+                key={t.id}
                 type="button"
-                onClick={addTemplateField}
-                className="w-full flex items-center justify-center gap-2 py-2 border border-dashed rounded-md text-xs text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
+                onClick={() => {
+                  setShowRaisePicker(false);
+                  openLaunch(t);
+                }}
+                className="w-full text-left rounded-xl border border-border/70 p-3 hover:border-primary/40 hover:bg-primary/[0.04] transition-colors"
               >
-                <Plus className="h-3 w-3" />Add custom field
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{t.name}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+                      {t.description || `${t.stages.length} stages · ${t.category}`}
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="text-[10px] shrink-0">{t.category}</Badge>
+                </div>
               </button>
-            </div>
+            ))}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowTemplateModal(false); resetTemplateForm(); }}>Cancel</Button>
-            <Button onClick={saveTemplate}>{editingTemplate ? "Update" : "Create"}</Button>
-          </DialogFooter>
+          {canManageTemplates && (
+            <DialogFooter className="sm:justify-between gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { setShowRaisePicker(false); openCreateTemplate(); }}>
+                <Plus className="h-4 w-4 mr-1" />New template
+              </Button>
+              <Button variant="outline" onClick={() => setShowRaisePicker(false)}>Cancel</Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
       {/* Launch Modal */}
       <Dialog open={!!launchTemplate} onOpenChange={(o) => !o && setLaunchTemplate(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Raise Workflow: {launchTemplate?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col gap-0 p-0">
+          <div className="relative border-b px-6 pt-5 pb-4 overflow-hidden">
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(ellipse 70% 80% at 0% 0%, hsl(var(--primary) / 0.12), transparent 55%)",
+              }}
+            />
+            <DialogHeader className="relative space-y-1">
+              <DialogTitle className="font-display text-xl tracking-tight">
+                Raise: {launchTemplate?.name}
+              </DialogTitle>
+              <DialogDescription>
+                Fill title and owners — stages will start from position 1 with TAT clocks.
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="space-y-4 px-6 py-5 overflow-y-auto flex-1">
             <div className="space-y-2">
               <Label>Title *</Label>
               <Input value={wfTitle} onChange={(e) => setWfTitle(e.target.value)} placeholder="e.g. Hiring – Junior Designer" />
@@ -1410,9 +1148,11 @@ const WorkflowsPage = () => {
               })}
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="border-t px-6 py-4">
             <Button variant="outline" onClick={() => setLaunchTemplate(null)}>Cancel</Button>
-            <Button onClick={launchWorkflow}>Launch</Button>
+            <Button onClick={launchWorkflow}>
+              <Play className="h-4 w-4 mr-1.5" />Launch workflow
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
