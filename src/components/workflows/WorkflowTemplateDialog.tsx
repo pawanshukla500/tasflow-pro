@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   Plus, X, GripVertical, GitFork, Flag, ChevronLeft, ChevronRight,
   Sparkles, CheckCircle2, Layers, FileText, ListChecks,
@@ -350,6 +350,9 @@ export function WorkflowTemplateDialog({
   const [stages, setStages] = useState<TemplateStageForm[]>([]);
   const [fields, setFields] = useState<TemplateFieldForm[]>([]);
   const [pickedPreset, setPickedPreset] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [stepError, setStepError] = useState<string | null>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -358,6 +361,8 @@ export function WorkflowTemplateDialog({
 
   useEffect(() => {
     if (!open) return;
+    setNameError(null);
+    setStepError(null);
     if (editing) {
       setStep("basics");
       setName(editing.name);
@@ -388,11 +393,12 @@ export function WorkflowTemplateDialog({
   const applyPreset = (preset: WorkflowTemplatePreset) => {
     setPickedPreset(preset.id);
     setName(preset.name);
+    setNameError(null);
+    setStepError(null);
     setCategory(preset.category);
     setDescription(preset.description);
     setStages(stagesFromPreset(preset));
     setFields(fieldsFromPreset(preset));
-    toast.success(`Loaded “${preset.name}” — customize stages next`);
     setStep("stages");
   };
 
@@ -421,29 +427,33 @@ export function WorkflowTemplateDialog({
 
   const validateBasics = () => {
     if (!name.trim()) {
-      toast.error("Give the template a name");
+      setNameError("Template name is required");
+      nameInputRef.current?.focus();
       return false;
     }
+    setNameError(null);
     return true;
   };
 
   const validateStages = () => {
     if (stages.length === 0) {
-      toast.error("Add at least one stage");
+      setStepError("Add at least one stage before continuing");
       return false;
     }
     if (stages.some((s) => !s.name.trim())) {
-      toast.error("Every stage needs a name");
+      setStepError("Every stage needs a name");
       return false;
     }
     if (stages.some((s) => s.is_terminal && !s.outcome_label?.trim())) {
-      toast.error("End stages need an outcome label (e.g. Successful)");
+      setStepError("End stages need an outcome label (e.g. Successful)");
       return false;
     }
+    setStepError(null);
     return true;
   };
 
   const goNext = () => {
+    setStepError(null);
     if (step === "basics" && !validateBasics()) return;
     if (step === "stages" && !validateStages()) return;
     const next = STEPS[stepIndex + 1];
@@ -451,8 +461,27 @@ export function WorkflowTemplateDialog({
   };
 
   const goBack = () => {
+    setStepError(null);
+    setNameError(null);
     const prev = STEPS[stepIndex - 1];
     if (prev) setStep(prev.id);
+  };
+
+  const goToStep = (target: StepId) => {
+    const targetIndex = STEPS.findIndex((s) => s.id === target);
+    if (targetIndex <= stepIndex) {
+      setStepError(null);
+      setStep(target);
+      return;
+    }
+    // Moving forward — validate each skipped step
+    if (stepIndex === 0 && !validateBasics()) return;
+    if (targetIndex >= 2 && stepIndex <= 1 && !validateStages()) {
+      if (step !== "stages") setStep("stages");
+      return;
+    }
+    setStepError(null);
+    setStep(target);
   };
 
   const save = async () => {
@@ -551,151 +580,168 @@ export function WorkflowTemplateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col gap-0 p-0">
-        <div className="relative overflow-hidden border-b px-6 pt-5 pb-4">
-          <div
-            className="pointer-events-none absolute inset-0 opacity-90"
-            style={{
-              background:
-                "radial-gradient(ellipse 80% 60% at 0% 0%, hsl(var(--primary) / 0.12), transparent 55%), radial-gradient(ellipse 50% 40% at 100% 0%, hsl(142 71% 45% / 0.08), transparent 50%)",
-            }}
-          />
-          <DialogHeader className="relative space-y-1">
-            <DialogTitle className="font-display text-xl tracking-tight">
+      <DialogContent
+        className={cn(
+          // Override default Dialog `grid` layout — it breaks sticky header/footer.
+          "!flex flex-col gap-0 p-0 overflow-hidden",
+          "w-[calc(100vw-1.5rem)] max-w-2xl",
+          "h-[min(88vh,760px)] max-h-[88vh]",
+          "sm:rounded-xl",
+        )}
+      >
+        {/* Header — fixed */}
+        <div className="shrink-0 border-b bg-background px-5 pt-5 pb-3 pr-12">
+          <DialogHeader className="space-y-1 text-left">
+            <DialogTitle className="font-display text-lg sm:text-xl tracking-tight">
               {editing ? "Edit workflow template" : "Create workflow template"}
             </DialogTitle>
-            <DialogDescription>
-              Design a reusable multi-stage process — then raise instances with one click.
+            <DialogDescription className="text-xs sm:text-sm">
+              Name it, pick a blueprint (optional), then build stages.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="relative mt-4">
-            <div className="h-1 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className="mt-3 flex gap-1">
-              {STEPS.map((s, i) => {
-                const Icon = s.icon;
-                const active = s.id === step;
-                const done = i < stepIndex;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => {
-                      if (i <= stepIndex || (i === 1 && validateBasics()) || i < stepIndex) setStep(s.id);
-                      else if (i > stepIndex) {
-                        if (step === "basics" && !validateBasics()) return;
-                        if (i >= 2 && stepIndex < 1 && !validateBasics()) return;
-                        if (i >= 2 && !validateStages() && stepIndex >= 1) return;
-                        setStep(s.id);
-                      }
-                    }}
-                    className={cn(
-                      "flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] sm:text-xs font-medium transition-colors",
-                      active && "bg-primary text-primary-foreground shadow-sm",
-                      done && !active && "bg-primary/10 text-primary",
-                      !active && !done && "text-muted-foreground hover:bg-muted/80",
-                    )}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    <span className="hidden sm:inline">{s.label}</span>
-                    <span className="sm:hidden">{i + 1}</span>
-                  </button>
-                );
-              })}
-            </div>
+          <nav className="mt-4 flex items-center gap-1" aria-label="Template steps">
+            {STEPS.map((s, i) => {
+              const Icon = s.icon;
+              const active = s.id === step;
+              const done = i < stepIndex;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => goToStep(s.id)}
+                  className={cn(
+                    "flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 rounded-lg px-1.5 py-2 text-[11px] sm:text-xs font-medium transition-colors min-h-10",
+                    active && "bg-primary text-primary-foreground",
+                    done && !active && "bg-primary/10 text-primary",
+                    !active && !done && "bg-muted/60 text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span>{s.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+          <div className="mt-2 h-1 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+        {/* Body — only this scrolls */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+          {stepError && (
+            <div
+              role="alert"
+              className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {stepError}
+            </div>
+          )}
+
           {step === "basics" && (
-            <div className="space-y-5 animate-in fade-in-0 slide-in-from-right-2 duration-200">
-              {!editing && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <Label className="text-sm">Start from a blueprint</Label>
+            <div className="space-y-5">
+              {/* Primary fields first */}
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="tpl-name">Template name *</Label>
+                  <Input
+                    id="tpl-name"
+                    ref={nameInputRef}
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (nameError) setNameError(null);
+                    }}
+                    placeholder="e.g. Purchase Approval"
+                    className={cn("h-10", nameError && "border-destructive focus-visible:ring-destructive")}
+                    autoFocus
+                  />
+                  {nameError && (
+                    <p className="text-xs text-destructive" role="alert">{nameError}</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="tpl-category">Category</Label>
+                    <Input
+                      id="tpl-category"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      placeholder="Operations"
+                      list="wf-categories"
+                      className="h-10"
+                    />
+                    <datalist id="wf-categories">
+                      <option value="Operations" />
+                      <option value="Procurement" />
+                      <option value="HR" />
+                      <option value="Finance" />
+                      <option value="Quality" />
+                    </datalist>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Pick a common process — stages and fields are filled in. You can edit everything after.
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="tpl-desc">Description</Label>
+                    <Textarea
+                      id="tpl-desc"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={2}
+                      placeholder="When should teams use this workflow?"
+                      className="resize-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Compact blueprints after the form */}
+              {!editing && (
+                <div className="space-y-2 pt-1 border-t border-border/60">
+                  <div className="flex items-center gap-1.5 pt-3">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                    <Label className="text-xs text-muted-foreground font-medium">
+                      Or start from a blueprint
+                    </Label>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     {WORKFLOW_TEMPLATE_PRESETS.map((p) => (
                       <button
                         key={p.id}
                         type="button"
                         onClick={() => applyPreset(p)}
                         className={cn(
-                          "text-left rounded-xl border p-3 transition-all hover:border-primary/50 hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          pickedPreset === p.id && "border-primary bg-primary/[0.06] ring-1 ring-primary/30",
+                          "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                          "hover:border-primary/50 hover:bg-primary/[0.04]",
+                          pickedPreset === p.id
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border bg-card text-foreground",
                         )}
                       >
-                        <p className="text-sm font-semibold text-foreground leading-snug">{p.name}</p>
-                        <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{p.blurb}</p>
-                        <Badge variant="secondary" className="mt-2 text-[10px]">{p.category}</Badge>
+                        {p.name}
+                        <Badge variant="secondary" className="text-[9px] h-4 px-1.5 font-normal">
+                          {p.category}
+                        </Badge>
                       </button>
                     ))}
                   </div>
-                  <div className="relative py-1">
-                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border/70" /></div>
-                    <div className="relative flex justify-center">
-                      <span className="bg-background px-2 text-[11px] text-muted-foreground">or start blank</span>
-                    </div>
-                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Blueprints fill stages and fields — you can edit everything on the next steps.
+                  </p>
                 </div>
               )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2 sm:col-span-2">
-                  <Label>Template name *</Label>
-                  <Input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Purchase Approval"
-                    className="h-11 text-base"
-                    autoFocus
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Category</Label>
-                  <Input
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    placeholder="Operations"
-                    list="wf-categories"
-                  />
-                  <datalist id="wf-categories">
-                    <option value="Operations" />
-                    <option value="Procurement" />
-                    <option value="HR" />
-                    <option value="Finance" />
-                    <option value="Quality" />
-                  </datalist>
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label>Description</Label>
-                  <Textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={2}
-                    placeholder="When should teams use this workflow?"
-                  />
-                </div>
-              </div>
             </div>
           )}
 
           {step === "stages" && (
-            <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-2 duration-200">
+            <div className="space-y-4">
               <div>
                 <Label className="text-sm">Build the pipeline *</Label>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Drag to reorder. Mark <GitFork className="inline h-3 w-3" /> Decision for YES/NO branches, or{" "}
-                  <Flag className="inline h-3 w-3" /> End when the process finishes.
+                  Drag to reorder. Mark Decision for YES/NO branches, or End when the process finishes.
                 </p>
               </div>
               <PipelinePreview stages={stages} />
@@ -710,7 +756,10 @@ export function WorkflowTemplateDialog({
                         allStages={stages}
                         departments={departments}
                         profiles={profiles}
-                        onChange={updateStage}
+                        onChange={(id, patch) => {
+                          setStepError(null);
+                          updateStage(id, patch);
+                        }}
                         onRemove={removeStage}
                       />
                     ))}
@@ -718,8 +767,8 @@ export function WorkflowTemplateDialog({
                 </SortableContext>
               </DndContext>
               {stages.length === 0 && (
-                <div className="rounded-xl border-2 border-dashed border-border py-10 text-center space-y-3">
-                  <Layers className="h-8 w-8 text-muted-foreground mx-auto opacity-60" />
+                <div className="rounded-xl border border-dashed border-border py-8 text-center space-y-3">
+                  <Layers className="h-7 w-7 text-muted-foreground mx-auto opacity-60" />
                   <p className="text-sm text-muted-foreground">No stages yet</p>
                   <Button type="button" variant="outline" size="sm" onClick={addStage}>
                     <Plus className="h-4 w-4 mr-1" />Add first stage
@@ -729,8 +778,8 @@ export function WorkflowTemplateDialog({
               {stages.length > 0 && (
                 <button
                   type="button"
-                  onClick={addStage}
-                  className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-primary/35 hover:border-primary hover:bg-primary/5 rounded-xl text-sm font-medium text-primary transition-colors"
+                  onClick={() => { setStepError(null); addStage(); }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-primary/40 hover:border-primary hover:bg-primary/5 rounded-xl text-sm font-medium text-primary transition-colors"
                 >
                   <Plus className="h-4 w-4" />Add stage
                 </button>
@@ -739,11 +788,11 @@ export function WorkflowTemplateDialog({
           )}
 
           {step === "fields" && (
-            <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-2 duration-200">
+            <div className="space-y-4">
               <div>
                 <Label className="text-sm">Launch fields (optional)</Label>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Captured every time someone raises this workflow — Indent ID, Lot no., Candidate name, etc.
+                  Captured each time this workflow is raised — Indent ID, Lot no., Candidate name, etc.
                 </p>
               </div>
               {fields.length === 0 ? (
@@ -802,7 +851,7 @@ export function WorkflowTemplateDialog({
           )}
 
           {step === "review" && (
-            <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-2 duration-200">
+            <div className="space-y-4">
               <div className="rounded-xl border bg-card p-4 space-y-3">
                 <div>
                   <p className="font-display text-lg font-semibold text-foreground">{name || "Untitled"}</p>
@@ -838,26 +887,28 @@ export function WorkflowTemplateDialog({
           )}
         </div>
 
-        <DialogFooter className="border-t px-6 py-4 gap-2 sm:gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
+        {/* Footer — fixed, never overlapped */}
+        <div className="shrink-0 border-t bg-background px-5 py-3 flex flex-wrap items-center gap-2">
+          <Button type="button" variant="ghost" className="h-10" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <div className="flex-1" />
+          <div className="flex-1 min-w-2" />
           {stepIndex > 0 && (
-            <Button variant="outline" onClick={goBack} disabled={saving}>
+            <Button type="button" variant="outline" className="h-10" onClick={goBack} disabled={saving}>
               <ChevronLeft className="h-4 w-4 mr-1" />Back
             </Button>
           )}
           {step !== "review" ? (
-            <Button onClick={goNext}>
-              Continue <ChevronRight className="h-4 w-4 ml-1" />
+            <Button type="button" className="h-10 min-w-[7.5rem]" onClick={goNext}>
+              Continue
+              <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           ) : (
-            <Button onClick={() => void save()} disabled={saving} className="min-w-[140px]">
+            <Button type="button" className="h-10 min-w-[9rem]" onClick={() => void save()} disabled={saving}>
               {saving ? "Saving…" : editing ? "Save changes" : "Create template"}
             </Button>
           )}
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
