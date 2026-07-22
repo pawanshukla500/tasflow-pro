@@ -2,11 +2,10 @@ import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search, Download, Upload, ChevronDown, ChevronRight, Circle, CheckCircle2,
-  MoreHorizontal, Plus, Trash2, ArrowRight, Pencil, User, UserCheck, Building2,
+  MoreHorizontal, Plus, Trash2, ArrowRight, Pencil, User,
   Clock, ListTodo, AlertTriangle, CalendarClock, Inbox,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -63,7 +62,7 @@ const MyTasks = () => {
   const { tasks, loading, loadingMore, fetchTasks, updateTaskStatus, deleteTask, hasMore, loadMore, total } = useTasks();
   const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<MyTasksTab>("assigned_to_me");
-  const [collapsedSections, setCollapsedSections] = useState<string[]>([]);
+  const [collapsedSections, setCollapsedSections] = useState<string[]>(["completed"]);
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskRow | null>(null);
@@ -164,24 +163,21 @@ const MyTasks = () => {
   ];
 
   const sections = [
-    { title: "Overdue", tasks: overdue, color: "text-destructive", border: "border-destructive/30", bg: "bg-destructive/5", icon: AlertTriangle, id: "overdue" },
-    { title: "Due Today", tasks: dueToday, color: "text-warning", border: "border-warning/30", bg: "bg-warning/5", icon: CalendarClock, id: "today" },
-    { title: "Upcoming", tasks: upcoming, color: "text-primary", border: "border-primary/20", bg: "bg-primary/5", icon: Clock, id: "upcoming" },
-    { title: "Completed", tasks: completed, color: "text-success", border: "border-success/20", bg: "bg-success/5", icon: CheckCircle2, id: "completed" },
+    { title: "Overdue", tasks: overdue, color: "text-destructive", accent: "border-l-destructive", icon: AlertTriangle, id: "overdue" },
+    { title: "Due Today", tasks: dueToday, color: "text-warning", accent: "border-l-warning", icon: CalendarClock, id: "today" },
+    { title: "Upcoming", tasks: upcoming, color: "text-primary", accent: "border-l-primary", icon: Clock, id: "upcoming" },
+    { title: "Completed", tasks: completed, color: "text-success", accent: "border-l-success", icon: CheckCircle2, id: "completed" },
   ];
 
   const kpis = [
-    { label: "Overdue", value: overdue.length, tone: "text-destructive", bg: "from-destructive/15 to-destructive/5" },
-    { label: "Due Today", value: dueToday.length, tone: "text-warning", bg: "from-warning/15 to-warning/5" },
-    { label: "Active", value: activeCount, tone: "text-primary", bg: "from-primary/15 to-primary/5" },
-    { label: "Done", value: completed.length, tone: "text-success", bg: "from-success/15 to-success/5" },
+    { label: "Overdue", value: overdue.length, tone: "text-destructive" },
+    { label: "Due today", value: dueToday.length, tone: "text-warning" },
+    { label: "Active", value: activeCount, tone: "text-primary" },
+    { label: "Done", value: completed.length, tone: "text-success" },
   ];
 
   const toggle = (id: string) =>
     setCollapsedSections((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
-
-  const getInitials = (name: string) =>
-    name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
   const handleStatusChange = async (task: TaskRow, newStatus: string) => {
     if (newStatus === "done" && task.requires_review && !canEditTaskMetadata(task, user?.id, isAdminOrMD, { isHR, managedDepartments: managedDepartments || [] })) {
@@ -247,46 +243,47 @@ const MyTasks = () => {
       <div
         id={`task-${task.id}`}
         className={cn(
-          "flex items-center gap-3 px-3.5 py-3 rounded-xl border bg-card/80 hover:bg-muted/40 hover:border-primary/20 transition-all group",
-          highlightTaskId === task.id && "ring-2 ring-primary/40 bg-primary/5",
+          "flex items-center gap-2.5 px-2.5 sm:px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors group",
+          highlightTaskId === task.id && "bg-primary/5 ring-1 ring-primary/30",
         )}
       >
         <button
-          className="text-muted-foreground hover:text-success transition-colors shrink-0"
+          type="button"
+          className="text-muted-foreground hover:text-success transition-colors shrink-0 p-0.5"
           onClick={() => handleCompleteClick(task)}
+          aria-label={task.status === "done" ? "Mark incomplete" : "Mark complete"}
         >
           {task.status === "done" ? (
-            <CheckCircle2 className="h-5 w-5 text-success" />
+            <CheckCircle2 className="h-4.5 w-4.5 h-[18px] w-[18px] text-success" />
           ) : (
-            <Circle className="h-5 w-5" />
+            <Circle className="h-[18px] w-[18px]" />
           )}
         </button>
 
         <div className="flex-1 min-w-0">
           <button
-            className="block w-full text-sm font-medium text-foreground text-left hover:text-primary transition-colors truncate"
+            type="button"
+            className={cn(
+              "block w-full text-sm text-left truncate transition-colors hover:text-primary",
+              task.status === "done" ? "text-muted-foreground line-through decoration-muted-foreground/40" : "font-medium text-foreground",
+            )}
             onClick={() => setEditingTask(task)}
           >
             {task.title}
           </button>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[11px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-[11px] text-muted-foreground">
             {firstAssignee ? (
-              <span className="inline-flex items-center gap-1 min-w-0">
-                <User className="h-3 w-3 shrink-0 opacity-60" />
-                <span className="truncate">{firstAssignee.name}{task.assignees.length > 1 && ` +${task.assignees.length - 1}`}</span>
-              </span>
+              <span className="truncate max-w-[140px]">{firstAssignee.name}{task.assignees.length > 1 ? ` +${task.assignees.length - 1}` : ""}</span>
             ) : (
-              <span className="inline-flex items-center gap-1"><User className="h-3 w-3 opacity-60" />Unassigned</span>
+              <span>Unassigned</span>
             )}
-            {task.creator_name && task.creator_name !== firstAssignee?.name && (
-              <span className="inline-flex items-center gap-1 min-w-0">
+            {task.department_name && (
+              <>
                 <span className="opacity-30">·</span>
-                <UserCheck className="h-3 w-3 shrink-0 opacity-60" />
-                <span className="truncate">{task.creator_name}</span>
-              </span>
+                <span className="truncate max-w-[120px]">{task.department_name}</span>
+              </>
             )}
-            {/* Compact meta — mobile only; desktop shows the right-side columns */}
-            <span className="sm:hidden inline-flex items-center gap-2">
+            <span className="sm:hidden inline-flex items-center gap-1.5">
               <span className="opacity-30">·</span>
               <span className="inline-flex items-center gap-1 capitalize">
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: priorityColors[task.priority] }} />
@@ -304,48 +301,32 @@ const MyTasks = () => {
           </div>
         </div>
 
-        {/* Right-aligned meta columns (desktop) */}
-        <div className="hidden sm:flex items-center gap-3 shrink-0">
-          {task.department_name && (
-            <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1 max-w-[140px]">
-              <Building2 className="h-3 w-3 shrink-0 opacity-60" />
-              <span className="truncate">{task.department_name}</span>
-            </span>
-          )}
-          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground capitalize w-16">
+        <div className="hidden sm:flex items-center gap-2.5 shrink-0 text-[11px]">
+          <span className="inline-flex items-center gap-1 text-muted-foreground capitalize w-14">
             <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: priorityColors[task.priority] }} />
             {task.priority}
           </span>
           <span className={cn(
-            "text-[11px] font-mono-num w-16 text-right",
+            "font-mono-num w-14 text-right",
             isOverdue ? "text-destructive font-semibold" : isDueToday ? "text-warning font-medium" : "text-muted-foreground",
           )}>
-            {task.due_date ? (
-              <>
-                {formatDateIST(task.due_date, { day: "numeric", month: "short" })}
-                {isOverdue && " ⚠"}
-              </>
-            ) : "—"}
+            {task.due_date ? formatDateIST(task.due_date, { day: "numeric", month: "short" }) : "—"}
           </span>
-          <Badge
-            variant="outline"
-            className="text-[10px] border-0 px-2 w-[76px] justify-center"
-            style={{ color: statusColors[task.status], background: `${statusColors[task.status]}14` }}
+          <span
+            className="w-[72px] text-center font-medium"
+            style={{ color: statusColors[task.status] }}
           >
             {statusLabels[task.status]}
-          </Badge>
-          <div className="flex -space-x-1.5 w-[44px] justify-end">
-            {task.assignees.slice(0, 2).map((a) => (
-              <div key={a.user_id} className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center text-[9px] font-bold border-2 border-card" title={a.name}>
-                {getInitials(a.name)}
-              </div>
-            ))}
-          </div>
+          </span>
         </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0 opacity-60 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+            >
               <MoreHorizontal className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
@@ -406,7 +387,7 @@ const MyTasks = () => {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto page-enter space-y-5">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto page-enter space-y-4">
       <PageHeader
         title="My Tasks"
         description={`${activeCount} active · ${completed.length} completed`}
@@ -419,7 +400,7 @@ const MyTasks = () => {
               <Download className="h-3.5 w-3.5 mr-1" />Export
             </Button>
             {accessScope.canCreateTasks && (
-              <Button size="sm" className="shadow-md shadow-primary/20" onClick={() => setShowCreate(true)}>
+              <Button size="sm" onClick={() => setShowCreate(true)}>
                 <Plus className="h-3.5 w-3.5 mr-1" />New Task
               </Button>
             )}
@@ -427,73 +408,78 @@ const MyTasks = () => {
         }
       />
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {kpis.map((k) => (
-          <div key={k.label} className={cn("card-premium p-3.5 bg-gradient-to-br", k.bg)}>
-            <p className={cn("text-2xl font-mono-num font-bold leading-none", k.tone)}>{k.value}</p>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5 font-semibold">{k.label}</p>
+      {/* Compact KPI strip — one row, no heavy cards */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm border-b border-border/60 pb-3">
+        {kpis.map((k, i) => (
+          <div key={k.label} className="inline-flex items-baseline gap-1.5">
+            {i > 0 && <span className="text-border mr-2 hidden sm:inline">|</span>}
+            <span className={cn("font-mono-num font-semibold tabular-nums", k.tone)}>{k.value}</span>
+            <span className="text-xs text-muted-foreground">{k.label}</span>
           </div>
         ))}
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-        <div className="relative flex-1 max-w-md">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-9 h-9 rounded-xl bg-muted/30 border-border/60"
-            placeholder="Search tasks…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      {/* Search + member filter + view tabs */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <div className="relative flex-1 max-w-md">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9 h-9"
+              placeholder="Search tasks…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {canFilterByUser && (
+            <Select value={userFilter} onValueChange={setUserFilter}>
+              <SelectTrigger className="h-9 w-full sm:w-[180px] text-xs">
+                <SelectValue placeholder="Team member…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{isAdminOrMD ? "All team members" : "My team"}</SelectItem>
+                {user?.id && (
+                  <SelectItem value={user.id}>Me</SelectItem>
+                )}
+                {filterableUsers
+                  .filter((member) => member.id !== user?.id)
+                  .map((member) => (
+                    <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
-        {canFilterByUser && (
-          <Select value={userFilter} onValueChange={setUserFilter}>
-            <SelectTrigger className="h-9 w-full sm:w-[180px] text-xs rounded-xl">
-              <SelectValue placeholder="Team member…" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{isAdminOrMD ? "All team members" : "My team"}</SelectItem>
-              {user?.id && (
-                <SelectItem value={user.id}>Me</SelectItem>
-              )}
-              {filterableUsers
-                .filter((member) => member.id !== user?.id)
-                .map((member) => (
-                  <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
 
-      {/* Filter tabs */}
-      <div className="flex items-center gap-1 bg-muted/40 rounded-xl p-1 border w-fit flex-wrap">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all press-scale",
-                isActive ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {tab.label}
-              <span className="font-mono-num text-[10px] opacity-70">({tab.count})</span>
-            </button>
-          );
-        })}
+        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors",
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {tab.label}
+                <span className="font-mono-num text-[10px] opacity-70">{tab.count}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Task sections */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         {sections.every((s) => s.tasks.length === 0) ? (
-          <div className="card-premium border-dashed">
+          <div className="rounded-xl border border-dashed">
             <EmptyState
               icon={ListTodo}
               title="No tasks in this view"
@@ -518,33 +504,39 @@ const MyTasks = () => {
               const isCollapsed = collapsedSections.includes(section.id);
               const Icon = section.icon;
               return (
-                <div key={section.id} className={cn("rounded-xl border overflow-hidden", section.border, section.bg)}>
+                <section
+                  key={section.id}
+                  className={cn("rounded-lg border border-border/70 border-l-4 bg-card overflow-hidden", section.accent)}
+                >
                   <button
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-background/40 transition-colors"
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition-colors"
                     onClick={() => toggle(section.id)}
                   >
                     <div className="flex items-center gap-2">
-                      {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      <Icon className={cn("h-4 w-4", section.color)} />
-                      <span className={cn("text-sm font-semibold", section.color)}>{section.title}</span>
-                      <Badge variant="secondary" className="text-[10px] h-5 font-mono-num">{section.tasks.length}</Badge>
+                      {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                      <Icon className={cn("h-3.5 w-3.5", section.color)} />
+                      <span className={cn("text-xs font-semibold uppercase tracking-wide", section.color)}>
+                        {section.title}
+                      </span>
+                      <span className="font-mono-num text-[11px] text-muted-foreground">{section.tasks.length}</span>
                     </div>
                   </button>
                   {!isCollapsed && (
-                    <div className="px-3 pb-3 space-y-2">
+                    <div className="border-t border-border/50 divide-y divide-border/40">
                       {section.tasks.map((task) => (
                         <TaskCard key={task.id} task={task} />
                       ))}
                     </div>
                   )}
-                </div>
+                </section>
               );
             })
         )}
       </div>
 
       {hasMore && (
-        <div className="flex flex-col items-center gap-2 pt-2">
+        <div className="flex flex-col items-center gap-2 pt-1">
           <p className="text-xs text-muted-foreground">
             Showing {tasks.length}
             {typeof total === "number" ? ` of ${total}` : ""} tasks
