@@ -2,6 +2,13 @@
   "mcpServers": {
     "supabase": {
       "url": "https://mcp.supabase.com/mcp?project_ref=nekdjoquirhecmejuoba"
+    },
+    "magic": {
+      "command": "npx",
+      "args": ["-y", "@21st-dev/magic@latest"],
+      "env": {
+        "API_KEY": "${MAGIC_API_KEY}"
+      }
     }
   }
 }
