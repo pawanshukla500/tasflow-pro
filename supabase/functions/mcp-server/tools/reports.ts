@@ -1,9 +1,6 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { type McpTool, objectSchema } from "./types.ts";
-
-function istToday(): string {
-  return new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
-}
+import { istToday } from "../../_shared/ist.ts";
 
 interface TaskRow {
   id: string; title: string; status: string; priority: string;

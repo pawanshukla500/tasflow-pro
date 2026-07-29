@@ -21,7 +21,7 @@ import { useTasks } from "@/hooks/useTasks";
 import CreateTaskModal from "@/components/CreateTaskModal";
 import { PageHeader } from "@/components/PageHeader";
 import { CountUp } from "@/components/motion";
-import { todayIST, formatDateIST, IST_TIME_ZONE } from "@/lib/time";
+import { todayIST, formatDateIST, addDaysIST } from "@/lib/time";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { HomeKpiCard } from "@/components/HomeKpiCard";
@@ -40,7 +40,7 @@ interface WorkflowRow {
 }
 
 const istDateOf = (ts: string) =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: IST_TIME_ZONE }).format(new Date(ts));
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(ts));
 
 /** Tiny inline sparkline (SVG) for KPI cards. */
 const Sparkline = ({ points, className = "" }: { points: number[]; className?: string }) => {
@@ -200,10 +200,9 @@ const Dashboard = () => {
   // ── KPI + trend computations ─────────────────────────────────────
   const dueTodayCount = tasks.filter(t => t.due_date === today && t.status !== "done").length;
   const dueTomorrow = useMemo(() => {
-    const d = new Date(); d.setDate(d.getDate() + 1);
-    const tomorrow = istDateOf(d.toISOString());
+    const tomorrow = addDaysIST(today, 1);
     return tasks.filter(t => t.due_date === tomorrow && t.status !== "done").length;
-  }, [tasks]);
+  }, [tasks, today]);
   const overdueCount = tasks.filter(t => t.due_date && t.due_date < today && t.status !== "done").length;
   const overdueHigh = tasks.filter(t => t.due_date && t.due_date < today && t.status !== "done" && (t.priority === "high" || t.priority === "critical")).length;
   const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
@@ -214,8 +213,7 @@ const Dashboard = () => {
   const { activitySeries, createdSpark, completedSpark, completedThisWeek, completedLastWeek } = useMemo(() => {
     const days: string[] = [];
     for (let i = 13; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      days.push(istDateOf(d.toISOString()));
+      days.push(addDaysIST(today, -i));
     }
     const createdBy = new Map<string, number>();
     const completedBy = new Map<string, number>();
@@ -243,7 +241,7 @@ const Dashboard = () => {
       completedThisWeek: sum(last7, completedBy),
       completedLastWeek: sum(prev7, completedBy),
     };
-  }, [tasks]);
+  }, [tasks, today]);
 
   const statusData = useMemo(() =>
     ["todo", "in_progress", "pending_review", "done", "blocked"]

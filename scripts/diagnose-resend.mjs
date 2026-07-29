@@ -31,8 +31,8 @@ function loadEnv() {
 
 const env = loadEnv();
 const apiKey = env.RESEND_API_KEY;
-const fromEmail = env.EMAIL_FROM || env.GMAIL_SENDER_EMAIL || "noreply@youthnic.shop";
-const fromName = env.EMAIL_FROM_NAME || env.GMAIL_FROM_NAME || "TaskFlow Pro by VB Exports";
+const fromEmail = env.EMAIL_FROM || env.GMAIL_SENDER_EMAIL || "task@youthnic.shop";
+const fromName = env.EMAIL_FROM_NAME || env.GMAIL_FROM_NAME || "TaskFlow Pro";
 
 console.log("=== Resend diagnostics ===\n");
 

@@ -37,8 +37,8 @@ if (!apiKey || apiKey.startsWith("REPLACE")) {
 
 const lines = [
   `RESEND_API_KEY=${apiKey}`,
-  `EMAIL_FROM=${env.EMAIL_FROM || env.GMAIL_SENDER_EMAIL || "noreply@youthnic.shop"}`,
-  `EMAIL_FROM_NAME=${env.EMAIL_FROM_NAME || env.GMAIL_FROM_NAME || "TaskFlow Pro by VB Exports"}`,
+  `EMAIL_FROM=${env.EMAIL_FROM || env.GMAIL_SENDER_EMAIL || "task@youthnic.shop"}`,
+  `EMAIL_FROM_NAME=${env.EMAIL_FROM_NAME || env.GMAIL_FROM_NAME || "TaskFlow Pro"}`,
 ];
 
 if (env.APP_URL) lines.push(`APP_URL=${env.APP_URL}`);

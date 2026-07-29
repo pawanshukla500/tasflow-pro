@@ -1,6 +1,7 @@
 // Weekly department insight for Managing Directors and System Admins.
 // Schedule via pg_cron (e.g. every Monday 09:00 IST).
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { istToday, istAddDays } from '../_shared/ist.ts'
 
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }
 
@@ -17,11 +18,10 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey)
   const appUrl = (Deno.env.get('APP_URL') || 'https://task.youthnic.shop').replace(/\/$/, '')
 
-  const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
-  const today = istNow.toISOString().slice(0, 10)
-  const weekAgo = new Date(istNow.getTime() - 7 * 86400000).toISOString().slice(0, 10)
+  const today = istToday()
+  const weekAgo = istAddDays(today, -7)
   const weekKey = (() => {
-    const d = new Date(istNow)
+    const d = new Date(`${today}T12:00:00+05:30`)
     const day = d.getUTCDay() || 7
     d.setUTCDate(d.getUTCDate() + 4 - day)
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
       } else {
         row.total++
         if (t.due_date && t.due_date < today) row.overdue++
-        else if (t.due_date && t.due_date <= new Date(istNow.getTime() + 3 * 86400000).toISOString().slice(0, 10)) row.dueSoon++
+        else if (t.due_date && t.due_date <= istAddDays(today, 3)) row.dueSoon++
       }
     }
 

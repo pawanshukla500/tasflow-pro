@@ -1,6 +1,7 @@
 // Daily department summary for department managers (team workload, overdue, pending).
 // Schedule via pg_cron daily at 08:30 IST (after user digests).
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { istToday, istAddDays } from "../_shared/ist.ts";
 
 const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*" };
 
@@ -24,11 +25,10 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceRoleKey);
   const appUrl = (Deno.env.get("APP_URL") || "https://task.youthnic.shop").replace(/\/$/, "");
-  const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const dueSoonEnd = new Date(Date.now() + (5.5 * 60 * 60 * 1000) + 3 * 86400000)
-    .toISOString()
-    .slice(0, 10);
-  const dateLabel = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toLocaleDateString("en-IN", {
+  const today = istToday();
+  const dueSoonEnd = istAddDays(today, 3);
+  const dateLabel = new Date().toLocaleDateString("en-IN", {
+    timeZone: "Asia/Kolkata",
     day: "numeric", month: "short", year: "numeric",
   });
 

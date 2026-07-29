@@ -4,7 +4,7 @@
  *
  * Env:
  *   RESEND_API_KEY          — required (from Resend dashboard)
- *   EMAIL_FROM              — e.g. noreply@youthnic.shop (falls back to GMAIL_SENDER_EMAIL)
+ *   EMAIL_FROM              — e.g. task@youthnic.shop (falls back to GMAIL_SENDER_EMAIL)
  *   EMAIL_FROM_NAME         — display name (falls back to GMAIL_FROM_NAME)
  */
 export interface SendEmailOptions {
@@ -22,7 +22,7 @@ export function getFromEmail(): string {
   return (
     Deno.env.get("EMAIL_FROM")?.trim() ||
     Deno.env.get("GMAIL_SENDER_EMAIL")?.trim() ||
-    "noreply@youthnic.shop"
+    "task@youthnic.shop"
   );
 }
 
@@ -30,7 +30,7 @@ export function getFromName(): string {
   return (
     Deno.env.get("EMAIL_FROM_NAME")?.trim() ||
     Deno.env.get("GMAIL_FROM_NAME")?.trim() ||
-    "TaskFlow Pro by VB Exports"
+    "TaskFlow Pro"
   );
 }
 
