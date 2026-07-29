@@ -7,7 +7,11 @@
       "command": "npx",
       "args": ["-y", "@21st-dev/magic@latest"],
       "env": {
+<<<<<<< HEAD
         "API_KEY": "${TWENTY_FIRST_API_KEY}"
+=======
+        "API_KEY": "${MAGIC_API_KEY}"
+>>>>>>> origin/main
       }
     }
   }
