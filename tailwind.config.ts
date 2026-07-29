@@ -14,17 +14,15 @@ export default {
     },
     extend: {
       fontFamily: {
-        // Body / UI — Manrope (readable geometric sans)
-        sans: ["Manrope", "system-ui", "sans-serif"],
-        // Headings / brand — Plus Jakarta Sans
-        display: ["Plus Jakarta Sans", "Manrope", "system-ui", "sans-serif"],
+        // Body + display — Plus Jakarta Sans (UI/UX Pro Max SaaS pairing)
+        sans: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
+        display: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
         mono: ["DM Mono", "ui-monospace", "monospace"],
       },
-      // Only ship 400 / 500 / 700 — map Tailwind's 600 "semibold" → 700
       fontWeight: {
         normal: "400",
         medium: "500",
-        semibold: "700",
+        semibold: "600",
         bold: "700",
       },
       fontSize: {

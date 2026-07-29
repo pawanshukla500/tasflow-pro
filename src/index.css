@@ -1,6 +1,5 @@
 /* Fonts load from index.html (preconnect + preload + display=swap).
-   Pairing: Manrope (body) + Plus Jakarta Sans (display) + DM Mono.
-   Weights shipped: 400, 500, 700 only. */
+   Pairing: Plus Jakarta Sans (body + display) + DM Mono — Soft UI / SaaS. */
 
 @tailwind base;
 @tailwind components;
@@ -9,114 +8,115 @@
 @layer base {
   :root {
     /* Type scale tokens (rem) */
-    --font-sans: "Manrope", system-ui, sans-serif;
-    --font-display: "Plus Jakarta Sans", "Manrope", system-ui, sans-serif;
+    --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+    --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
     --font-mono: "DM Mono", ui-monospace, monospace;
 
-    --text-body-size: 1rem;
-    --text-body-leading: 1.625;
-    --text-body-tracking: 0;
+    --text-body-size: 0.9375rem;
+    --text-body-leading: 1.6;
+    --text-body-tracking: -0.011em;
     --text-muted-leading: 1.5;
 
-    --background: 36 33% 97%;
-    --foreground: 240 10% 10%;
+    /* Soft UI teal system (UI/UX Pro Max — productivity SaaS) */
+    --background: 166 35% 97%;
+    --foreground: 175 45% 14%;
 
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 10%;
+    --card-foreground: 175 45% 14%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 10%;
+    --popover-foreground: 175 45% 14%;
 
-    --primary: 239 84% 67%;
+    --primary: 174 84% 32%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 36 20% 93%;
-    --secondary-foreground: 240 10% 10%;
+    --secondary: 166 25% 93%;
+    --secondary-foreground: 175 40% 18%;
 
-    --muted: 36 15% 93%;
-    --muted-foreground: 30 5% 50%;
+    --muted: 168 22% 93%;
+    --muted-foreground: 175 12% 40%;
 
-    --accent: 239 84% 95%;
-    --accent-foreground: 239 84% 50%;
+    --accent: 174 45% 94%;
+    --accent-foreground: 174 70% 26%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 45%;
+    --success: 152 60% 36%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 50%;
+    --warning: 32 95% 44%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 30 15% 90%;
-    --input: 30 15% 90%;
-    --ring: 239 84% 67%;
+    --border: 168 20% 88%;
+    --input: 168 20% 88%;
+    --ring: 174 84% 32%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
 
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 240 5% 35%;
-    --sidebar-primary: 239 84% 67%;
+    --sidebar-foreground: 175 18% 32%;
+    --sidebar-primary: 174 84% 32%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 239 84% 95%;
-    --sidebar-accent-foreground: 239 84% 50%;
-    --sidebar-border: 30 15% 92%;
-    --sidebar-ring: 239 84% 67%;
+    --sidebar-accent: 174 45% 94%;
+    --sidebar-accent-foreground: 174 70% 26%;
+    --sidebar-border: 168 18% 90%;
+    --sidebar-ring: 174 84% 32%;
 
-    --chart-indigo: 239 84% 67%;
-    --chart-green: 142 71% 45%;
-    --chart-amber: 38 92% 50%;
+    --chart-indigo: 174 84% 37%;
+    --chart-green: 152 60% 36%;
+    --chart-amber: 32 95% 44%;
     --chart-red: 0 72% 51%;
   }
 
   .dark {
-    --background: 240 10% 8%;
-    --foreground: 0 0% 95%;
+    --background: 175 30% 7%;
+    --foreground: 166 20% 96%;
 
-    --card: 240 10% 12%;
-    --card-foreground: 0 0% 95%;
+    --card: 175 25% 10%;
+    --card-foreground: 166 20% 96%;
 
-    --popover: 240 10% 12%;
-    --popover-foreground: 0 0% 95%;
+    --popover: 175 25% 10%;
+    --popover-foreground: 166 20% 96%;
 
-    --primary: 239 84% 67%;
+    --primary: 174 70% 42%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 10% 16%;
-    --secondary-foreground: 0 0% 95%;
+    --secondary: 175 18% 16%;
+    --secondary-foreground: 166 20% 96%;
 
-    --muted: 240 10% 16%;
-    --muted-foreground: 240 5% 55%;
+    --muted: 175 16% 15%;
+    --muted-foreground: 168 12% 65%;
 
-    --accent: 239 50% 20%;
-    --accent-foreground: 239 84% 80%;
+    --accent: 174 30% 16%;
+    --accent-foreground: 174 55% 70%;
 
-    --destructive: 0 62% 30%;
-    --destructive-foreground: 0 0% 95%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 35%;
+    --success: 152 50% 42%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 80% 45%;
+    --warning: 32 90% 48%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 240 10% 18%;
-    --input: 240 10% 18%;
-    --ring: 239 84% 67%;
+    --border: 175 14% 18%;
+    --input: 175 14% 18%;
+    --ring: 174 70% 42%;
 
-    --sidebar-background: 240 10% 10%;
-    --sidebar-foreground: 240 5% 65%;
-    --sidebar-primary: 239 84% 67%;
+    --sidebar-background: 175 28% 8%;
+    --sidebar-foreground: 166 15% 85%;
+    --sidebar-primary: 174 70% 42%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 239 50% 18%;
-    --sidebar-accent-foreground: 239 84% 80%;
-    --sidebar-border: 240 10% 16%;
-    --sidebar-ring: 239 84% 67%;
+    --sidebar-accent: 174 30% 14%;
+    --sidebar-accent-foreground: 174 55% 70%;
+    --sidebar-border: 175 14% 16%;
+    --sidebar-ring: 174 70% 42%;
 
-    --chart-indigo: 239 84% 67%;
-    --chart-green: 142 71% 45%;
-    --chart-amber: 38 92% 50%;
-    --chart-red: 0 72% 51%;
+    --chart-indigo: 174 70% 48%;
+    --chart-green: 152 50% 48%;
+    --chart-amber: 32 90% 52%;
+    --chart-red: 0 62% 50%;
   }
 }
 
@@ -269,13 +269,13 @@
 
   /* ── Premium surfaces ──────────────────────────────────────────── */
   .card-premium {
-    @apply bg-card rounded-2xl border shadow-sm;
-    background-image: linear-gradient(160deg, hsl(var(--card)) 60%, hsl(var(--muted) / 0.35));
-    transition: box-shadow 220ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1), border-color 220ms ease;
+    @apply bg-card rounded-xl border border-border/80;
+    box-shadow: 0 1px 2px hsl(var(--foreground) / 0.04), 0 4px 12px -6px hsl(var(--foreground) / 0.06);
+    transition: box-shadow 200ms ease, border-color 200ms ease;
   }
   .card-premium:hover {
-    box-shadow: 0 10px 32px -12px hsl(var(--foreground) / 0.14);
-    border-color: hsl(var(--primary) / 0.25);
+    box-shadow: 0 2px 4px hsl(var(--foreground) / 0.05), 0 8px 20px -8px hsl(var(--foreground) / 0.08);
+    border-color: hsl(var(--primary) / 0.2);
   }
   .section-label {
     @apply text-[11px] font-medium uppercase tracking-widest text-muted-foreground;

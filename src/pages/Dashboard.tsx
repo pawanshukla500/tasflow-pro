@@ -24,6 +24,8 @@ import { CountUp } from "@/components/motion";
 import { todayIST, formatDateIST, IST_TIME_ZONE } from "@/lib/time";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { HomeKpiCard } from "@/components/HomeKpiCard";
+import { cn } from "@/lib/utils";
 
 type Scope = "all" | "my_department" | "assigned_to_me" | "assigned_by_me";
 
@@ -94,14 +96,14 @@ const statusLabels: Record<string, string> = {
 // Hex (not hsl strings) so badge backgrounds can append alpha like `${color}14`
 const statusColors: Record<string, string> = {
   todo: "#94a3b8",
-  in_progress: "#6366f1",
-  pending_review: "#f59e0b",
-  in_review: "#f59e0b",
-  done: "#22c55e",
+  in_progress: "#0d9488",
+  pending_review: "#ea580c",
+  in_review: "#ea580c",
+  done: "#059669",
   blocked: "#dc2626",
 };
 const priorityColors: Record<string, string> = {
-  critical: "#dc2626", high: "#f59e0b", medium: "#6366f1", low: "#22c55e",
+  critical: "#dc2626", high: "#ea580c", medium: "#0d9488", low: "#059669",
 };
 const workflowStatusStyle: Record<string, string> = {
   active: "bg-primary/10 text-primary",
@@ -250,10 +252,10 @@ const Dashboard = () => {
   [tasks]);
 
   const kpis = [
-    { label: "Due Today", value: dueTodayCount, icon: Clock, tone: "text-warning", chipBg: "from-warning/20 to-warning/5", sub: `${dueTomorrow} due tomorrow`, spark: createdSpark },
-    { label: "Overdue", value: overdueCount, icon: AlertTriangle, tone: "text-destructive", chipBg: "from-destructive/20 to-destructive/5", sub: overdueHigh > 0 ? `${overdueHigh} high priority` : "none high priority", spark: null },
-    { label: "In Progress", value: inProgressCount, icon: Loader2, tone: "text-primary", chipBg: "from-primary/20 to-primary/5", sub: `${inReviewCount} in review`, spark: createdSpark },
-    { label: "Completed", value: doneCount, icon: CheckCircle2, tone: "text-success", chipBg: "from-success/20 to-success/5", sub: `${completedThisWeek} this week`, spark: completedSpark, trend: { current: completedThisWeek, previous: completedLastWeek } },
+    { label: "Due Today", value: dueTodayCount, icon: Clock, tone: "warning" as const, caption: `${dueTomorrow} due tomorrow`, spark: createdSpark },
+    { label: "Overdue", value: overdueCount, icon: AlertTriangle, tone: "danger" as const, caption: overdueHigh > 0 ? `${overdueHigh} high priority` : "none high priority", spark: null },
+    { label: "In Progress", value: inProgressCount, icon: Loader2, tone: "primary" as const, caption: `${inReviewCount} in review`, spark: createdSpark },
+    { label: "Completed", value: doneCount, icon: CheckCircle2, tone: "success" as const, caption: `${completedThisWeek} this week`, spark: completedSpark, trend: { current: completedThisWeek, previous: completedLastWeek } },
   ];
 
   const activeWorkflows = workflows.filter(w => w.status === "active");
@@ -271,7 +273,6 @@ const Dashboard = () => {
       })
       .slice(0, 5);
   }, [leaderboardProfiles, perfMetrics]);
-  const medals = ["🥇", "🥈", "🥉"];
   const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 
   const handleExport = () => {
@@ -293,39 +294,52 @@ const Dashboard = () => {
     .sort((a, b) => (a.due_date || "9999-12-31").localeCompare(b.due_date || "9999-12-31"));
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
+    <div className="relative p-4 md:p-6 lg:p-8 max-w-6xl mx-auto page-enter">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-4 h-48 opacity-90"
+        style={{
+          background:
+            "radial-gradient(ellipse 65% 80% at 0% 0%, hsl(var(--primary) / 0.1), transparent 55%), radial-gradient(ellipse 40% 50% at 100% 0%, hsl(var(--warning) / 0.06), transparent 50%)",
+        }}
+      />
+
       <PageHeader
-        title={`Hello, ${firstName} 👋`}
+        className="relative mb-5"
+        title={`Hello, ${firstName}`}
         description={formatDateIST(new Date(), { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         actions={
           <>
-            <Button variant="outline" size="sm" className="press-scale" onClick={handleExport}>
-              <Download className="h-3.5 w-3.5 mr-1" />Export
+            <Button variant="outline" size="sm" className="cursor-pointer press-scale" onClick={handleExport}>
+              <Download className="h-3.5 w-3.5 mr-1.5" />Export
             </Button>
             {canCreateTask && (
-              <Button size="sm" className="press-scale hover:shadow-lg hover:shadow-primary/25" onClick={() => setShowCreate(true)}>
+              <Button size="sm" className="cursor-pointer press-scale" onClick={() => setShowCreate(true)}>
                 <Plus className="h-3.5 w-3.5 mr-1" />New Task
               </Button>
             )}
           </>
         }
       />
-      <div className="space-y-6">
 
+      <div className="relative space-y-5">
         {accessScope.tier !== "member" && (
           <ScopeBanner scope={accessScope} departmentNames={deptNames} />
         )}
 
         {motivation && (
-          <p className="text-xs text-muted-foreground italic flex items-start gap-1.5 animate-fade-in">
-            <Sparkles className="h-3 w-3 mt-0.5 shrink-0 opacity-60" />
-            <span>"{motivation.quote}" <span className="opacity-60 not-italic">— {motivation.author}</span></span>
+          <p className="text-sm text-muted-foreground flex items-start gap-2 animate-fade-in border-l-2 border-primary/30 pl-3">
+            <Sparkles className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary/70" />
+            <span>
+              <span className="text-foreground/80">"{motivation.quote}"</span>
+              <span className="text-muted-foreground"> — {motivation.author}</span>
+            </span>
           </p>
         )}
 
-        {/* Scope filter */}
-        <div className="flex flex-wrap items-center gap-2 animate-rise">
-          <div className="flex items-center gap-1 bg-muted/50 rounded-xl p-1 w-fit border">
+        {/* Scope filter toolbar */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 rounded-xl border bg-card/90 px-3 py-2.5 shadow-[0_1px_0_hsl(var(--border)/0.5)]">
+          <div className="flex flex-wrap items-center gap-1 bg-muted/60 rounded-lg p-1 w-fit">
             {([
               { id: "all", label: accessScope.hasFullAccess ? "All Tasks" : "Team Tasks" },
               ...(accessScope.isManager && accessScope.departmentIds?.length
@@ -336,8 +350,14 @@ const Dashboard = () => {
             ] as { id: Scope; label: string }[]).map(opt => (
               <button
                 key={opt.id}
+                type="button"
                 onClick={() => setScope(opt.id)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all press-scale ${scope === opt.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={cn(
+                  "cursor-pointer px-3 py-1.5 rounded-md text-xs font-medium transition-colors duration-150",
+                  scope === opt.id
+                    ? "bg-card text-foreground shadow-sm ring-1 ring-border/70"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
               >
                 {opt.label}
               </button>
@@ -345,7 +365,7 @@ const Dashboard = () => {
           </div>
           {accessScope.canViewDeptPerformance && (
             <Select value={userFilter} onValueChange={setUserFilter}>
-              <SelectTrigger className="h-9 w-[200px] text-xs rounded-xl">
+              <SelectTrigger className="h-9 w-full sm:w-[200px] text-xs cursor-pointer">
                 <SelectValue placeholder="Filter by user…" />
               </SelectTrigger>
               <SelectContent>
@@ -356,80 +376,89 @@ const Dashboard = () => {
               </SelectContent>
             </Select>
           )}
-          <span className="ml-1 text-[11px] text-muted-foreground tabular-nums">{tasks.length} task{tasks.length === 1 ? "" : "s"}</span>
+          <span className="text-xs text-muted-foreground font-mono-num sm:ml-auto">
+            {tasks.length} task{tasks.length === 1 ? "" : "s"}
+          </span>
         </div>
 
-        {/* ── KPI cards ─────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 stagger-children">
+        {/* KPI strip — 21st.dev-inspired tone cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
           {kpis.map(kpi => (
-            <div key={kpi.label} className="card-premium p-4 md:p-5 hover-lift group">
-              <div className="flex items-start justify-between mb-3">
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${kpi.chipBg} flex items-center justify-center ${kpi.tone} group-hover:scale-110 group-hover:rotate-3 transition-transform`}>
-                  <kpi.icon className="h-[18px] w-[18px]" />
-                </div>
-                {kpi.trend ? <TrendChip current={kpi.trend.current} previous={kpi.trend.previous} /> : kpi.spark ? (
-                  <Sparkline points={kpi.spark} className={kpi.tone} />
-                ) : null}
-              </div>
-              <p className="text-stat text-3xl text-foreground leading-none">
-                <CountUp value={kpi.value} />
-              </p>
-              <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mt-2 font-semibold">{kpi.label}</p>
-              <p className="text-[11px] text-muted-foreground/80 mt-0.5">{kpi.sub}</p>
-            </div>
+            <HomeKpiCard
+              key={kpi.label}
+              label={kpi.label}
+              value={kpi.value}
+              caption={kpi.caption}
+              icon={kpi.icon}
+              tone={kpi.tone}
+              trendSlot={
+                kpi.trend ? (
+                  <TrendChip current={kpi.trend.current} previous={kpi.trend.previous} />
+                ) : kpi.spark ? (
+                  <Sparkline
+                    points={kpi.spark}
+                    className={
+                      kpi.tone === "success" ? "text-success" :
+                      kpi.tone === "warning" ? "text-warning" :
+                      kpi.tone === "danger" ? "text-destructive" :
+                      kpi.tone === "primary" ? "text-primary" :
+                      "text-muted-foreground"
+                    }
+                  />
+                ) : null
+              }
+            />
           ))}
         </div>
 
-        {/* ── Analytics ─────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-5">
-          {/* Daily activity */}
-          <div className="card-premium p-5 lg:col-span-3 animate-rise [animation-delay:160ms]">
-            <div className="flex items-center justify-between mb-1">
+        {/* Analytics band */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 md:gap-4">
+          <div className="card-premium p-4 sm:p-5 lg:col-span-3">
+            <div className="flex items-center justify-between mb-1 gap-2">
               <div>
                 <p className="section-label">Last 14 days</p>
-                <h3 className="text-sm font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
-                  <Activity className="h-3.5 w-3.5 text-primary" />Daily Activity
-                </h3>
+                <h2 className="text-base font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
+                  <Activity className="h-4 w-4 text-primary" />Daily Activity
+                </h2>
               </div>
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary" />Created</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-success" />Completed</span>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-primary" />Created</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-success" />Completed</span>
               </div>
             </div>
-            <div className="h-[210px] mt-3 -ml-2">
+            <div className="h-[200px] mt-3 -ml-2">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={activitySeries} margin={{ top: 4, right: 4, bottom: 0, left: -18 }}>
                   <defs>
                     <linearGradient id="gradCreated" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(239,84%,67%)" stopOpacity={0.28} />
-                      <stop offset="100%" stopColor="hsl(239,84%,67%)" stopOpacity={0.02} />
+                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.28} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
                     </linearGradient>
                     <linearGradient id="gradCompleted" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(142,71%,45%)" stopOpacity={0.28} />
-                      <stop offset="100%" stopColor="hsl(142,71%,45%)" stopOpacity={0.02} />
+                      <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.28} />
+                      <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
                   <XAxis dataKey="day" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={24} />
                   <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} allowDecimals={false} width={34} />
                   <Tooltip content={<ChartTooltip />} cursor={{ stroke: "hsl(var(--border))", strokeDasharray: "4 4" }} />
-                  <Area type="monotone" dataKey="Created" stroke="hsl(239,84%,67%)" strokeWidth={2} fill="url(#gradCreated)" dot={false} activeDot={{ r: 3.5 }} animationDuration={900} />
-                  <Area type="monotone" dataKey="Completed" stroke="hsl(142,71%,45%)" strokeWidth={2} fill="url(#gradCompleted)" dot={false} activeDot={{ r: 3.5 }} animationDuration={900} animationBegin={150} />
+                  <Area type="monotone" dataKey="Created" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#gradCreated)" dot={false} activeDot={{ r: 3.5 }} animationDuration={900} />
+                  <Area type="monotone" dataKey="Completed" stroke="hsl(var(--success))" strokeWidth={2} fill="url(#gradCompleted)" dot={false} activeDot={{ r: 3.5 }} animationDuration={900} animationBegin={150} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Status donut */}
-          <div className="card-premium p-5 lg:col-span-2 animate-rise [animation-delay:240ms]">
+          <div className="card-premium p-4 sm:p-5 lg:col-span-2">
             <p className="section-label">Distribution</p>
-            <h3 className="text-sm font-semibold text-foreground mt-0.5 mb-2 flex items-center gap-1.5">
-              <ListTodo className="h-3.5 w-3.5 text-primary" />Workflow Status
-            </h3>
+            <h2 className="text-base font-semibold text-foreground mt-0.5 mb-2 flex items-center gap-1.5">
+              <ListTodo className="h-4 w-4 text-primary" />Task Status
+            </h2>
             {statusData.length === 0 ? (
               <div className="h-[180px] flex flex-col items-center justify-center text-center gap-2">
                 <p className="text-sm text-muted-foreground">No tasks yet</p>
                 {canCreateTask && (
-                  <Button size="sm" variant="outline" onClick={() => setShowCreate(true)}>
+                  <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setShowCreate(true)}>
                     <Plus className="h-3.5 w-3.5 mr-1" />Create one
                   </Button>
                 )}
@@ -447,14 +476,15 @@ const Dashboard = () => {
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <p className="text-stat text-2xl text-foreground leading-none"><CountUp value={tasks.length} /></p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">tasks</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">tasks</p>
                   </div>
                 </div>
                 <div className="flex-1 space-y-1.5">
                   {statusData.map(s => (
-                    <div key={s.key} className="flex items-center justify-between text-xs">
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />{s.name}
+                    <div key={s.key} className="flex items-center justify-between text-xs gap-2">
+                      <span className="flex items-center gap-1.5 text-muted-foreground min-w-0">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} />
+                        <span className="truncate">{s.name}</span>
                       </span>
                       <span className="font-mono-num font-semibold text-foreground">{s.value}</span>
                     </div>
@@ -465,44 +495,49 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* ── Active workflows + pending tasks ──────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
-          <div className="card-premium p-5 animate-rise [animation-delay:200ms]">
+        {/* Workflows + pending */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+          <div className="card-premium p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="section-label">Active projects</p>
-                <h3 className="text-sm font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
-                  <GitBranch className="h-3.5 w-3.5 text-primary" />Workflows
-                </h3>
+                <h2 className="text-base font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
+                  <GitBranch className="h-4 w-4 text-primary" />Workflows
+                </h2>
               </div>
-              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary" onClick={() => navigate("/workflows")}>
+              <Button variant="ghost" size="sm" className="cursor-pointer text-xs text-muted-foreground hover:text-primary" onClick={() => navigate("/workflows")}>
                 View all<ArrowRight className="h-3 w-3 ml-1" />
               </Button>
             </div>
             {activeWorkflows.length === 0 ? (
               <div className="py-8 text-center">
                 <p className="text-sm text-muted-foreground">No active workflows</p>
-                <Button size="sm" variant="outline" className="mt-3" onClick={() => navigate("/workflows")}>
+                <Button size="sm" variant="outline" className="mt-3 cursor-pointer" onClick={() => navigate("/workflows")}>
                   <Plus className="h-3.5 w-3.5 mr-1" />Raise a workflow
                 </Button>
               </div>
             ) : (
-              <div className="space-y-3 stagger-children">
+              <div className="space-y-2">
                 {activeWorkflows.slice(0, 5).map(wf => {
                   const pct = wf.total_stages > 0 ? Math.round(((wf.current_stage_position - 1) / wf.total_stages) * 100) : 0;
                   return (
-                    <button key={wf.id} onClick={() => navigate("/workflows")} className="w-full text-left p-3 rounded-xl border bg-background/40 hover:border-primary/30 hover:bg-muted/40 transition-all group">
+                    <button
+                      key={wf.id}
+                      type="button"
+                      onClick={() => navigate("/workflows")}
+                      className="cursor-pointer w-full text-left p-3 rounded-lg border border-border/70 bg-background/50 hover:border-primary/25 hover:bg-muted/30 transition-colors duration-150 group"
+                    >
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <span className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{wf.title}</span>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize shrink-0 ${workflowStatusStyle[wf.status] || "bg-muted text-muted-foreground"}`}>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md capitalize shrink-0 ${workflowStatusStyle[wf.status] || "bg-muted text-muted-foreground"}`}>
                           {wf.status.replace("_", " ")}
                         </span>
                       </div>
                       <div className="flex items-center gap-2.5">
                         <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-gradient-to-r from-primary to-primary/70 bar-grow" style={{ width: `${Math.max(pct, 4)}%` }} />
+                          <div className="h-full rounded-full bg-primary bar-grow" style={{ width: `${Math.max(pct, 4)}%` }} />
                         </div>
-                        <span className="text-[10px] font-mono-num text-muted-foreground shrink-0">
+                        <span className="text-[11px] font-mono-num text-muted-foreground shrink-0">
                           Stage {wf.current_stage_position}/{wf.total_stages || "?"}
                         </span>
                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: priorityColors[wf.priority] || priorityColors.medium }} title={`${wf.priority} priority`} />
@@ -514,17 +549,16 @@ const Dashboard = () => {
             )}
           </div>
 
-          {/* Pending tasks */}
-          <div className="card-premium p-5 animate-rise [animation-delay:260ms]">
+          <div className="card-premium p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="section-label">Needs attention</p>
-                <h3 className="text-sm font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 text-warning" />Pending Tasks
+                <h2 className="text-base font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-warning" />Pending Tasks
                   {ongoing.length > 0 && <Badge variant="secondary" className="font-mono-num text-[10px] ml-1">{ongoing.length}</Badge>}
-                </h3>
+                </h2>
               </div>
-              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary" onClick={() => navigate("/my-tasks")}>
+              <Button variant="ghost" size="sm" className="cursor-pointer text-xs text-muted-foreground hover:text-primary" onClick={() => navigate("/my-tasks")}>
                 My Tasks<ArrowRight className="h-3 w-3 ml-1" />
               </Button>
             </div>
@@ -534,25 +568,29 @@ const Dashboard = () => {
                 <p className="text-sm text-muted-foreground">All caught up — nothing pending</p>
               </div>
             ) : (
-              <div className="space-y-0.5 max-h-[290px] overflow-y-auto stagger-children">
+              <div className="space-y-0.5 max-h-[290px] overflow-y-auto">
                 {ongoing.slice(0, 8).map(task => {
                   const isOverdue = task.due_date && task.due_date < today;
                   const isDueToday = task.due_date === today;
                   return (
-                    <div key={task.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/50 transition-all group">
-                      <div className="w-2 h-2 rounded-full shrink-0 group-hover:scale-125 transition-transform" style={{ backgroundColor: priorityColors[task.priority] || priorityColors.medium }} />
+                    <div key={task.id} className="flex items-center gap-3 px-2.5 py-2 rounded-lg hover:bg-muted/40 transition-colors duration-150">
+                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: priorityColors[task.priority] || priorityColors.medium }} />
                       <span className="flex-1 text-sm text-foreground truncate">{task.title}</span>
                       <Badge variant="outline" className="text-[10px] shrink-0 hidden sm:inline-flex border-0 px-2" style={{ color: statusColors[task.status], background: `${statusColors[task.status]}14` }}>
                         {statusLabels[task.status] || task.status}
                       </Badge>
                       {task.due_date && (
-                        <span className={`text-[11px] shrink-0 font-mono-num ${isOverdue ? "text-destructive font-semibold" : isDueToday ? "text-warning font-medium" : "text-muted-foreground"}`}>
-                          {formatDateIST(task.due_date)}{isOverdue && " ⚠"}
+                        <span className={cn(
+                          "text-[11px] shrink-0 font-mono-num inline-flex items-center gap-1",
+                          isOverdue ? "text-destructive font-semibold" : isDueToday ? "text-warning font-medium" : "text-muted-foreground",
+                        )}>
+                          {isOverdue && <AlertTriangle className="h-3 w-3" />}
+                          {formatDateIST(task.due_date)}
                         </span>
                       )}
                       <div className="flex -space-x-1.5 shrink-0">
                         {task.assignees.slice(0, 2).map(a => (
-                          <div key={a.user_id} className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center text-[9px] font-bold border-2 border-card" title={a.name}>
+                          <div key={a.user_id} className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[9px] font-bold border-2 border-card" title={a.name}>
                             {getInitials(a.name)}
                           </div>
                         ))}
@@ -568,82 +606,87 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* ── Team performance + departments (managers) ─────────── */}
         {showLeadershipPanels && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
-            <div className="card-premium p-5 animate-rise [animation-delay:220ms]">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+            <div className="card-premium p-4 sm:p-5">
               <p className="section-label">Leaderboard</p>
-              <h3 className="text-sm font-semibold text-foreground mt-0.5 mb-4 flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5 text-primary" />Team Performance
-              </h3>
+              <h2 className="text-base font-semibold text-foreground mt-0.5 mb-4 flex items-center gap-1.5">
+                <Users className="h-4 w-4 text-primary" />Team Performance
+              </h2>
               {topPerformers.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4 text-center">No team members yet</p>
               ) : (
-                <div className="space-y-3 stagger-children">
+                <div className="space-y-2">
                   {topPerformers.map((u, i) => {
                     const m = perfMetrics.find((pm) => pm.user_id === u.id);
                     const hasData = m?.has_sufficient_data ?? false;
                     const score = hasData ? u.performance_score : null;
                     return (
-                    <div key={u.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted/40 transition-colors">
-                      <span className="w-6 text-center text-sm">{medals[i] || <span className="text-[11px] text-muted-foreground font-mono-num">{i + 1}</span>}</span>
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center text-[10px] font-bold ring-2 ring-background shadow-sm">
-              {u.avatar_url ? <img src={u.avatar_url} alt="" className="w-full h-full rounded-full object-cover" loading="lazy" decoding="async" /> : getInitials(u.name)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-foreground truncate">{u.name}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">{u.position || "Team Member"}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {score === null ? (
-                          <span className="text-[10px] text-muted-foreground">N/A</span>
-                        ) : (
-                        <>
-                        <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-gradient-to-r from-success to-success/70 bar-grow" style={{ width: `${score}%`, animationDelay: `${300 + i * 80}ms` }} />
+                      <div key={u.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/35 transition-colors">
+                        <span className="w-6 text-center text-[11px] font-mono-num text-muted-foreground font-semibold">{i + 1}</span>
+                        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold ring-2 ring-background">
+                          {u.avatar_url ? <img src={u.avatar_url} alt="" className="w-full h-full rounded-full object-cover" loading="lazy" decoding="async" /> : getInitials(u.name)}
                         </div>
-                        <span className="text-[10px] font-mono-num text-foreground font-semibold w-8 text-right">{score}%</span>
-                        </>
-                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-foreground truncate">{u.name}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">{u.position || "Team Member"}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {score === null ? (
+                            <span className="text-[11px] text-muted-foreground">N/A</span>
+                          ) : (
+                            <>
+                              <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full rounded-full bg-success bar-grow" style={{ width: `${score}%`, animationDelay: `${300 + i * 80}ms` }} />
+                              </div>
+                              <span className="text-[11px] font-mono-num text-foreground font-semibold w-8 text-right">{score}%</span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
                     );
                   })}
                 </div>
               )}
             </div>
 
-            <div className="card-premium p-5 animate-rise [animation-delay:280ms]">
+            <div className="card-premium p-4 sm:p-5">
               <p className="section-label">By department</p>
-              <h3 className="text-sm font-semibold text-foreground mt-0.5 mb-4 flex items-center gap-1.5">
-                <Target className="h-3.5 w-3.5 text-primary" />Department Overview
-              </h3>
+              <h2 className="text-base font-semibold text-foreground mt-0.5 mb-4 flex items-center gap-1.5">
+                <Target className="h-4 w-4 text-primary" />Department Overview
+              </h2>
               {scopedDepartments.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4 text-center">No departments yet</p>
               ) : (
-                <div className="space-y-3.5 stagger-children">
+                <div className="space-y-2.5">
                   {scopedDepartments.map((d, i) => {
                     const deptTasks = tasks.filter(t => t.department_id === d.id);
                     const deptDone = deptTasks.filter(t => t.status === "done").length;
                     const completionRate = deptTasks.length > 0 ? Math.round((deptDone / deptTasks.length) * 100) : 0;
                     const overdue = deptTasks.filter(t => t.due_date && t.due_date < today && t.status !== "done").length;
                     return (
-                      <div key={d.id} className="p-2.5 rounded-xl hover:bg-muted/40 transition-colors">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-full ring-4 ring-transparent" style={{ backgroundColor: d.color, boxShadow: `0 0 0 3px ${d.color}22` }} />
-                            <span className="text-xs font-semibold text-foreground">{d.name}</span>
+                      <div key={d.id} className="p-2 rounded-lg hover:bg-muted/35 transition-colors">
+                        <div className="flex items-center justify-between mb-2 gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color, boxShadow: `0 0 0 3px ${d.color}22` }} />
+                            <span className="text-xs font-semibold text-foreground truncate">{d.name}</span>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 shrink-0">
                             {overdue > 0 && <Badge variant="destructive" className="text-[9px] px-1.5 py-0">{overdue} overdue</Badge>}
-                            <span className="text-[10px] font-mono-num text-muted-foreground">{deptTasks.length} tasks</span>
+                            <span className="text-[11px] font-mono-num text-muted-foreground">{deptTasks.length} tasks</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full bar-grow ${completionRate >= 80 ? "bg-gradient-to-r from-success to-success/70" : completionRate >= 60 ? "bg-gradient-to-r from-primary to-primary/70" : "bg-gradient-to-r from-warning to-warning/70"}`} style={{ width: `${completionRate}%`, animationDelay: `${350 + i * 80}ms` }} />
+                            <div
+                              className={cn(
+                                "h-full rounded-full bar-grow",
+                                completionRate >= 80 ? "bg-success" : completionRate >= 60 ? "bg-primary" : "bg-warning",
+                              )}
+                              style={{ width: `${completionRate}%`, animationDelay: `${350 + i * 80}ms` }}
+                            />
                           </div>
-                          <span className="text-[10px] font-mono-num text-foreground font-semibold w-8 text-right">{completionRate}%</span>
+                          <span className="text-[11px] font-mono-num text-foreground font-semibold w-8 text-right">{completionRate}%</span>
                         </div>
                       </div>
                     );
@@ -654,12 +697,12 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* ── Recent tasks ──────────────────────────────────────── */}
-        <div className="card-premium p-5 animate-rise [animation-delay:300ms]">
+        {/* Recent tasks */}
+        <div className="card-premium p-4 sm:p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="section-label">Latest</p>
-              <h3 className="text-sm font-semibold text-foreground mt-0.5">Recent Tasks</h3>
+              <h2 className="text-base font-semibold text-foreground mt-0.5">Recent Tasks</h2>
             </div>
             <Badge variant="secondary" className="font-mono-num text-[10px]">{tasks.length} total</Badge>
           </div>
@@ -669,28 +712,31 @@ const Dashboard = () => {
             <div className="text-center py-8">
               <p className="text-muted-foreground">No tasks yet</p>
               {canCreateTask && (
-                <Button size="sm" className="mt-3" onClick={() => setShowCreate(true)}>
+                <Button size="sm" className="mt-3 cursor-pointer" onClick={() => setShowCreate(true)}>
                   <Plus className="h-3.5 w-3.5 mr-1" />Create your first task
                 </Button>
               )}
             </div>
           ) : (
-            <div className="space-y-0.5 stagger-children">
+            <div className="space-y-0.5">
               {tasks.slice(0, 8).map(task => (
-                <div key={task.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/50 transition-all group">
-                  <div className="w-2 h-2 rounded-full shrink-0 group-hover:scale-125 transition-transform" style={{ backgroundColor: priorityColors[task.priority] || priorityColors.medium }} />
+                <div key={task.id} className="flex items-center gap-3 px-2.5 py-2 rounded-lg hover:bg-muted/40 transition-colors duration-150 group">
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: priorityColors[task.priority] || priorityColors.medium }} />
                   <span className="flex-1 text-sm text-foreground truncate group-hover:text-primary transition-colors">{task.title}</span>
                   <Badge variant="outline" className="text-[10px] shrink-0 border-0 px-2" style={{ color: statusColors[task.status], background: `${statusColors[task.status]}14` }}>
                     {statusLabels[task.status] || task.status}
                   </Badge>
                   {task.due_date && (
-                    <span className={`text-[11px] shrink-0 font-mono-num ${task.due_date < today && task.status !== "done" ? "text-destructive font-medium" : task.due_date === today ? "text-warning" : "text-muted-foreground"}`}>
+                    <span className={cn(
+                      "text-[11px] shrink-0 font-mono-num",
+                      task.due_date < today && task.status !== "done" ? "text-destructive font-medium" : task.due_date === today ? "text-warning" : "text-muted-foreground",
+                    )}>
                       {formatDateIST(task.due_date)}
                     </span>
                   )}
                   <div className="flex -space-x-1.5 shrink-0">
                     {task.assignees.slice(0, 2).map(a => (
-                      <div key={a.user_id} className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center text-[9px] font-bold border-2 border-card">
+                      <div key={a.user_id} className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[9px] font-bold border-2 border-card">
                         {getInitials(a.name)}
                       </div>
                     ))}
