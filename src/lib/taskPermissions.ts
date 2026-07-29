@@ -1,5 +1,6 @@
 import type { TaskRow } from "@/hooks/useTasks";
 import { isTaskInReview } from "@/lib/taskStatus";
+import { addDaysIST, todayIST } from "@/lib/time";
 
 export const TASK_STATUS_LABELS: Record<string, string> = {
   todo: "To Do",
@@ -126,19 +127,14 @@ export function canExtendTaskDueDate(
 }
 
 export function maxTaskDueDateExtension(task: Pick<TaskRow, "due_date">): Date {
-  const base = task.due_date ? new Date(task.due_date) : new Date();
-  const max = new Date(base);
-  max.setDate(max.getDate() + 30);
-  return max;
+  const base = task.due_date || todayIST();
+  // Noon IST so Date pickers land on the intended calendar day worldwide.
+  return new Date(`${addDaysIST(base, 30)}T12:00:00+05:30`);
 }
 
 export function minTaskDueDateExtension(task: Pick<TaskRow, "due_date">): Date {
   if (task.due_date) {
-    const min = new Date(task.due_date);
-    min.setDate(min.getDate() + 1);
-    return min;
+    return new Date(`${addDaysIST(task.due_date, 1)}T12:00:00+05:30`);
   }
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
+  return new Date(`${todayIST()}T12:00:00+05:30`);
 }

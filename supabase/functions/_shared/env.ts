@@ -20,8 +20,8 @@ export const edgeEnv = {
   firebaseServiceAccountJson: read("FIREBASE_SERVICE_ACCOUNT_JSON"),
   firebaseServiceAccountJsonPath: read("FIREBASE_SERVICE_ACCOUNT_JSON_PATH"),
 
-  gmailSenderEmail: read("EMAIL_FROM") || read("GMAIL_SENDER_EMAIL") || "noreply@youthnic.shop",
-  gmailFromName: read("EMAIL_FROM_NAME") || read("GMAIL_FROM_NAME") || "TaskFlow Pro by VB Exports",
+  gmailSenderEmail: read("EMAIL_FROM") || read("GMAIL_SENDER_EMAIL") || "task@youthnic.shop",
+  gmailFromName: read("EMAIL_FROM_NAME") || read("GMAIL_FROM_NAME") || "TaskFlow Pro",
   resendApiKey: read("RESEND_API_KEY"),
   emailLogoUrl: read("EMAIL_LOGO_URL"),
 

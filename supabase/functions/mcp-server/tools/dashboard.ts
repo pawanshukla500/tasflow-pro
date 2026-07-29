@@ -1,9 +1,5 @@
 import { type McpTool, objectSchema } from "./types.ts";
-
-/** Today's date (YYYY-MM-DD) in IST, matching the app's date handling. */
-function istToday(): string {
-  return new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
-}
+import { istToday, istAddDays } from "../../_shared/ist.ts";
 
 export const dashboardTools: McpTool[] = [
   {
@@ -66,9 +62,7 @@ export const dashboardTools: McpTool[] = [
     }),
     handler: async ({ client }, args) => {
       const from = args.from ? String(args.from) : istToday();
-      const to = args.to
-        ? String(args.to)
-        : new Date(Date.now() + (5.5 * 3600 + 30 * 86400) * 1000).toISOString().slice(0, 10);
+      const to = args.to ? String(args.to) : istAddDays(istToday(), 30);
       const { data, error } = await client
         .from("tasks")
         .select("id, title, status, priority, due_date, department_id")

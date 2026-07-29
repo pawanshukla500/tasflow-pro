@@ -4,6 +4,7 @@
 // all open (non-done) tasks assigned to them, plus active workflow stages they
 // own. Users with nothing pending are skipped.
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { istToday, istDayOfWeek } from '../_shared/ist.ts'
 
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }
 
@@ -20,11 +21,8 @@ Deno.serve(async (req) => {
     })
   }
 
-  // Skip Sunday (0 = Sunday in UTC; org is IST but day boundary close enough for a daily summary)
-  const now = new Date()
-  // Use IST day-of-week
-  const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
-  if (istNow.getUTCDay() === 0) {
+  // Skip Sunday (IST day-of-week)
+  if (istDayOfWeek() === 0) {
     return new Response(JSON.stringify({ ok: true, skipped: 'sunday' }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
@@ -35,7 +33,7 @@ Deno.serve(async (req) => {
   const functionInvokeKey = Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_PUBLISHABLE_KEY') || serviceRoleKey
   const supabase = createClient(supabaseUrl, serviceRoleKey)
 
-  const today = istNow.toISOString().slice(0, 10)
+  const today = istToday()
   const dayKey = today
 
   // All open tasks (pending = anything not done). We fetch every open task once

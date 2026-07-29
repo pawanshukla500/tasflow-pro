@@ -4,8 +4,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { TEMPLATES } from '../_shared/transactional-email-templates/registry.ts'
 
 // Configuration — sender uses Resend API (see _shared/send-email.ts)
-const FROM_NAME = Deno.env.get('EMAIL_FROM_NAME')?.trim() || Deno.env.get('GMAIL_FROM_NAME')?.trim() || 'TaskFlow Pro by VB Exports'
-const FROM_EMAIL = Deno.env.get('EMAIL_FROM')?.trim() || Deno.env.get('GMAIL_SENDER_EMAIL')?.trim() || 'noreply@youthnic.shop'
+const FROM_NAME = Deno.env.get('EMAIL_FROM_NAME')?.trim() || Deno.env.get('GMAIL_FROM_NAME')?.trim() || 'TaskFlow Pro'
+const FROM_EMAIL = Deno.env.get('EMAIL_FROM')?.trim() || Deno.env.get('GMAIL_SENDER_EMAIL')?.trim() || 'task@youthnic.shop'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

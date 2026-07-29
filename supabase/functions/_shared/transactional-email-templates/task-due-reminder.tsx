@@ -10,10 +10,17 @@ interface Props {
   tasks?: TaskItem[]
 }
 
-const todayKey = () => new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10)
+const todayKey = () =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
 
 const formatDue = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''
+  iso
+    ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00+05:30` : iso).toLocaleDateString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: 'numeric',
+        month: 'short',
+      })
+    : ''
 
 const statusFor = (dueDate?: string | null) => {
   if (!dueDate) return { label: 'PENDING', color: colors.muted }

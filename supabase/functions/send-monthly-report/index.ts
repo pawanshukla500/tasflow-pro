@@ -1,5 +1,6 @@
 // Cron-driven monthly report for Managing Directors and System Admins via branded transactional pipeline.
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { istToday } from '../_shared/ist.ts'
 
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }
 
@@ -18,19 +19,24 @@ Deno.serve(async (req) => {
     serviceKey
   )
 
-  const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const end = new Date(now.getFullYear(), now.getMonth(), 1)
-  const monthLabel = start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-  const monthKey = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`
+  // Previous calendar month in IST
+  const today = istToday()
+  const [y, m] = today.split('-').map(Number)
+  const prevMonth = m === 1 ? 12 : m - 1
+  const prevYear = m === 1 ? y - 1 : y
+  const startIso = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01T00:00:00+05:30`
+  const endIso = `${y}-${String(m).padStart(2, '0')}-01T00:00:00+05:30`
+  const monthLabel = new Date(startIso).toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata', month: 'long', year: 'numeric',
+  })
+  const monthKey = `${prevYear}-${String(prevMonth).padStart(2, '0')}`
 
   const { data: tasks } = await supabase
     .from('tasks').select('id, status, department_id, completed_at, created_at, due_date')
-    .gte('created_at', start.toISOString()).lt('created_at', end.toISOString())
+    .gte('created_at', new Date(startIso).toISOString()).lt('created_at', new Date(endIso).toISOString())
 
   const totalTasks = tasks?.length || 0
   const completedTasks = tasks?.filter((t) => t.status === 'done').length || 0
-  const today = new Date().toISOString().slice(0, 10)
   const overdueTasks = tasks?.filter((t) =>
     t.status !== 'done' && t.due_date && t.due_date < today
   ).length || 0

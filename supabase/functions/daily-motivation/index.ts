@@ -1,4 +1,6 @@
 // Returns a daily motivational quote. Tries Google AI (Gemini) first, falls back to a curated bank.
+import { istToday } from "../_shared/ist.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -32,7 +34,7 @@ function pickFallback(seed: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istToday();
   const apiKey = Deno.env.get("GOOGLE_AI_API_KEY");
 
   // Try Google AI first

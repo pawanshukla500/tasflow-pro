@@ -165,7 +165,7 @@ export function buildDepartmentPerformance(
   tasks: { department_id?: string | null; status: string; due_date?: string | null; completed_on_time?: boolean | null }[],
   workflows: { raised_by_department_id?: string | null; status: string }[],
 ): DepartmentPerformance[] {
-  const today = new Intl.DateTimeFormat("en-CA").format(new Date());
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 
   return departments.map((dept) => {
     const deptProfiles = profiles.filter((p) => p.department_id === dept.id);
