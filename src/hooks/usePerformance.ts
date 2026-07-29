@@ -11,6 +11,8 @@ export interface PerformanceReason {
 export interface ScoreBreakdownItem {
   factor: string;
   weight: number;
+  /** Present after fairness migration — weight after dropping N/A factors */
+  effective_weight?: number;
   value: number;
   contribution: number;
 }

@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Clock, GitBranch, Info, TrendingDown, Tren
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import type { UserPerformanceMetrics, PerformanceReason } from "@/hooks/usePerformance";
+import { computeWeightedPerformanceScore } from "@/lib/performanceScoring";
 
 const impactIcon = (impact: PerformanceReason["impact"]) => {
   if (impact === "positive") return <TrendingUp className="h-3.5 w-3.5 text-success" />;
@@ -22,18 +23,27 @@ export function PerformanceBreakdown({ metrics, compact = false, showReasons = t
     ? metrics.score_breakdown.map((b) => ({
         label: b.factor,
         value: b.value,
-        weight: b.weight,
+        weight: b.effective_weight ?? b.weight,
         contribution: b.contribution,
       }))
-    : [
-        { label: "Task completion", value: metrics.task_completion_rate, weight: 30, contribution: Math.round(metrics.task_completion_rate * 0.3) },
-        { label: "On-time delivery", value: metrics.on_time_rate, weight: 25, contribution: Math.round(metrics.on_time_rate * 0.25) },
-        { label: "Overdue health", value: metrics.overdue_penalty_score ?? 100, weight: 15, contribution: Math.round((metrics.overdue_penalty_score ?? 100) * 0.15) },
-        { label: "Workflow completion", value: metrics.workflow_completion_rate, weight: 15, contribution: Math.round(metrics.workflow_completion_rate * 0.15) },
-        { label: "Quality / reviews", value: metrics.quality_rate, weight: 10, contribution: Math.round(metrics.quality_rate * 0.1) },
-        { label: "Recent activity", value: metrics.engagement_score ?? 0, weight: 5, contribution: Math.round((metrics.engagement_score ?? 0) * 0.05) },
-        { label: "Response time", value: metrics.collaboration_score, weight: 5, contribution: Math.round(metrics.collaboration_score * 0.05) },
-      ]);
+    : computeWeightedPerformanceScore({
+        tasksAssigned: metrics.tasks_assigned,
+        tasksCompleted: metrics.tasks_completed,
+        taskCompletionRate: metrics.task_completion_rate,
+        onTimeRate: metrics.on_time_rate,
+        overduePenalty: metrics.overdue_penalty_score ?? 100,
+        workflowsAssigned: metrics.workflows_assigned,
+        workflowRate: metrics.workflow_completion_rate,
+        reviewsTotal: metrics.reviews_total,
+        qualityRate: metrics.quality_rate,
+        engagement: metrics.engagement_score ?? 0,
+        responseTime: metrics.collaboration_score,
+      }).breakdown.map((b) => ({
+        label: b.factor,
+        value: b.value,
+        weight: b.effectiveWeight,
+        contribution: b.contribution,
+      })));
 
   const reasons = (metrics.deduction_reasons || []).filter(
     (r) => showReasons || r.impact === "negative",
@@ -88,7 +98,7 @@ export function PerformanceBreakdown({ metrics, compact = false, showReasons = t
             </div>
           ))}
           <p className="text-[10px] text-muted-foreground pt-1">
-            Total = sum of weighted contributions (max 100). Overdue tasks and low activity reduce your score.
+            Score is based on work assigned to you. Factors that do not apply (e.g. no workflows) are skipped and weights renormalize. Overdue tasks and low activity reduce your score.
           </p>
         </div>
       )}
