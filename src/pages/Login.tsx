@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,18 +8,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { sendPasswordResetEmail } from "@/lib/passwordReset";
 import {
-  Eye, EyeOff, Mail, Lock, User, Building2, Globe, Shield, Zap, Workflow, Sparkles, Target, Rocket, Sun, Coffee, ArrowRight,
+  Eye, EyeOff, Mail, Lock, User, Building2, Globe, Shield, Workflow, ListTodo, ArrowRight,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-const DAILY_THEMES = [
-  { gradient: "from-indigo-600 via-violet-600 to-purple-700", icon: Rocket, headline: "Launch your organization with clarity.", sub: "Enterprise task management built for teams that ship.", tag: "Monday Mode" },
-  { gradient: "from-blue-600 via-cyan-600 to-teal-600", icon: Target, headline: "Multi-tenant. Secure. Scalable.", sub: "Your data, your domain, your workflow.", tag: "Tuesday Focus" },
-  { gradient: "from-emerald-600 via-teal-600 to-cyan-700", icon: Workflow, headline: "Workflows that move work forward.", sub: "From tasks to approvals — all in one place.", tag: "Wednesday Flow" },
-  { gradient: "from-amber-500 via-orange-600 to-rose-600", icon: Zap, headline: "Daily digests. Zero surprises.", sub: "Automated summaries keep every team member aligned.", tag: "Thursday Drive" },
-  { gradient: "from-fuchsia-600 via-pink-600 to-rose-600", icon: Sparkles, headline: "Premium experience. Enterprise power.", sub: "Built for commercial deployment and resale.", tag: "Friday Finish" },
-  { gradient: "from-sky-600 via-blue-600 to-indigo-700", icon: Sun, headline: "Your workspace. Your rules.", sub: "Custom domains, roles, and permissions.", tag: "Saturday Calm" },
-  { gradient: "from-slate-700 via-gray-700 to-zinc-800", icon: Coffee, headline: "Production-ready SaaS.", sub: "Firebase Auth + secure Postgres backend.", tag: "Sunday Reset" },
-];
+/** Product benefits only — no tech stack / infra copy on the login surface. */
+const BENEFITS = [
+  { icon: ListTodo, text: "Tasks, deadlines, and ownership in one place" },
+  { icon: Workflow, text: "Cross-team workflows with clear handoffs" },
+  { icon: Shield, text: "Roles and permissions that fit your org" },
+] as const;
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -35,9 +33,6 @@ const Login = () => {
   const [resetLoading, setResetLoading] = useState(false);
   const { signIn, registerOrganizationWithAccount } = useAuth();
   const { toast } = useToast();
-
-  const todayTheme = useMemo(() => DAILY_THEMES[new Date().getDay()], []);
-  const TodayIcon = todayTheme.icon;
 
   const handleSignIn = async () => {
     if (!email || !password) {
@@ -80,7 +75,7 @@ const Login = () => {
       if (message.includes("auth/wrong-password") || message.includes("INVALID_PASSWORD")) {
         toast({
           title: "Email already registered",
-          description: "This email exists in Firebase with a different password. Use Forgot password or delete the user in Firebase Console → Authentication.",
+          description: "This email is already in use with a different password. Use Forgot password, or ask an admin to reset access.",
           variant: "destructive",
         });
       } else {
@@ -108,181 +103,286 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex bg-background">
-      <div className={`hidden lg:flex lg:w-[52%] relative overflow-hidden bg-gradient-to-br ${todayTheme.gradient} animate-gradient text-white p-12 flex-col justify-between`}>
-        <div className="absolute inset-0 opacity-10" style={{
-          backgroundImage: "radial-gradient(circle at 25% 25%, white 1px, transparent 1px)",
-          backgroundSize: "32px 32px",
-        }} />
-        {/* Floating glow orbs */}
-        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/10 blur-3xl animate-float-slow" />
-        <div className="absolute bottom-10 -left-20 w-72 h-72 rounded-full bg-white/10 blur-3xl animate-float [animation-delay:2s]" />
-        <div className="relative z-10 flex items-center gap-3 animate-in fade-in slide-in-from-left-4 duration-700">
-          <div className="w-12 h-12 rounded-2xl bg-white/95 flex items-center justify-center p-2 shadow-xl">
-            <img src="/youthnic-logo.svg" width={48} height={48} decoding="async" alt="TaskFlow Pro" className="w-full h-full object-contain" />
+      {/* Brand panel — Soft UI teal, product story only */}
+      <aside className="hidden lg:flex lg:w-[48%] relative overflow-hidden text-primary-foreground p-10 xl:p-14 flex-col justify-between bg-primary">
+        <div
+          aria-hidden
+          className="absolute inset-0 opacity-[0.12]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 20% 20%, white 1px, transparent 1px), radial-gradient(ellipse 80% 60% at 100% 0%, white, transparent 55%)",
+            backgroundSize: "28px 28px, 100% 100%",
+          }}
+        />
+        <div aria-hidden className="absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
+        <div aria-hidden className="absolute top-1/3 -right-20 h-64 w-64 rounded-full bg-black/10 blur-3xl" />
+
+        <div className="relative z-10 flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center p-1.5 shadow-md">
+            <img src="/youthnic-logo.svg" width={40} height={40} decoding="async" alt="" className="w-full h-full object-contain" />
           </div>
           <div>
-            <p className="font-bold text-xl tracking-tight">TaskFlow Pro</p>
-            <p className="text-sm opacity-80">Enterprise SaaS Platform</p>
+            <p className="font-display font-bold text-lg tracking-tight leading-none">TaskFlow Pro</p>
+            <p className="text-xs text-primary-foreground/75 mt-1">Work management for teams</p>
           </div>
         </div>
 
-        <div className="relative z-10 space-y-8 max-w-lg animate-in fade-in slide-in-from-left-6 duration-1000 delay-150">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/15 backdrop-blur text-sm font-medium border border-white/20 animate-pop [animation-delay:300ms]">
-            <TodayIcon className="w-4 h-4 animate-float [animation-duration:3s]" />
-            {todayTheme.tag}
+        <div className="relative z-10 space-y-8 max-w-md">
+          <div>
+            <h1 className="font-display text-3xl xl:text-4xl font-bold leading-[1.15] tracking-tight text-balance">
+              Clarity for every task, workflow, and handoff.
+            </h1>
+            <p className="mt-4 text-base text-primary-foreground/85 leading-relaxed">
+              Keep your organization aligned — from daily tasks to cross-department workflows.
+            </p>
           </div>
-          <h2 className="text-4xl xl:text-5xl font-bold leading-[1.1] tracking-tight">{todayTheme.headline}</h2>
-          <p className="opacity-90 text-lg leading-relaxed">{todayTheme.sub}</p>
-          <div className="grid gap-3 pt-2">
-            {[
-              { icon: Building2, text: "Multi-tenant organization management" },
-              { icon: Shield, text: "Firebase Authentication + role-based access" },
-              { icon: Mail, text: "Automated daily task digests" },
-            ].map(({ icon: Icon, text }, i) => (
-              <div key={text} className="flex items-center gap-3 text-sm animate-rise" style={{ animationDelay: `${500 + i * 130}ms` }}>
-                <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center transition-transform hover:scale-110">
-                  <Icon className="w-4 h-4" />
-                </div>
+          <ul className="space-y-3">
+            {BENEFITS.map(({ icon: Icon, text }) => (
+              <li key={text} className="flex items-center gap-3 text-sm text-primary-foreground/90">
+                <span className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+                  <Icon className="w-4 h-4" aria-hidden />
+                </span>
                 {text}
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
 
-        <p className="relative z-10 text-xs opacity-60">© {new Date().getFullYear()} TaskFlow Pro. Enterprise-ready SaaS.</p>
-      </div>
+        <p className="relative z-10 text-xs text-primary-foreground/55">
+          © {new Date().getFullYear()} TaskFlow Pro
+        </p>
+      </aside>
 
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
-        <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Auth form */}
+      <main className="flex-1 flex items-center justify-center p-6 sm:p-10 relative">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-80 lg:opacity-100"
+          style={{
+            background:
+              "radial-gradient(ellipse 50% 40% at 100% 0%, hsl(var(--primary) / 0.08), transparent 55%)",
+          }}
+        />
+
+        <div className="relative w-full max-w-[420px]">
           <div className="lg:hidden flex flex-col items-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-white border shadow-sm flex items-center justify-center p-2 mb-3 animate-pop animate-float [animation-duration:4s]">
-              <img src="/youthnic-logo.svg" width={48} height={48} decoding="async" alt="TaskFlow Pro" className="w-full h-full object-contain" />
+            <div className="w-14 h-14 rounded-xl bg-card border border-border/80 shadow-sm flex items-center justify-center p-2 mb-3">
+              <img src="/youthnic-logo.svg" width={40} height={40} decoding="async" alt="" className="w-full h-full object-contain" />
             </div>
-            <h1 className="text-xl font-bold animate-rise [animation-delay:120ms]">TaskFlow Pro</h1>
+            <h1 className="font-display text-xl font-bold tracking-tight">TaskFlow Pro</h1>
+            <p className="text-xs text-muted-foreground mt-1">Work management for teams</p>
           </div>
 
           {!forgotOpen ? (
             <>
-              <div className="mb-8">
-                <h2 className="text-2xl font-bold tracking-tight">Welcome</h2>
-                <p className="text-sm text-muted-foreground mt-1">Sign in or register your organization.</p>
+              <div className="mb-6">
+                <h2 className="font-display text-2xl font-bold tracking-tight text-foreground">Welcome</h2>
+                <p className="text-sm text-muted-foreground mt-1.5">Sign in to your workspace, or register a new organization.</p>
               </div>
 
-              <Tabs defaultValue="signin" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-6 h-11">
-                  <TabsTrigger value="signin">Sign In</TabsTrigger>
-                  <TabsTrigger value="register">Register Org</TabsTrigger>
-                </TabsList>
+              <div className="rounded-xl border border-border/80 bg-card p-5 sm:p-6 shadow-[0_1px_2px_hsl(var(--foreground)/0.04),0_8px_24px_-12px_hsl(var(--foreground)/0.08)]">
+                <Tabs defaultValue="signin" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 mb-5 h-10 bg-muted/70">
+                    <TabsTrigger value="signin" className="cursor-pointer text-sm">Sign In</TabsTrigger>
+                    <TabsTrigger value="register" className="cursor-pointer text-sm">Register Org</TabsTrigger>
+                  </TabsList>
 
-                <TabsContent value="signin" className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signin-email">Work email</Label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <Input id="signin-email" type="email" placeholder="returnorders@vbexports.co.in" className="pl-9 h-11"
-                        value={email} onChange={(e) => setEmail(e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="signin-password">Password</Label>
-                      <button type="button" onClick={() => { setResetEmail(email); setForgotOpen(true); }}
-                        className="text-xs text-primary hover:underline">Forgot password?</button>
-                    </div>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <Input id="signin-password" type={showPassword ? "text" : "password"} placeholder="••••••••"
-                        className="pl-9 pr-9 h-11" value={password} onChange={(e) => setPassword(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleSignIn()} />
-                      <button type="button" onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                  <Button className="w-full h-11 text-base press-scale group/signin hover:shadow-lg hover:shadow-primary/30" onClick={handleSignIn} disabled={loading}>
-                    {loading ? "Signing in…" : "Sign In"}
-                    {!loading && <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover/signin:translate-x-1" />}
-                  </Button>
-                </TabsContent>
-
-                <TabsContent value="register" className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Organization name</Label>
-                    <div className="relative">
-                      <Building2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <Input placeholder="VB Exports" className="pl-9 h-11" value={orgName} onChange={(e) => setOrgName(e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Domain type</Label>
-                    <Select value={domainType} onValueChange={(v) => setDomainType(v as "custom" | "public")}>
-                      <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="custom">Custom domain (e.g. vbexports.co.in)</SelectItem>
-                        <SelectItem value="public">Public email (gmail.com, etc.)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {domainType === "custom" && (
+                  <TabsContent value="signin" className="space-y-4 mt-0">
                     <div className="space-y-2">
-                      <Label>Organization domain</Label>
+                      <Label htmlFor="signin-email">Work email</Label>
                       <div className="relative">
-                        <Globe className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                        <Input placeholder="vbexports.co.in" className="pl-9 h-11" value={orgDomain}
-                          onChange={(e) => setOrgDomain(e.target.value.replace(/^@/, ""))} />
+                        <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                        <Input
+                          id="signin-email"
+                          type="email"
+                          autoComplete="email"
+                          placeholder="you@company.com"
+                          className="pl-9 h-11"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                        />
                       </div>
-                      <p className="text-xs text-muted-foreground">Admin email must match this domain.</p>
                     </div>
-                  )}
-                  <div className="space-y-2">
-                    <Label>Your name</Label>
-                    <div className="relative">
-                      <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <Input placeholder="Admin name" className="pl-9 h-11" value={name} onChange={(e) => setName(e.target.value)} />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="signin-password">Password</Label>
+                        <button
+                          type="button"
+                          onClick={() => { setResetEmail(email); setForgotOpen(true); }}
+                          className="cursor-pointer text-xs font-medium text-primary hover:underline"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                        <Input
+                          id="signin-password"
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="current-password"
+                          placeholder="••••••••"
+                          className="pl-9 pr-10 h-11"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="cursor-pointer absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Admin email</Label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <Input type="email" placeholder="returnorders@vbexports.co.in" className="pl-9 h-11"
-                        value={email} onChange={(e) => setEmail(e.target.value)} />
+                    <Button
+                      className="cursor-pointer w-full h-11 text-sm font-semibold group/signin"
+                      onClick={handleSignIn}
+                      disabled={loading}
+                    >
+                      {loading ? "Signing in…" : "Sign In"}
+                      {!loading && (
+                        <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-200 group-hover/signin:translate-x-0.5" />
+                      )}
+                    </Button>
+                  </TabsContent>
+
+                  <TabsContent value="register" className="space-y-3.5 mt-0">
+                    <div className="space-y-2">
+                      <Label htmlFor="reg-org">Organization name</Label>
+                      <div className="relative">
+                        <Building2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                        <Input
+                          id="reg-org"
+                          placeholder="Your company"
+                          className="pl-9 h-11"
+                          value={orgName}
+                          onChange={(e) => setOrgName(e.target.value)}
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Password</Label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <Input type={showPassword ? "text" : "password"} placeholder="Min. 6 characters" className="pl-9 pr-9 h-11"
-                        value={password} onChange={(e) => setPassword(e.target.value)} />
+                    <div className="space-y-2">
+                      <Label>Domain type</Label>
+                      <Select value={domainType} onValueChange={(v) => setDomainType(v as "custom" | "public")}>
+                        <SelectTrigger className="h-11 cursor-pointer"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="custom">Custom domain (e.g. company.com)</SelectItem>
+                          <SelectItem value="public">Public email (gmail.com, etc.)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                  </div>
-                  <Button className="w-full h-11 text-base" onClick={handleOrgRegister} disabled={loading}>
-                    {loading ? "Creating…" : "Create Organization"}
-                  </Button>
-                </TabsContent>
-              </Tabs>
+                    {domainType === "custom" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="reg-domain">Organization domain</Label>
+                        <div className="relative">
+                          <Globe className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                          <Input
+                            id="reg-domain"
+                            placeholder="company.com"
+                            className="pl-9 h-11"
+                            value={orgDomain}
+                            onChange={(e) => setOrgDomain(e.target.value.replace(/^@/, ""))}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">Admin email must match this domain.</p>
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      <Label htmlFor="reg-name">Your name</Label>
+                      <div className="relative">
+                        <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                        <Input
+                          id="reg-name"
+                          placeholder="Full name"
+                          className="pl-9 h-11"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="reg-email">Admin email</Label>
+                      <div className="relative">
+                        <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                        <Input
+                          id="reg-email"
+                          type="email"
+                          autoComplete="email"
+                          placeholder="you@company.com"
+                          className="pl-9 h-11"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="reg-password">Password</Label>
+                      <div className="relative">
+                        <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                        <Input
+                          id="reg-password"
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="new-password"
+                          placeholder="Min. 6 characters"
+                          className="pl-9 pr-10 h-11"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="cursor-pointer absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <Button
+                      className="cursor-pointer w-full h-11 text-sm font-semibold"
+                      onClick={handleOrgRegister}
+                      disabled={loading}
+                    >
+                      {loading ? "Creating…" : "Create Organization"}
+                    </Button>
+                  </TabsContent>
+                </Tabs>
+              </div>
             </>
           ) : (
-            <div className="space-y-5">
+            <div className={cn(
+              "rounded-xl border border-border/80 bg-card p-5 sm:p-6 space-y-5",
+              "shadow-[0_1px_2px_hsl(var(--foreground)/0.04),0_8px_24px_-12px_hsl(var(--foreground)/0.08)]",
+            )}>
               <div>
-                <h2 className="text-2xl font-bold tracking-tight">Reset password</h2>
-                <p className="text-sm text-muted-foreground mt-1">We'll send a branded reset email with a secure link to TaskFlow Pro.</p>
+                <h2 className="font-display text-2xl font-bold tracking-tight">Reset password</h2>
+                <p className="text-sm text-muted-foreground mt-1.5">
+                  We’ll email you a secure link to choose a new password.
+                </p>
               </div>
               <div className="space-y-2">
-                <Label>Email</Label>
-                <Input type="email" className="h-11" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleForgotPassword()} />
+                <Label htmlFor="reset-email">Email</Label>
+                <Input
+                  id="reset-email"
+                  type="email"
+                  autoComplete="email"
+                  className="h-11"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleForgotPassword()}
+                />
               </div>
-              <Button className="w-full h-11" onClick={handleForgotPassword} disabled={resetLoading}>
+              <Button className="cursor-pointer w-full h-11 font-semibold" onClick={handleForgotPassword} disabled={resetLoading}>
                 {resetLoading ? "Sending…" : "Send reset link"}
               </Button>
-              <Button variant="ghost" className="w-full" onClick={() => setForgotOpen(false)}>Back</Button>
+              <Button variant="ghost" className="cursor-pointer w-full" onClick={() => setForgotOpen(false)}>
+                Back to sign in
+              </Button>
             </div>
           )}
         </div>
-      </div>
+      </main>
     </div>
   );
 };
