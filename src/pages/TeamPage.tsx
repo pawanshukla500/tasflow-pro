@@ -1,5 +1,8 @@
-import { useState, useEffect } from "react";
-import { Search, MoreHorizontal, Download, Plus, Trash2, Edit, Phone, KeyRound } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import {
+  Search, MoreHorizontal, Download, Plus, Trash2, Edit, Phone, KeyRound,
+  Users, Building2, UserCog, CircleDot,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -8,11 +11,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/PageHeader";
 import { useAuth, AppRole } from "@/contexts/AuthContext";
 import { useAccessScope } from "@/hooks/useAccessScope";
 import { ScopeBanner } from "@/components/ScopeBanner";
-import { ROLE_OPTIONS, roleLabel } from "@/lib/roleLabels";
+import { ROLE_OPTIONS } from "@/lib/roleLabels";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/edgeFunctions";
@@ -20,6 +24,7 @@ import { sendPasswordResetEmail } from "@/lib/passwordReset";
 import { useToast } from "@/hooks/use-toast";
 import { shouldShowInPerformanceLeaderboard } from "@/lib/performanceVisibility";
 import { todayIST } from "@/lib/time";
+import { cn } from "@/lib/utils";
 
 interface ProfileWithRole {
   id: string;
@@ -41,12 +46,13 @@ interface DeptOption {
   name: string;
 }
 
+/** Soft role chips — readable on light surfaces, brand-aligned */
 const roleColors: Record<string, string> = {
-  managing_director: "bg-primary text-primary-foreground",
-  system_admin: "bg-destructive text-destructive-foreground",
-  department_manager: "bg-primary/20 text-primary",
-  employee: "bg-muted text-muted-foreground",
-  hr: "bg-warning/20 text-warning",
+  managing_director: "bg-primary text-primary-foreground border-transparent",
+  system_admin: "bg-destructive/12 text-destructive border-destructive/20",
+  department_manager: "bg-accent text-accent-foreground border-primary/15",
+  employee: "bg-secondary text-secondary-foreground border-border",
+  hr: "bg-warning/15 text-foreground border-warning/30",
 };
 
 const roleLabels: Record<string, string> = {
@@ -56,6 +62,26 @@ const roleLabels: Record<string, string> = {
   employee: "Employee",
   hr: "HR",
 };
+
+const AVATAR_TONES = [
+  "bg-primary/90 text-primary-foreground",
+  "bg-[hsl(220,40%,42%)] text-white",
+  "bg-[hsl(162,42%,32%)] text-white",
+  "bg-[hsl(28,55%,42%)] text-white",
+  "bg-[hsl(250,30%,45%)] text-white",
+] as const;
+
+function avatarTone(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash + name.charCodeAt(i) * (i + 1)) % AVATAR_TONES.length;
+  return AVATAR_TONES[hash];
+}
+
+function performanceBarClass(score: number) {
+  if (score >= 80) return "bg-success";
+  if (score >= 60) return "bg-warning";
+  return "bg-destructive";
+}
 
 const TeamPage = () => {
   const { accessScope, isAdminOrMD, isDeptManager, isHR, user } = useAuth();
@@ -122,6 +148,13 @@ const TeamPage = () => {
     if (deptFilter !== "all" && m.department_id !== deptFilter) return false;
     return true;
   });
+
+  const kpis = useMemo(() => [
+    { label: "Total", value: members.length, tone: "text-foreground", icon: Users },
+    { label: "Active", value: members.filter((m) => m.active).length, tone: "text-success", icon: CircleDot },
+    { label: "Managers", value: members.filter((m) => m.roles.includes("department_manager")).length, tone: "text-primary", icon: UserCog },
+    { label: "Departments", value: departments.length, tone: "text-foreground", icon: Building2 },
+  ], [members, departments.length]);
 
   const handleExportCSV = () => {
     const headers = ["Name", "Email", "Role", "Department", "Mobile", "Active"];
@@ -409,11 +442,22 @@ const TeamPage = () => {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto page-enter space-y-4">
+    <div className="relative p-4 md:p-6 max-w-6xl mx-auto page-enter space-y-5">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-2 h-40 opacity-80"
+        style={{
+          background:
+            "radial-gradient(ellipse 70% 80% at 0% 0%, hsl(var(--primary) / 0.08), transparent 55%), radial-gradient(ellipse 45% 60% at 100% 0%, hsl(142 71% 45% / 0.05), transparent 50%)",
+        }}
+      />
+
       {accessScope.tier !== "member" && !accessScope.hasFullAccess && (
         <ScopeBanner scope={accessScope} departmentNames={departments.map((d) => d.name)} />
       )}
+
       <PageHeader
+        className="relative mb-0"
         title="Team"
         description={
           accessScope.hasFullAccess
@@ -422,142 +466,231 @@ const TeamPage = () => {
         }
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={handleExportCSV}><Download className="h-3.5 w-3.5 mr-1" />Export CSV</Button>
-            <Button size="sm" onClick={() => { resetForm(); setShowAddModal(true); }}><Plus className="h-4 w-4 mr-1" />Add Member</Button>
+            <Button variant="outline" size="sm" className="cursor-pointer" onClick={handleExportCSV}>
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Export CSV
+            </Button>
+            <Button size="sm" className="cursor-pointer" onClick={() => { resetForm(); setShowAddModal(true); }}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add Member
+            </Button>
           </>
         }
       />
 
       {departments.length === 0 && isAdminOrMD && (
-        <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="relative rounded-lg border border-dashed border-primary/35 bg-primary/[0.04] px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p className="font-medium text-sm">Setup step 1: Create departments</p>
-            <p className="text-xs text-muted-foreground">Add departments before assigning HODs and Team Members.</p>
+            <p className="font-display text-sm font-semibold text-foreground">Setup step 1: Create departments</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Add departments before assigning HODs and Team Members.</p>
           </div>
-          <Button size="sm" variant="outline" onClick={() => navigate("/departments")}>Go to Departments</Button>
+          <Button size="sm" variant="outline" className="cursor-pointer shrink-0" onClick={() => navigate("/departments")}>
+            Go to Departments
+          </Button>
         </div>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="bg-card rounded-lg border p-3 text-center">
-          <p className="text-stat text-3xl text-foreground">{members.length}</p>
-          <p className="text-stat-label mt-1.5">Total Members</p>
-        </div>
-        <div className="bg-card rounded-lg border p-3 text-center">
-          <p className="text-stat text-3xl text-success">{members.filter((m) => m.active).length}</p>
-          <p className="text-stat-label mt-1.5">Active</p>
-        </div>
-        <div className="bg-card rounded-lg border p-3 text-center">
-          <p className="text-stat text-3xl text-primary">{members.filter((m) => m.roles.includes("department_manager")).length}</p>
-          <p className="text-stat-label mt-1.5">Managers</p>
-        </div>
-        <div className="bg-card rounded-lg border p-3 text-center">
-          <p className="text-stat text-3xl text-foreground">{departments.length}</p>
-          <p className="text-stat-label mt-1.5">Departments</p>
-        </div>
+      {/* Compact KPI strip — denser than card grid */}
+      <div className="relative flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/70 pb-3">
+        {kpis.map((k, i) => (
+          <div key={k.label} className="inline-flex items-center gap-2">
+            {i > 0 && <span className="hidden sm:block w-px h-4 bg-border/80 -ml-2 mr-0" aria-hidden />}
+            <k.icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden />
+            <span className={cn("font-mono-num text-lg font-semibold tabular-nums leading-none", k.tone)}>{k.value}</span>
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{k.label}</span>
+          </div>
+        ))}
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
+      {/* Filter toolbar */}
+      <div className="relative flex flex-col sm:flex-row sm:items-center gap-2.5 rounded-lg border bg-card/80 backdrop-blur-sm px-3 py-2.5 shadow-[0_1px_0_hsl(var(--border)/0.6)]">
+        <div className="relative flex-1 min-w-0">
           <Search className="h-4 w-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-8 h-8 text-sm" placeholder="Search members…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input
+            className="pl-8 h-9 text-sm bg-background"
+            placeholder="Search members…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="All Roles" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Roles</SelectItem>
-            <SelectItem value="managing_director">Managing Director</SelectItem>
-            <SelectItem value="system_admin">System Admin</SelectItem>
-            <SelectItem value="department_manager">Team Leader (HOD)</SelectItem>
-            <SelectItem value="employee">Employee</SelectItem>
-            <SelectItem value="hr">HR</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={deptFilter} onValueChange={setDeptFilter}>
-          <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="All Departments" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Departments</SelectItem>
-            {departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <span className="text-xs text-muted-foreground ml-auto">{filtered.length} members</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="w-full sm:w-[160px] h-9 text-sm cursor-pointer">
+              <SelectValue placeholder="All Roles" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Roles</SelectItem>
+              <SelectItem value="managing_director">Managing Director</SelectItem>
+              <SelectItem value="system_admin">System Admin</SelectItem>
+              <SelectItem value="department_manager">Team Leader (HOD)</SelectItem>
+              <SelectItem value="employee">Employee</SelectItem>
+              <SelectItem value="hr">HR</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={deptFilter} onValueChange={setDeptFilter}>
+            <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm cursor-pointer">
+              <SelectValue placeholder="All Departments" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.map((d) => (
+                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground whitespace-nowrap sm:ml-1 font-mono-num">
+            {filtered.length} shown
+          </span>
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-card rounded-lg border">
+      {/* Member directory table */}
+      <div className="relative rounded-lg border bg-card overflow-hidden shadow-[0_1px_0_hsl(var(--border)/0.5)]">
         {loading ? (
-          <div className="p-8 text-center text-muted-foreground">Loading…</div>
+          <div className="p-10 text-center text-sm text-muted-foreground">Loading team…</div>
         ) : filtered.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">No members found</div>
+          <div className="p-10 text-center space-y-2">
+            <Users className="h-8 w-8 mx-auto text-muted-foreground/50" />
+            <p className="text-sm font-medium text-foreground">No members found</p>
+            <p className="text-xs text-muted-foreground">Try a different search or clear filters.</p>
+          </div>
         ) : (
-          filtered.map((m) => (
-            <div key={m.id} className="flex items-center gap-3 px-4 py-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors group">
-              <div className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-medium shrink-0">
-                {getInitials(m.name)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground">{m.name}</p>
-                <p className="text-xs text-muted-foreground">{m.email}</p>
-              </div>
-              {m.mobile_no && (
-                <span className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" />{m.mobile_no}</span>
-              )}
-              <Badge className={`text-[10px] ${roleColors[m.roles[0]] || roleColors.employee}`}>
-                {roleLabels[m.roles[0]] || "Employee"}
-              </Badge>
-              <span className="text-xs text-muted-foreground w-28 text-center">{m.department_name || "—"}</span>
-              <div className="w-16 flex items-center gap-1.5">
-                {shouldShowInPerformanceLeaderboard(m.roles) ? (
-                  <>
-                    <div className="flex-1 h-1.5 bg-muted rounded-full">
-                      <div className={`h-full rounded-full ${m.performance_score >= 80 ? "bg-success" : m.performance_score >= 60 ? "bg-warning" : "bg-destructive"}`} style={{ width: `${m.performance_score}%` }} />
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent bg-muted/40">
+                <TableHead className="h-9 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground pl-4">Member</TableHead>
+                <TableHead className="h-9 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground hidden md:table-cell">Contact</TableHead>
+                <TableHead className="h-9 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">Role</TableHead>
+                <TableHead className="h-9 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground hidden lg:table-cell">Department</TableHead>
+                <TableHead className="h-9 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground w-[7.5rem]">Score</TableHead>
+                <TableHead className="h-9 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground hidden sm:table-cell">Status</TableHead>
+                <TableHead className="h-9 w-10 pr-3"><span className="sr-only">Actions</span></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((m) => (
+                <TableRow key={m.id} className="group transition-colors duration-150">
+                  <TableCell className="pl-4 py-2.5">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={cn(
+                          "w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 ring-2 ring-background",
+                          avatarTone(m.name),
+                        )}
+                      >
+                        {getInitials(m.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate leading-tight">{m.name}</p>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">{m.email}</p>
+                        {m.position && (
+                          <p className="text-[11px] text-muted-foreground/80 truncate mt-0.5 md:hidden">{m.position}</p>
+                        )}
+                      </div>
                     </div>
-                    <span className="text-[10px] font-mono-num text-muted-foreground">{m.performance_score}%</span>
-                  </>
-                ) : (
-                  <span className="text-[10px] text-muted-foreground w-full text-center">—</span>
-                )}
-              </div>
-              <Badge variant={m.active ? "secondary" : "outline"} className="text-[10px]">
-                {m.active ? "Active" : "Inactive"}
-              </Badge>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100">
-                    <MoreHorizontal className="h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => openEdit(m)}><Edit className="h-3.5 w-3.5 mr-2" />Edit Member</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleSendReset(m)}><KeyRound className="h-3.5 w-3.5 mr-2" />Send Password Reset</DropdownMenuItem>
-                  <DropdownMenuItem className="text-destructive" onClick={() => setDeleteId(m.id)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete Member</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ))
+                  </TableCell>
+                  <TableCell className="py-2.5 hidden md:table-cell">
+                    {m.mobile_no ? (
+                      <span className="text-xs text-muted-foreground inline-flex items-center gap-1.5 font-mono-num">
+                        <Phone className="h-3 w-3 shrink-0 opacity-70" />
+                        {m.mobile_no}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground/50">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="py-2.5">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] font-medium px-2 py-0.5 rounded-md border",
+                        roleColors[m.roles[0]] || roleColors.employee,
+                      )}
+                    >
+                      {roleLabels[m.roles[0]] || "Employee"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="py-2.5 hidden lg:table-cell">
+                    <span className="text-xs text-muted-foreground">{m.department_name || "—"}</span>
+                  </TableCell>
+                  <TableCell className="py-2.5">
+                    {shouldShowInPerformanceLeaderboard(m.roles) ? (
+                      <div className="flex items-center gap-2 min-w-[5.5rem]">
+                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={cn("h-full rounded-full transition-[width] duration-300", performanceBarClass(m.performance_score))}
+                            style={{ width: `${Math.max(0, Math.min(100, m.performance_score))}%` }}
+                          />
+                        </div>
+                        <span className="text-[11px] font-mono-num tabular-nums text-muted-foreground w-8 text-right">
+                          {m.performance_score}%
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="py-2.5 hidden sm:table-cell">
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 text-[11px] font-medium",
+                        m.active ? "text-success" : "text-muted-foreground",
+                      )}
+                    >
+                      <span className={cn("h-1.5 w-1.5 rounded-full", m.active ? "bg-success" : "bg-muted-foreground/40")} />
+                      {m.active ? "Active" : "Inactive"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-2.5 pr-3 text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 cursor-pointer opacity-70 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Open actions</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem className="cursor-pointer" onClick={() => openEdit(m)}>
+                          <Edit className="h-3.5 w-3.5 mr-2" />Edit Member
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="cursor-pointer" onClick={() => handleSendReset(m)}>
+                          <KeyRound className="h-3.5 w-3.5 mr-2" />Send Password Reset
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={() => setDeleteId(m.id)}>
+                          <Trash2 className="h-3.5 w-3.5 mr-2" />Delete Member
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </div>
 
       <Dialog open={showAddModal} onOpenChange={(open) => { if (!open) { setShowAddModal(false); resetForm(); } }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Add New Member</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-display">Add New Member</DialogTitle></DialogHeader>
           {renderFormFields(false)}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowAddModal(false); resetForm(); }}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={formLoading}>{formLoading ? "Saving…" : "Create Account"}</Button>
+            <Button variant="outline" className="cursor-pointer" onClick={() => { setShowAddModal(false); resetForm(); }}>Cancel</Button>
+            <Button className="cursor-pointer" onClick={handleCreate} disabled={formLoading}>{formLoading ? "Saving…" : "Create Account"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!editMember} onOpenChange={(open) => { if (!open) { setEditMember(null); resetForm(); } }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Edit Member</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-display">Edit Member</DialogTitle></DialogHeader>
           {renderFormFields(true)}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditMember(null); resetForm(); }}>Cancel</Button>
-            <Button onClick={handleUpdate} disabled={formLoading}>{formLoading ? "Saving…" : "Update"}</Button>
+            <Button variant="outline" className="cursor-pointer" onClick={() => { setEditMember(null); resetForm(); }}>Cancel</Button>
+            <Button className="cursor-pointer" onClick={handleUpdate} disabled={formLoading}>{formLoading ? "Saving…" : "Update"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -565,7 +698,7 @@ const TeamPage = () => {
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this team member?</AlertDialogTitle>
+            <AlertDialogTitle className="font-display">Delete this team member?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 {(() => {
@@ -573,26 +706,39 @@ const TeamPage = () => {
                   if (!m) return null;
                   return (
                     <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
-                      <div className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-medium shrink-0">
+                      <div
+                        className={cn(
+                          "w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0",
+                          avatarTone(m.name),
+                        )}
+                      >
                         {getInitials(m.name)}
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{m.name}</p>
                         <p className="text-xs text-muted-foreground truncate">{m.email}</p>
-                        {m.department_name && <p className="text-[11px] text-muted-foreground">{m.department_name} · {roleLabels[m.roles[0]] || "Employee"}</p>}
+                        {m.department_name && (
+                          <p className="text-[11px] text-muted-foreground">
+                            {m.department_name} · {roleLabels[m.roles[0]] || "Employee"}
+                          </p>
+                        )}
                       </div>
                     </div>
                   );
                 })()}
                 <p className="text-sm">
-                  This permanently removes the account, profile, role assignments, and login access. <span className="text-destructive font-medium">This action cannot be undone.</span>
+                  This permanently removes the account, profile, role assignments, and login access.{" "}
+                  <span className="text-destructive font-medium">This action cannot be undone.</span>
                 </p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Yes, delete this member
             </AlertDialogAction>
           </AlertDialogFooter>
