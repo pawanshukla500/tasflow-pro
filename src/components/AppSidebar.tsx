@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { RoleBadge } from "@/components/RoleBadge";
 import { NotificationCenter } from "@/components/NotificationCenter";
+import { BrandLogo, BrandLockup } from "@/components/BrandLogo";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -81,25 +82,25 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
       mobile ? "w-full" : "h-screen shrink-0",
       !mobile && (isCollapsed ? "w-14" : "w-60"),
     )}>
-      <div className={cn("p-3 flex items-center gap-2 border-b border-sidebar-border", isCollapsed && !mobile && "justify-center p-2")}>
-        {!isCollapsed && (
-          <>
-            <div className="w-9 h-9 rounded-xl bg-white border flex items-center justify-center shrink-0 overflow-hidden p-1 shadow-sm">
-              <img src="/youthnic-logo.svg" alt="TaskFlow Pro" className="w-full h-full object-contain" width={40} height={40} decoding="async" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-display font-bold text-foreground truncate tracking-tight">TaskFlow Pro</p>
-              <p className="text-[10px] text-muted-foreground truncate">
-                {user?.organization?.name || "Enterprise Workspace"}
-              </p>
-            </div>
-          </>
+      <div className={cn(
+        "p-3 flex items-center gap-2 border-b border-sidebar-border",
+        isCollapsed && !mobile && "flex-col justify-center gap-1.5 p-2",
+      )}>
+        {!isCollapsed ? (
+          <BrandLockup
+            size="md"
+            tone="auto"
+            className="flex-1 min-w-0"
+            subtitle={user?.organization?.name || "Enterprise Workspace"}
+          />
+        ) : (
+          !mobile && <BrandLogo size="sm" tone="auto" alt="TaskFlow Pro" />
         )}
         {!mobile && (
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground cursor-pointer"
             onClick={() => setCollapsed(!collapsed)}
             aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >

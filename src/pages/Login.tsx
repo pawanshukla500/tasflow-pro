@@ -11,6 +11,7 @@ import {
   Eye, EyeOff, Mail, Lock, User, Building2, Globe, Shield, Workflow, ListTodo, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BrandLogo, BrandLockup } from "@/components/BrandLogo";
 
 /** Product benefits only — no tech stack / infra copy on the login surface. */
 const BENEFITS = [
@@ -117,14 +118,13 @@ const Login = () => {
         <div aria-hidden className="absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
         <div aria-hidden className="absolute top-1/3 -right-20 h-64 w-64 rounded-full bg-black/10 blur-3xl" />
 
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center p-1.5 shadow-md">
-            <img src="/youthnic-logo.svg" width={40} height={40} decoding="async" alt="" className="w-full h-full object-contain" />
-          </div>
-          <div>
-            <p className="font-display font-bold text-lg tracking-tight leading-none">TaskFlow Pro</p>
-            <p className="text-xs text-primary-foreground/75 mt-1">Work management for teams</p>
-          </div>
+        <div className="relative z-10">
+          <BrandLockup
+            size="md"
+            tone="onBrand"
+            invertedText
+            subtitle="Work management for teams"
+          />
         </div>
 
         <div className="relative z-10 space-y-8 max-w-md">
@@ -166,9 +166,7 @@ const Login = () => {
 
         <div className="relative w-full max-w-[420px]">
           <div className="lg:hidden flex flex-col items-center mb-8">
-            <div className="w-14 h-14 rounded-xl bg-card border border-border/80 shadow-sm flex items-center justify-center p-2 mb-3">
-              <img src="/youthnic-logo.svg" width={40} height={40} decoding="async" alt="" className="w-full h-full object-contain" />
-            </div>
+            <BrandLogo size="xl" tone="auto" className="mb-3" />
             <h1 className="font-display text-xl font-bold tracking-tight">TaskFlow Pro</h1>
             <p className="text-xs text-muted-foreground mt-1">Work management for teams</p>
           </div>
