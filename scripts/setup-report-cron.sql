@@ -32,13 +32,13 @@ select cron.schedule(
   $$
 );
 
--- Daily user digest — 08:00 IST (02:30 UTC)
+-- Daily user digest — 10:00 IST (04:30 UTC)
 select cron.unschedule('send-daily-digest') where exists (
   select 1 from cron.job where jobname = 'send-daily-digest'
 );
 select cron.schedule(
   'send-daily-digest',
-  '30 2 * * *',
+  '30 4 * * *',
   $$
   select net.http_post(
     url := 'https://nekdjoquirhecmejuoba.supabase.co/functions/v1/send-daily-digest',

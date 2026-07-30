@@ -235,3 +235,110 @@ export function EmailDetailCard({ title, children }: { title?: string; children:
     </Section>
   )
 }
+
+/** Compact statistic tile for digests / leadership reports. */
+export function StatCard({
+  label,
+  value,
+  accent,
+}: {
+  label: string
+  value: string | number
+  accent?: string
+}) {
+  const color = accent || colors.primary
+  return (
+    <Section
+      style={{
+        background: colors.bg,
+        border: `1px solid ${colors.border}`,
+        borderRadius: '12px',
+        padding: '14px 12px',
+        textAlign: 'center' as const,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: '22px',
+          fontWeight: 800,
+          color,
+          margin: '0 0 4px',
+          letterSpacing: '-0.4px',
+          lineHeight: '1.1',
+        }}
+      >
+        {value}
+      </Text>
+      <Text
+        style={{
+          fontSize: '10px',
+          fontWeight: 700,
+          color: colors.muted,
+          margin: 0,
+          textTransform: 'uppercase' as const,
+          letterSpacing: '0.08em',
+        }}
+      >
+        {label}
+      </Text>
+    </Section>
+  )
+}
+
+/** 2–4 column stat row (email-safe tables via Columns). */
+export function StatRow({
+  items,
+}: {
+  items: { label: string; value: string | number; accent?: string }[]
+}) {
+  const width = `${Math.floor(100 / Math.max(items.length, 1))}%`
+  return (
+    <Section style={{ margin: '16px 0' }}>
+      <Row>
+        {items.map((item, i) => (
+          <Column key={i} style={{ width, paddingRight: i < items.length - 1 ? '8px' : 0, verticalAlign: 'top' }}>
+            <StatCard label={item.label} value={item.value} accent={item.accent} />
+          </Column>
+        ))}
+      </Row>
+    </Section>
+  )
+}
+
+export function InsightCard({
+  title,
+  body,
+  tone = 'neutral',
+}: {
+  title: string
+  body: string
+  tone?: 'neutral' | 'success' | 'warning' | 'danger'
+}) {
+  const border =
+    tone === 'success' ? colors.success :
+    tone === 'warning' ? colors.warning :
+    tone === 'danger' ? colors.danger :
+    colors.primary
+  return (
+    <Section
+      style={{
+        background: colors.bg,
+        borderLeft: `4px solid ${border}`,
+        borderRadius: '10px',
+        padding: '12px 14px',
+        margin: '10px 0',
+      }}
+    >
+      <Text style={{ ...text, fontWeight: 700, margin: '0 0 4px', fontSize: '13px' }}>{title}</Text>
+      <Text style={{ ...mutedText, margin: 0 }}>{body}</Text>
+    </Section>
+  )
+}
+
+export function CtaBlock({ href, label }: { href: string; label: string }) {
+  return (
+    <Section style={{ textAlign: 'center' as const, margin: '22px 0 8px' }}>
+      <Link href={href} style={button}>{label}</Link>
+    </Section>
+  )
+}

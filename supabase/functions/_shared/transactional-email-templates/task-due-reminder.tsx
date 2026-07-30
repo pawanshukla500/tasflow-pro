@@ -43,7 +43,7 @@ const TaskDueReminderEmail = ({ recipientName, tasks = [] }: Props) => {
       heroTitle="Tasks need your attention"
       heroSubtitle={summary}
     >
-      <Heading style={h1}>Your pending tasks ⏰</Heading>
+      <Heading style={h1}>Tasks that need attention</Heading>
       <Text style={text}>Hi{recipientName ? ` ${recipientName}` : ''},</Text>
       <Text style={text}>
         You have {tasks.length} pending item{tasks.length === 1 ? '' : 's'}

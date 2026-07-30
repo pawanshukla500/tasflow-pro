@@ -37,9 +37,11 @@ Deno.serve(async (req) => {
   })
   const fridayLabel = `Week ending ${weekLabel}`
 
-  const [{ data: allTasks }, { data: departments }] = await Promise.all([
-    supabase.from('tasks').select('id, title, due_date, priority, department_id, status, completed_at, organization_id'),
+  const [{ data: allTasks }, { data: departments }, { data: assignees }, { data: profiles }] = await Promise.all([
+    supabase.from('tasks').select('id, title, due_date, priority, department_id, status, completed_at, organization_id, created_by'),
     supabase.from('departments').select('id, name, organization_id'),
+    supabase.from('task_assignees').select('task_id, user_id'),
+    supabase.from('profiles').select('id, name, organization_id, active'),
   ])
 
   const { data: roles } = await supabase
@@ -48,6 +50,14 @@ Deno.serve(async (req) => {
   const recipientIds = Array.from(new Set((roles || []).map((r) => r.user_id)))
   const { data: recipients } = await supabase
     .from('profiles').select('id, name, email, active, organization_id').in('id', recipientIds)
+
+  const taskAssignees = new Map<string, string[]>()
+  for (const a of assignees || []) {
+    const list = taskAssignees.get(a.task_id) || []
+    list.push(a.user_id)
+    taskAssignees.set(a.task_id, list)
+  }
+  const profileName = new Map((profiles || []).map((p) => [p.id, p.name || 'Team member']))
 
   const results: { user: string; ok: boolean; error?: string }[] = []
   for (const r of recipients || []) {
@@ -67,17 +77,38 @@ Deno.serve(async (req) => {
       total: number; overdue: number; dueSoon: number; done: number; doneThisWeek: number
     }>()
 
+    const byEmployee = new Map<string, { completedThisWeek: number; overdue: number; open: number }>()
+
     for (const t of orgTasks) {
       const key = t.department_id || 'unassigned'
       if (!byDept.has(key)) byDept.set(key, { total: 0, overdue: 0, dueSoon: 0, done: 0, doneThisWeek: 0 })
       const row = byDept.get(key)!
+
+      const assigneeIds = taskAssignees.get(t.id) || (t.created_by ? [t.created_by] : [])
+
       if (t.status === 'done') {
         row.done++
-        if (t.completed_at && t.completed_at.slice(0, 10) >= weekAgo) row.doneThisWeek++
+        const doneThisWeek = !!(t.completed_at && t.completed_at.slice(0, 10) >= weekAgo)
+        if (doneThisWeek) {
+          row.doneThisWeek++
+          for (const uid of assigneeIds) {
+            if (!byEmployee.has(uid)) byEmployee.set(uid, { completedThisWeek: 0, overdue: 0, open: 0 })
+            byEmployee.get(uid)!.completedThisWeek++
+          }
+        }
       } else {
         row.total++
-        if (t.due_date && t.due_date < today) row.overdue++
-        else if (t.due_date && t.due_date <= istAddDays(today, 3)) row.dueSoon++
+        const isOverdue = !!(t.due_date && t.due_date < today)
+        const isDueSoon = !!(t.due_date && t.due_date >= today && t.due_date <= istAddDays(today, 3))
+        if (isOverdue) row.overdue++
+        else if (isDueSoon) row.dueSoon++
+
+        for (const uid of assigneeIds) {
+          if (!byEmployee.has(uid)) byEmployee.set(uid, { completedThisWeek: 0, overdue: 0, open: 0 })
+          const emp = byEmployee.get(uid)!
+          emp.open++
+          if (isOverdue) emp.overdue++
+        }
       }
     }
 
@@ -90,11 +121,12 @@ Deno.serve(async (req) => {
           total: s.total,
           overdue: s.overdue,
           dueSoon: s.dueSoon,
+          completed: s.done,
           completionPct,
           doneThisWeek: s.doneThisWeek,
         }
       })
-      .filter((r) => r.total > 0 || r.doneThisWeek > 0)
+      .filter((row) => row.total > 0 || row.doneThisWeek > 0 || row.completed > 0)
       .sort((a, b) => b.overdue - a.overdue || b.total - a.total)
 
     if (rows.length === 0) {
@@ -104,8 +136,11 @@ Deno.serve(async (req) => {
 
     const totalPending = rows.reduce((a, row) => a + row.total, 0)
     const totalOverdue = rows.reduce((a, row) => a + row.overdue, 0)
+    const totalCompleted = rows.reduce((a, row) => a + row.completed, 0)
+    const totalDoneThisWeek = rows.reduce((a, row) => a + row.doneThisWeek, 0)
+    const companyAll = totalPending + totalCompleted
+    const companyCompletionPct = companyAll > 0 ? Math.round((totalCompleted / companyAll) * 100) : 0
 
-    // "Doing well" = low overdue + strong completion / throughput this week
     const topPerformers = [...rows]
       .filter((row) => row.overdue === 0 && (row.completionPct >= 70 || row.doneThisWeek >= 3))
       .sort((a, b) => b.completionPct - a.completionPct || b.doneThisWeek - a.doneThisWeek)
@@ -116,6 +151,46 @@ Deno.serve(async (req) => {
       .sort((a, b) => b.overdue - a.overdue || a.completionPct - b.completionPct)
       .slice(0, 3)
       .map((row) => row.name)
+
+    const topEmployees = Array.from(byEmployee.entries())
+      .map(([uid, s]) => ({
+        name: profileName.get(uid) || 'Team member',
+        completedThisWeek: s.completedThisWeek,
+        overdue: s.overdue,
+        open: s.open,
+      }))
+      .filter((e) => e.completedThisWeek > 0 || e.overdue > 0)
+      .sort((a, b) => b.completedThisWeek - a.completedThisWeek || a.overdue - b.overdue)
+      .slice(0, 5)
+
+    const insights: string[] = []
+    if (topPerformers[0]) {
+      insights.push(`${topPerformers[0]} is leading department health this week.`)
+    }
+    if (totalOverdue > 0) {
+      const share = totalPending > 0 ? Math.round((totalOverdue / totalPending) * 100) : 0
+      insights.push(`${totalOverdue} overdue tasks (${share}% of open work) need leadership follow-up.`)
+    }
+    if (totalDoneThisWeek > 0) {
+      insights.push(`Teams closed ${totalDoneThisWeek} tasks in the last 7 days — company completion sits at ${companyCompletionPct}%.`)
+    }
+    if (needsAttention[0] && !insights.some((i) => i.includes(needsAttention[0]))) {
+      insights.push(`${needsAttention[0]} shows elevated overdue / low completion — prioritize a check-in.`)
+    }
+
+    const recommendations: string[] = []
+    if (needsAttention.length > 0) {
+      recommendations.push(`Review ${needsAttention.join(' & ')} overdue lists in Reports and rebalance assignees if capacity is uneven.`)
+    }
+    if (topPerformers.length > 0) {
+      recommendations.push(`Share practices from ${topPerformers[0]} with other departments in the next standup.`)
+    }
+    if (totalOverdue >= 5) {
+      recommendations.push('Schedule a short overdue scrub this week — clear critical/high items first.')
+    }
+    if (recommendations.length === 0) {
+      recommendations.push('Keep the daily 10:00 IST briefings enabled so individuals stay on top of pending work.')
+    }
 
     try {
       const res = await fetch(`${supabaseUrl}/functions/v1/send-transactional-email`, {
@@ -130,14 +205,20 @@ Deno.serve(async (req) => {
           recipientEmail: r.email,
           idempotencyKey: `weekly-insight-friday-${r.id}-${weekKey}`,
           templateData: {
-            title: `Friday leadership overlook — ${totalPending} open across ${rows.length} departments`,
+            title: `Friday management overview — ${companyCompletionPct}% completion · ${totalPending} open`,
             recipientName: r.name,
             weekLabel: fridayLabel,
             totalPending,
             totalOverdue,
+            totalCompleted,
+            totalDoneThisWeek,
+            companyCompletionPct,
             departments: rows,
             topPerformers,
             needsAttention,
+            topEmployees,
+            insights,
+            recommendations,
             ctaLabel: 'Open Reports',
             ctaUrl: `${appUrl}/reports`,
           },

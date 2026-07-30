@@ -12,6 +12,7 @@ export interface TemplateEntry {
 import { template as welcomeUser } from './welcome-user.tsx'
 import { template as taskAssigned } from './task-assigned.tsx'
 import { template as taskDueReminder } from './task-due-reminder.tsx'
+import { template as taskCompleted } from './task-completed.tsx'
 import { template as monthlyReport } from './monthly-report.tsx'
 import { template as genericNotification } from './generic-notification.tsx'
 import { template as workflowStageAssigned } from './workflow-stage-assigned.tsx'
@@ -24,6 +25,7 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   'welcome-user': welcomeUser,
   'task-assigned': taskAssigned,
   'task-due-reminder': taskDueReminder,
+  'task-completed': taskCompleted,
   'monthly-report': monthlyReport,
   'generic-notification': genericNotification,
   'workflow-stage-assigned': workflowStageAssigned,
