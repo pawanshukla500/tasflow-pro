@@ -40,10 +40,10 @@ import {
 const ImportTasksModal = lazy(() => import("@/components/ImportTasksModal"));
 
 const priorityColors: Record<string, string> = {
-  critical: "#dc2626",
-  high: "#f59e0b",
-  medium: "#6366f1",
-  low: "#22c55e",
+  critical: "hsl(var(--destructive))",
+  high: "hsl(var(--warning))",
+  medium: "hsl(var(--primary))",
+  low: "hsl(var(--success))",
 };
 
 const statusLabels = TASK_STATUS_LABELS;
@@ -51,10 +51,10 @@ const statusLabels = TASK_STATUS_LABELS;
 const statusColors: Record<string, string> = {
   todo: "hsl(var(--muted-foreground))",
   in_progress: "hsl(var(--primary))",
-  pending_review: "hsl(38,92%,50%)",
-  in_review: "hsl(38,92%,50%)",
-  done: "hsl(142,71%,45%)",
-  blocked: "hsl(0,72%,51%)",
+  pending_review: "hsl(var(--warning))",
+  in_review: "hsl(var(--warning))",
+  done: "hsl(var(--success))",
+  blocked: "hsl(var(--destructive))",
 };
 
 const MyTasks = () => {
@@ -163,17 +163,49 @@ const MyTasks = () => {
   ];
 
   const sections = [
-    { title: "Overdue", tasks: overdue, color: "text-destructive", accent: "border-l-destructive", icon: AlertTriangle, id: "overdue" },
-    { title: "Due Today", tasks: dueToday, color: "text-warning", accent: "border-l-warning", icon: CalendarClock, id: "today" },
-    { title: "Upcoming", tasks: upcoming, color: "text-primary", accent: "border-l-primary", icon: Clock, id: "upcoming" },
-    { title: "Completed", tasks: completed, color: "text-success", accent: "border-l-success", icon: CheckCircle2, id: "completed" },
+    {
+      title: "Overdue",
+      tasks: overdue,
+      color: "text-destructive",
+      accent: "border-l-destructive",
+      headerBg: "bg-destructive/[0.04]",
+      icon: AlertTriangle,
+      id: "overdue",
+    },
+    {
+      title: "Due Today",
+      tasks: dueToday,
+      color: "text-warning",
+      accent: "border-l-warning",
+      headerBg: "bg-warning/[0.05]",
+      icon: CalendarClock,
+      id: "today",
+    },
+    {
+      title: "Upcoming",
+      tasks: upcoming,
+      color: "text-primary",
+      accent: "border-l-primary",
+      headerBg: "bg-primary/[0.04]",
+      icon: Clock,
+      id: "upcoming",
+    },
+    {
+      title: "Completed",
+      tasks: completed,
+      color: "text-success",
+      accent: "border-l-success",
+      headerBg: "bg-success/[0.04]",
+      icon: CheckCircle2,
+      id: "completed",
+    },
   ];
 
   const kpis = [
-    { label: "Overdue", value: overdue.length, tone: "text-destructive" },
-    { label: "Due today", value: dueToday.length, tone: "text-warning" },
-    { label: "Active", value: activeCount, tone: "text-primary" },
-    { label: "Done", value: completed.length, tone: "text-success" },
+    { label: "Overdue", value: overdue.length, tone: "text-destructive", icon: AlertTriangle },
+    { label: "Due today", value: dueToday.length, tone: "text-warning", icon: CalendarClock },
+    { label: "Active", value: activeCount, tone: "text-primary", icon: Clock },
+    { label: "Done", value: completed.length, tone: "text-success", icon: CheckCircle2 },
   ];
 
   const toggle = (id: string) =>
@@ -243,18 +275,19 @@ const MyTasks = () => {
       <div
         id={`task-${task.id}`}
         className={cn(
-          "flex items-center gap-2.5 px-2.5 sm:px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors group",
-          highlightTaskId === task.id && "bg-primary/5 ring-1 ring-primary/30",
+          "flex items-center gap-2.5 px-3 sm:px-3.5 py-2.5 transition-colors group",
+          "hover:bg-primary/[0.03]",
+          highlightTaskId === task.id && "bg-primary/5 ring-1 ring-inset ring-primary/30",
         )}
       >
         <button
           type="button"
-          className="text-muted-foreground hover:text-success transition-colors shrink-0 p-0.5"
+          className="text-muted-foreground hover:text-success transition-colors shrink-0 p-1 -ml-0.5 cursor-pointer rounded-md hover:bg-success/10"
           onClick={() => handleCompleteClick(task)}
           aria-label={task.status === "done" ? "Mark incomplete" : "Mark complete"}
         >
           {task.status === "done" ? (
-            <CheckCircle2 className="h-4.5 w-4.5 h-[18px] w-[18px] text-success" />
+            <CheckCircle2 className="h-[18px] w-[18px] text-success" />
           ) : (
             <Circle className="h-[18px] w-[18px]" />
           )}
@@ -264,8 +297,8 @@ const MyTasks = () => {
           <button
             type="button"
             className={cn(
-              "block w-full text-sm text-left truncate transition-colors hover:text-primary",
-              task.status === "done" ? "text-muted-foreground line-through decoration-muted-foreground/40" : "font-medium text-foreground",
+              "block w-full text-sm text-left truncate transition-colors hover:text-primary cursor-pointer",
+              task.status === "done" ? "text-muted-foreground line-through decoration-muted-foreground/40" : "font-semibold text-foreground",
             )}
             onClick={() => setEditingTask(task)}
           >
@@ -325,7 +358,7 @@ const MyTasks = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 shrink-0 opacity-60 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+              className="h-8 w-8 shrink-0 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 cursor-pointer"
             >
               <MoreHorizontal className="h-3.5 w-3.5" />
             </Button>
@@ -387,20 +420,30 @@ const MyTasks = () => {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto page-enter space-y-4">
+    <div className="relative p-4 md:p-6 max-w-5xl mx-auto page-enter space-y-5">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background:
+            "radial-gradient(ellipse 70% 55% at 0% 0%, hsl(var(--primary) / 0.09), transparent 55%), radial-gradient(ellipse 40% 50% at 100% 0%, hsl(var(--warning) / 0.05), transparent 50%)",
+        }}
+      />
+
       <PageHeader
+        className="relative mb-0"
         title="My Tasks"
         description={`${activeCount} active · ${completed.length} completed`}
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+            <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => setShowImport(true)}>
               <Upload className="h-3.5 w-3.5 mr-1" />Import
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExport}>
+            <Button variant="outline" size="sm" className="cursor-pointer" onClick={handleExport}>
               <Download className="h-3.5 w-3.5 mr-1" />Export
             </Button>
             {accessScope.canCreateTasks && (
-              <Button size="sm" onClick={() => setShowCreate(true)}>
+              <Button size="sm" className="cursor-pointer" onClick={() => setShowCreate(true)}>
                 <Plus className="h-3.5 w-3.5 mr-1" />New Task
               </Button>
             )}
@@ -408,23 +451,25 @@ const MyTasks = () => {
         }
       />
 
-      {/* Compact KPI strip — one row, no heavy cards */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm border-b border-border/60 pb-3">
-        {kpis.map((k) => (
-          <div key={k.label} className="inline-flex items-baseline gap-1.5">
-            <span className={cn("font-mono-num font-semibold tabular-nums", k.tone)}>{k.value}</span>
-            <span className="text-xs text-muted-foreground">{k.label}</span>
+      {/* Soft KPI band */}
+      <div className="relative flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/70 pb-3 animate-rise">
+        {kpis.map((k, i) => (
+          <div key={k.label} className="inline-flex items-center gap-2">
+            {i > 0 && <span className="hidden sm:block w-px h-4 bg-border/80 -ml-2 mr-0" aria-hidden />}
+            <k.icon className={cn("h-3.5 w-3.5 shrink-0", k.tone)} aria-hidden />
+            <span className={cn("font-mono-num text-lg font-semibold tabular-nums leading-none", k.tone)}>{k.value}</span>
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{k.label}</span>
           </div>
         ))}
       </div>
 
       {/* Search + member filter + view tabs */}
-      <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-          <div className="relative flex-1 max-w-md">
-            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+      <div className="relative space-y-3 animate-rise [animation-delay:80ms]">
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center rounded-xl border bg-card/80 backdrop-blur-sm px-3 py-2.5 shadow-[0_1px_0_hsl(var(--border)/0.6)]">
+          <div className="relative flex-1 min-w-0">
+            <Search className="h-4 w-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="pl-9 h-9"
+              className="pl-8 h-9 bg-background"
               placeholder="Search tasks…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -432,7 +477,7 @@ const MyTasks = () => {
           </div>
           {canFilterByUser && (
             <Select value={userFilter} onValueChange={setUserFilter}>
-              <SelectTrigger className="h-9 w-full sm:w-[180px] text-xs">
+              <SelectTrigger className="h-9 w-full sm:w-[180px] text-xs cursor-pointer bg-background">
                 <SelectValue placeholder="Team member…" />
               </SelectTrigger>
               <SelectContent>
@@ -450,7 +495,11 @@ const MyTasks = () => {
           )}
         </div>
 
-        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+        <div
+          role="tablist"
+          aria-label="Task views"
+          className="flex items-center gap-1 overflow-x-auto pb-0.5 p-1 rounded-xl bg-muted/50 border border-border/50"
+        >
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -458,17 +507,26 @@ const MyTasks = () => {
               <button
                 key={tab.id}
                 type="button"
+                role="tab"
+                aria-selected={isActive}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors",
+                  "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer",
                   isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                    ? "bg-card text-primary shadow-sm border border-border/60"
+                    : "text-muted-foreground hover:text-foreground hover:bg-card/60 border border-transparent",
                 )}
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className="h-3.5 w-3.5" aria-hidden />
                 {tab.label}
-                <span className="font-mono-num text-[10px] opacity-70">{tab.count}</span>
+                <span
+                  className={cn(
+                    "font-mono-num text-[10px] tabular-nums px-1.5 py-0.5 rounded-md",
+                    isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {tab.count}
+                </span>
               </button>
             );
           })}
@@ -476,9 +534,9 @@ const MyTasks = () => {
       </div>
 
       {/* Task sections */}
-      <div className="space-y-3">
+      <div className="relative space-y-3 stagger-children">
         {sections.every((s) => s.tasks.length === 0) ? (
-          <div className="rounded-xl border border-dashed">
+          <div className="rounded-2xl border border-dashed border-border/80 bg-card/50 overflow-hidden">
             <EmptyState
               icon={ListTodo}
               title="No tasks in this view"
@@ -505,20 +563,34 @@ const MyTasks = () => {
               return (
                 <section
                   key={section.id}
-                  className={cn("rounded-lg border border-border/70 border-l-4 bg-card overflow-hidden", section.accent)}
+                  className={cn(
+                    "rounded-xl border border-border/70 border-l-4 bg-card overflow-hidden shadow-[0_1px_2px_hsl(var(--foreground)/0.03)]",
+                    section.accent,
+                  )}
                 >
                   <button
                     type="button"
-                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition-colors"
+                    className={cn(
+                      "w-full flex items-center justify-between px-3.5 py-2.5 transition-colors cursor-pointer",
+                      section.headerBg,
+                      "hover:brightness-[0.98]",
+                    )}
                     onClick={() => toggle(section.id)}
+                    aria-expanded={!isCollapsed}
                   >
                     <div className="flex items-center gap-2">
-                      {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
-                      <Icon className={cn("h-3.5 w-3.5", section.color)} />
+                      {isCollapsed
+                        ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                        : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                      <span className={cn("w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-current/10", section.color)}>
+                        <Icon className="h-3 w-3" aria-hidden />
+                      </span>
                       <span className={cn("text-xs font-semibold uppercase tracking-wide", section.color)}>
                         {section.title}
                       </span>
-                      <span className="font-mono-num text-[11px] text-muted-foreground">{section.tasks.length}</span>
+                      <span className="font-mono-num text-[11px] text-muted-foreground tabular-nums bg-muted/80 px-1.5 py-0.5 rounded-md">
+                        {section.tasks.length}
+                      </span>
                     </div>
                   </button>
                   {!isCollapsed && (
@@ -535,12 +607,12 @@ const MyTasks = () => {
       </div>
 
       {hasMore && (
-        <div className="flex flex-col items-center gap-2 pt-1">
+        <div className="relative flex flex-col items-center gap-2 pt-1">
           <p className="text-xs text-muted-foreground">
             Showing {tasks.length}
             {typeof total === "number" ? ` of ${total}` : ""} tasks
           </p>
-          <Button variant="outline" size="sm" onClick={() => void loadMore()} disabled={loading || loadingMore}>
+          <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => void loadMore()} disabled={loading || loadingMore}>
             {loadingMore ? "Loading…" : "Load more tasks"}
           </Button>
         </div>
