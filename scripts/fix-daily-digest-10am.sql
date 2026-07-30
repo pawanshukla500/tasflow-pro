@@ -1,6 +1,6 @@
 -- Alias of scripts/fix-email-crons.sql (kept for older docs/links).
 -- Idempotent: email report crons for TaskFlow Pro.
--- Safe to re-run via SQL Editor or `supabase db query -f`.
+-- Safe to re-run via SQL Editor or `supabase db query -f` (single statement).
 --
 -- Daily digest: 10:00 IST = 04:30 UTC
 -- Weekly leadership (Admin/MD): Friday 09:00 IST = 03:30 UTC
@@ -75,15 +75,3 @@ BEGIN
 
   RAISE NOTICE 'Email crons set: daily digest 10:00 IST; weekly leadership Friday 09:00 IST.';
 END $$;
-
--- Verify
-SELECT jobname, schedule, active
-FROM cron.job
-WHERE jobname IN (
-  'send-daily-digest',
-  'send-weekly-pending-report',
-  'send-due-reminders-daily',
-  'send-department-daily-summary',
-  'send-monthly-report'
-)
-ORDER BY jobname;
