@@ -2,7 +2,7 @@
 import * as React from 'npm:react@18.3.1'
 import { Button, Heading, Text, Section } from 'npm:@react-email/components@0.0.22'
 import type { TemplateEntry } from './registry.ts'
-import { EmailShell, h1, text, button, APP_URL, colors, DetailRow, EmailDetailCard } from './_layout.tsx'
+import { EmailShell, h1, text, button, APP_URL, colors, DetailRow, EmailDetailCard, InsightCard } from './_layout.tsx'
 
 interface Props {
   recipientName?: string
@@ -18,29 +18,46 @@ const priorityColor: Record<string, string> = {
   critical: colors.danger, high: colors.warning, medium: colors.primary, low: colors.muted,
 }
 
+/** Used sparingly — create/import no longer auto-email; pass sendEmail:true only when necessary. */
 const TaskAssignedEmail = ({ recipientName, taskTitle, taskDescription, priority, dueDate, assignedBy, taskId }: Props) => {
   const deepLink = taskId ? `${APP_URL}/my-tasks?task=${taskId}` : `${APP_URL}/my-tasks`
   return (
-  <EmailShell preview={`New task: ${taskTitle || 'Task'}`} heroTitle="New task assigned" heroSubtitle="Action required on your dashboard">
-    <Heading style={h1}>New task assigned to you</Heading>
-    <Text style={text}>Hi{recipientName ? ` ${recipientName}` : ''},</Text>
-    <Text style={text}>{assignedBy || 'A team member'} assigned you a new task in TaskFlow Pro.</Text>
-    <EmailDetailCard title="Task details">
-      <DetailRow label="Task" value={taskTitle || 'Untitled task'} />
-      {taskDescription && <Text style={{ ...text, fontSize: '13px', color: colors.muted }}>{taskDescription}</Text>}
-      <DetailRow label="Priority" value={priority} accent={priority ? priorityColor[priority] : undefined} />
-      <DetailRow label="Due date" value={dueDate ? new Date(dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined} />
-      <DetailRow label="Assigned by" value={assignedBy} />
-    </EmailDetailCard>
-    <Section style={{ textAlign: 'center', margin: '20px 0 8px' }}>
-      <Button href={deepLink} style={button}>Open this task</Button>
-    </Section>
-  </EmailShell>
-)}
+    <EmailShell
+      preview={`Task assigned: ${taskTitle || 'Task'}`}
+      heroTitle="Task assigned to you"
+      heroSubtitle="Open TaskFlow to review and take action"
+    >
+      <Heading style={h1}>You have a new assignment</Heading>
+      <Text style={text}>Hi{recipientName ? ` ${recipientName}` : ''},</Text>
+      <Text style={text}>
+        {assignedBy || 'A team member'} assigned you a task. Routine assignments appear in your morning briefing —
+        this message was sent because action may be needed sooner.
+      </Text>
+      <EmailDetailCard title="Task details">
+        <DetailRow label="Task" value={taskTitle || 'Untitled task'} />
+        {taskDescription && <Text style={{ ...text, fontSize: '13px', color: colors.muted }}>{taskDescription}</Text>}
+        <DetailRow label="Priority" value={priority} accent={priority ? priorityColor[priority] : undefined} />
+        <DetailRow
+          label="Due date"
+          value={dueDate ? new Date(dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined}
+        />
+        <DetailRow label="Assigned by" value={assignedBy} />
+      </EmailDetailCard>
+      <InsightCard
+        title="Tip"
+        tone="neutral"
+        body="Your full pending list arrives every morning at 10:00 IST in the daily digest."
+      />
+      <Section style={{ textAlign: 'center', margin: '20px 0 8px' }}>
+        <Button href={deepLink} style={button}>Open this task</Button>
+      </Section>
+    </EmailShell>
+  )
+}
 
 export const template = {
   component: TaskAssignedEmail,
-  subject: (d) => `New task assigned: ${d.taskTitle || 'Task'}`,
+  subject: (d) => `Task assigned: ${d.taskTitle || 'Task'}`,
   displayName: 'Task assigned',
   previewData: {
     recipientName: 'Priya', taskTitle: 'Update Q2 inventory report',

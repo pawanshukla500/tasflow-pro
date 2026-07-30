@@ -153,16 +153,17 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
           throw assigneeError;
         }
         try {
+          // In-app only — assignment emails are covered by the daily 10 AM digest
           await invokeEdgeFunction("notify-task-assigned", {
             body: {
               taskId: task.id,
               assigneeUserIds: assignees,
               assignedByName: user?.profile?.name || user?.email || "A teammate",
+              sendEmail: false,
             },
           });
         } catch (notifyErr) {
           console.warn("notify-task-assigned failed", notifyErr);
-          toast.warning("Task created, but assignment email could not be sent");
         }
       }
 

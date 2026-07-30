@@ -1,60 +1,41 @@
 /// <reference types="npm:@types/react@18.3.1" />
-
 import * as React from 'npm:react@18.3.1'
-
+import { Text, Section } from 'npm:@react-email/components@0.0.22'
 import {
-  Body,
-  Container,
-  Head,
-  Heading,
-  Html,
-  Preview,
-  Text,
-} from 'npm:@react-email/components@0.0.22'
+  EmailShell, text, mutedText, colors, infoCard,
+} from '../transactional-email-templates/_layout.tsx'
 
 interface ReauthenticationEmailProps {
   token: string
 }
 
 export const ReauthenticationEmail = ({ token }: ReauthenticationEmailProps) => (
-  <Html lang="en" dir="ltr">
-    <Head />
-    <Preview>Your verification code</Preview>
-    <Body style={main}>
-      <Container style={container}>
-        <Heading style={h1}>Confirm reauthentication</Heading>
-        <Text style={text}>Use the code below to confirm your identity:</Text>
-        <Text style={codeStyle}>{token}</Text>
-        <Text style={footer}>
-          This code will expire shortly. If you didn't request this, you can
-          safely ignore this email.
-        </Text>
-      </Container>
-    </Body>
-  </Html>
+  <EmailShell
+    preview="Your TaskFlow Pro verification code"
+    heroTitle="Verification code"
+    heroSubtitle="Confirm it is really you"
+  >
+    <Text style={text}>Use this one-time code to continue:</Text>
+    <Section style={{
+      ...infoCard,
+      textAlign: 'center' as const,
+      border: `2px solid ${colors.primary}`,
+    }}>
+      <Text style={{
+        fontFamily: 'Consolas, Monaco, monospace',
+        fontSize: '28px',
+        fontWeight: 800,
+        color: colors.primary,
+        letterSpacing: '6px',
+        margin: 0,
+      }}>
+        {token}
+      </Text>
+    </Section>
+    <Text style={mutedText}>
+      This code expires shortly. If you did not request it, you can ignore this email.
+    </Text>
+  </EmailShell>
 )
 
 export default ReauthenticationEmail
-
-const main = { backgroundColor: '#ffffff', fontFamily: "'DM Sans', Arial, sans-serif" }
-const container = { padding: '20px 25px' }
-const h1 = {
-  fontSize: '22px',
-  fontWeight: 'bold' as const,
-  color: '#1a1a2e',
-  margin: '0 0 20px',
-}
-const text = {
-  fontSize: '14px',
-  color: '#6b7280',
-  lineHeight: '1.5',
-  margin: '0 0 25px',
-}
-const codeStyle = {
-  fontFamily: "'DM Mono', Courier, monospace",
-  fontSize: '22px',
-  fontWeight: 'bold' as const,
-  color: '#6366f1',
-  margin: '0 0 30px',
-}
-const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }

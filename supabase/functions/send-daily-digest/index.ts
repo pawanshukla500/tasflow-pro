@@ -1,5 +1,5 @@
 // Daily digest: pending tasks bifurcated (delayed / due soon / pending) per user.
-// Schedule via pg_cron daily at 08:00 IST.
+// Schedule via pg_cron daily at 10:00 IST (04:30 UTC).
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { istToday, istAddDays } from "../_shared/ist.ts";
 

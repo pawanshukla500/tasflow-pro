@@ -19,14 +19,14 @@ const CredentialRow = ({ label, value, highlight }: { label: string; value: stri
         {label}
       </Text>
       <div style={{
-        background: highlight ? '#eef2ff' : colors.bg,
+        background: highlight ? 'rgba(13,148,136,0.08)' : colors.bg,
         border: `1px solid ${highlight ? colors.primary : colors.border}`,
         borderRadius: '10px',
         padding: '12px 14px',
         fontSize: highlight ? '15px' : '14px',
         fontWeight: highlight ? 700 : 600,
         color: colors.text,
-        fontFamily: highlight ? 'monospace' : 'inherit',
+        fontFamily: highlight ? 'Consolas, Monaco, monospace' : 'inherit',
       }}>
         {value}
       </div>
@@ -66,7 +66,7 @@ const WelcomeUserEmail = ({ name, email, password, role, loginUrl }: Props) => {
       <Section style={{
         ...infoCard,
         border: `2px solid ${colors.primary}`,
-        boxShadow: '0 8px 24px rgba(99,102,241,0.12)',
+        boxShadow: '0 8px 24px rgba(13,148,136,0.12)',
       }}>
         <Text style={{ ...text, fontWeight: 700, margin: '0 0 14px', color: colors.primary, fontSize: '14px' }}>
           Your sign-in details
@@ -77,7 +77,7 @@ const WelcomeUserEmail = ({ name, email, password, role, loginUrl }: Props) => {
       </Section>
 
       <Text style={{ ...text, fontWeight: 700, margin: '20px 0 12px' }}>How to get started</Text>
-      <Step num={1} title="Open TaskFlow" body="Click the purple button below — same login page as the app." />
+      <Step num={1} title="Open TaskFlow" body="Click the teal button below — same login page as the app." />
       <Step num={2} title="Enter your Login ID" body={`Email: ${email || 'your email'}`} />
       <Step num={3} title="Enter your password" body="Copy the password from the box above." />
       <Step num={4} title="Start working" body="Change your password from Settings after first login." />
@@ -87,7 +87,7 @@ const WelcomeUserEmail = ({ name, email, password, role, loginUrl }: Props) => {
       </Section>
 
       <Text style={mutedText}>
-        This is a one-time welcome email with your temporary password.
+        This is a one-time welcome email with your temporary password. Pending work appears in your daily 10:00 IST briefing.
       </Text>
     </EmailShell>
   )

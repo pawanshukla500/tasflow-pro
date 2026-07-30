@@ -96,6 +96,10 @@ Deno.serve(async (req) => {
     })
   }
 
+  // Default: in-app only. Emails on every create flood inboxes — daily digest covers pending work.
+  // Pass sendEmail: true for rare/urgent assignment mails.
+  const sendEmail = body.sendEmail === true
+
   let profileQuery = supabase
     .from('profiles')
     .select('id, name, email, organization_id')
@@ -112,11 +116,26 @@ Deno.serve(async (req) => {
 
   const results = []
   for (const p of profiles || []) {
-    // Honor user notification preference
+    // Always create in-app notification
+    await createInAppNotification(supabase, {
+      userId: p.id,
+      type: 'task_assigned',
+      title: 'New task assigned',
+      body: `${assignedByName} assigned you: ${task.title}`,
+      actionUrl: `/my-tasks?task=${taskId}`,
+      metadata: { taskId, priority: task.priority },
+    })
+
+    if (!sendEmail) {
+      results.push({ user_id: p.id, ok: true, email: false, inApp: true })
+      continue
+    }
+
+    // Honor user notification preference for email only
     const { data: prefs } = await supabase
       .from('notification_preferences').select('task_assigned').eq('user_id', p.id).maybeSingle()
     if (prefs && prefs.task_assigned === false) {
-      results.push({ user_id: p.id, skipped: true, reason: 'user_preference' })
+      results.push({ user_id: p.id, skipped: true, reason: 'user_preference', inApp: true })
       continue
     }
 
@@ -145,19 +164,10 @@ Deno.serve(async (req) => {
     })
     const ok = resp.ok
     const errText = ok ? undefined : await resp.text().catch(() => 'unknown')
-    results.push({ user_id: p.id, ok, error: errText })
-
-    await createInAppNotification(supabase, {
-      userId: p.id,
-      type: 'task_assigned',
-      title: 'New task assigned',
-      body: `${assignedByName} assigned you: ${task.title}`,
-      actionUrl: `/my-tasks?task=${taskId}`,
-      metadata: { taskId, priority: task.priority },
-    })
+    results.push({ user_id: p.id, ok, error: errText, email: true, inApp: true })
   }
 
-  return new Response(JSON.stringify({ results }), {
+  return new Response(JSON.stringify({ results, sendEmail }), {
     status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 })

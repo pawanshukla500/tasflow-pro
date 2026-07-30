@@ -25,7 +25,7 @@ export function AdminSettingsPanel() {
     setOrgDomain(user.organization.domain || "");
     const settings = user.organization.settings as { email?: { daily_digest_enabled?: boolean; digest_hour_ist?: number } };
     setDailyDigest(settings?.email?.daily_digest_enabled !== false);
-    setDigestHour(String(settings?.email?.digest_hour_ist ?? 8));
+    setDigestHour(String(settings?.email?.digest_hour_ist ?? 10));
   }, [user?.organization]);
 
   useEffect(() => {
@@ -105,14 +105,16 @@ export function AdminSettingsPanel() {
           <div className="flex items-center justify-between rounded-lg border p-4">
             <div>
               <p className="font-medium text-sm">Daily digest emails</p>
-              <p className="text-xs text-muted-foreground">Send each user their pending tasks &amp; workflows every morning</p>
+              <p className="text-xs text-muted-foreground">
+                Morning pending-task briefing at 10:00 IST (creating a task no longer sends a separate email)
+              </p>
             </div>
             <Switch checked={dailyDigest} onCheckedChange={setDailyDigest} />
           </div>
           <div className="rounded-lg border border-dashed p-4 space-y-1">
-            <p className="font-medium text-sm">Friday leadership overlook</p>
+            <p className="font-medium text-sm">Friday management overview</p>
             <p className="text-xs text-muted-foreground">
-              Admins and Managing Directors automatically receive a weekly department scorecard every Friday morning (which teams are doing well vs need attention).
+              Admins and Managing Directors receive a weekly department performance overview every Friday (completion %, overdue, top teams, recommendations).
             </p>
           </div>
           <div className="space-y-2">
