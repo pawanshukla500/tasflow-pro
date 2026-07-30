@@ -1,5 +1,5 @@
-// Weekly department insight for Managing Directors and System Admins.
-// Schedule via pg_cron (e.g. every Monday 09:00 IST).
+// Friday leadership overlook for Managing Directors and System Admins.
+// Schedule via pg_cron every Friday 09:00 IST (03:30 UTC).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { istToday, istAddDays } from '../_shared/ist.ts'
 
@@ -28,6 +28,14 @@ Deno.serve(async (req) => {
     const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
     return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
   })()
+  const weekLabel = new Date(`${today}T12:00:00+05:30`).toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+  const fridayLabel = `Week ending ${weekLabel}`
 
   const [{ data: allTasks }, { data: departments }] = await Promise.all([
     supabase.from('tasks').select('id, title, due_date, priority, department_id, status, completed_at, organization_id'),
@@ -97,12 +105,15 @@ Deno.serve(async (req) => {
     const totalPending = rows.reduce((a, row) => a + row.total, 0)
     const totalOverdue = rows.reduce((a, row) => a + row.overdue, 0)
 
-    const topPerformers = rows
-      .filter((row) => row.overdue === 0 && row.completionPct >= 70)
+    // "Doing well" = low overdue + strong completion / throughput this week
+    const topPerformers = [...rows]
+      .filter((row) => row.overdue === 0 && (row.completionPct >= 70 || row.doneThisWeek >= 3))
+      .sort((a, b) => b.completionPct - a.completionPct || b.doneThisWeek - a.doneThisWeek)
       .slice(0, 3)
       .map((row) => row.name)
-    const needsAttention = rows
+    const needsAttention = [...rows]
       .filter((row) => row.overdue >= 2 || (row.total > 0 && row.completionPct < 50))
+      .sort((a, b) => b.overdue - a.overdue || a.completionPct - b.completionPct)
       .slice(0, 3)
       .map((row) => row.name)
 
@@ -117,11 +128,11 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           templateName: 'weekly-leadership-insight',
           recipientEmail: r.email,
-          idempotencyKey: `weekly-insight-${r.id}-${weekKey}`,
+          idempotencyKey: `weekly-insight-friday-${r.id}-${weekKey}`,
           templateData: {
-            title: `Weekly insight — ${totalPending} open across ${rows.length} departments`,
+            title: `Friday leadership overlook — ${totalPending} open across ${rows.length} departments`,
             recipientName: r.name,
-            weekLabel: weekKey,
+            weekLabel: fridayLabel,
             totalPending,
             totalOverdue,
             departments: rows,
@@ -138,7 +149,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  return new Response(JSON.stringify({ ok: true, week: weekKey, recipients: results }), {
+  return new Response(JSON.stringify({ ok: true, week: weekKey, schedule: 'friday', recipients: results }), {
     status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 })

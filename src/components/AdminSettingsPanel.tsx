@@ -105,9 +105,15 @@ export function AdminSettingsPanel() {
           <div className="flex items-center justify-between rounded-lg border p-4">
             <div>
               <p className="font-medium text-sm">Daily digest emails</p>
-              <p className="text-xs text-muted-foreground">Send pending tasks & workflows summary each morning</p>
+              <p className="text-xs text-muted-foreground">Send each user their pending tasks &amp; workflows every morning</p>
             </div>
             <Switch checked={dailyDigest} onCheckedChange={setDailyDigest} />
+          </div>
+          <div className="rounded-lg border border-dashed p-4 space-y-1">
+            <p className="font-medium text-sm">Friday leadership overlook</p>
+            <p className="text-xs text-muted-foreground">
+              Admins and Managing Directors automatically receive a weekly department scorecard every Friday morning (which teams are doing well vs need attention).
+            </p>
           </div>
           <div className="space-y-2">
             <Label>Digest send hour (IST)</Label>

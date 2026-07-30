@@ -97,6 +97,7 @@ BEGIN
   );
 
   -- Weekly executive insight — Monday 09:00 IST (03:30 UTC)
+  -- NOTE: later moved to Friday by 20260730090000_weekly_leadership_friday.sql
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'send-weekly-pending-report') THEN
     PERFORM cron.unschedule('send-weekly-pending-report');
   END IF;

@@ -3,6 +3,7 @@ import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Download } from 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/edgeFunctions";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { formatDateIST } from "@/lib/time";
@@ -278,14 +279,17 @@ export default function ImportTasksModal({ onClose, onImported }: Props) {
 
         if (r.matched.length > 0) {
           await supabase.from("task_assignees").insert(r.matched.map(m => ({ task_id: task.id, user_id: m.id })));
-          // Send assignment email
-          supabase.functions.invoke("notify-task-assigned", {
-            body: {
-              taskId: task.id,
-              assigneeUserIds: r.matched.map(m => m.id),
-              assignedByName: user?.profile?.name || user?.email || "A teammate",
-            },
-          }).catch(e => console.warn("notify failed", e));
+          try {
+            await invokeEdgeFunction("notify-task-assigned", {
+              body: {
+                taskId: task.id,
+                assigneeUserIds: r.matched.map(m => m.id),
+                assignedByName: user?.profile?.name || user?.email || "A teammate",
+              },
+            });
+          } catch (e) {
+            console.warn("notify-task-assigned failed", e);
+          }
         }
         ok++;
       } catch (e) { console.warn("import row err", e); }

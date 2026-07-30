@@ -21,6 +21,8 @@ interface Props {
   departments?: DeptRow[]
   topPerformers?: string[]
   needsAttention?: string[]
+  ctaLabel?: string
+  ctaUrl?: string
 }
 
 const WeeklyLeadershipInsightEmail = ({
@@ -31,55 +33,81 @@ const WeeklyLeadershipInsightEmail = ({
   departments = [],
   topPerformers = [],
   needsAttention = [],
+  ctaLabel = 'Open Reports',
+  ctaUrl,
 }: Props) => (
-  <EmailShell preview={`Weekly leadership insight — ${totalPending} open tasks`}>
-    <Heading style={h1}>Weekly Leadership Insight 📊</Heading>
+  <EmailShell
+    preview={`Friday leadership overlook — ${totalPending} open tasks`}
+    heroTitle="Friday leadership overlook"
+    heroSubtitle={`Department performance · ${weekLabel || 'this week'}`}
+  >
+    <Heading style={h1}>Which departments are doing well?</Heading>
     <Text style={text}>Hi{recipientName ? ` ${recipientName}` : ''},</Text>
     <Text style={text}>
-      Department performance summary for {weekLabel || 'this week'}.
+      Your weekly Admin / MD overview for {weekLabel || 'this week'}. Use this to spot strong teams and where support is needed.
     </Text>
+
     <Section style={{
-      background: '#ffffff', border: `1px solid ${colors.border}`,
-      borderRadius: '8px', padding: '12px 16px', margin: '14px 0',
+      background: colors.bg, border: `1px solid ${colors.border}`,
+      borderRadius: '12px', padding: '14px 18px', margin: '14px 0',
     }}>
-      <Text style={{ ...text, fontWeight: 700 }}>
-        Org overview: {totalPending} pending · {totalOverdue} overdue
+      <Text style={{ ...text, fontWeight: 700, margin: '0 0 8px' }}>
+        Org snapshot: {totalPending} open · {totalOverdue} overdue
       </Text>
       {topPerformers.length > 0 && (
-        <Text style={{ ...mutedText, color: '#16a34a' }}>
+        <Text style={{ ...mutedText, color: colors.success, margin: '6px 0' }}>
           ✅ Doing well: {topPerformers.join(', ')}
         </Text>
       )}
       {needsAttention.length > 0 && (
-        <Text style={{ ...mutedText, color: '#dc2626' }}>
+        <Text style={{ ...mutedText, color: colors.danger, margin: '6px 0' }}>
           ⚠️ Needs attention: {needsAttention.join(', ')}
         </Text>
       )}
+    </Section>
+
+    <Section style={{
+      background: '#ffffff', border: `1px solid ${colors.border}`,
+      borderRadius: '12px', padding: '12px 16px', margin: '14px 0',
+    }}>
+      <Text style={{ ...text, fontWeight: 700, margin: '0 0 10px' }}>By department</Text>
       {departments.map((d, i) => (
-        <Text key={i} style={{ ...mutedText, margin: '8px 0', borderBottom: i < departments.length - 1 ? `1px solid ${colors.border}` : 'none', paddingBottom: '8px' }}>
+        <Text
+          key={i}
+          style={{
+            ...mutedText,
+            margin: '8px 0',
+            borderBottom: i < departments.length - 1 ? `1px solid ${colors.border}` : 'none',
+            paddingBottom: '8px',
+          }}
+        >
           <strong style={{ color: colors.text }}>{d.name}</strong>
           {' — '}{d.total} open, {d.overdue} overdue, {d.completionPct}% completion
-          {d.doneThisWeek > 0 && `, ${d.doneThisWeek} done this week`}
+          {d.doneThisWeek > 0 && `, ${d.doneThisWeek} completed this week`}
         </Text>
       ))}
+      {departments.length === 0 && (
+        <Text style={mutedText}>No department activity this week.</Text>
+      )}
     </Section>
+
     <Text style={mutedText}>
-      Your personal pending tasks are sent separately each morning in the daily digest.
+      Personal pending-task digests go to everyone each morning. This Friday mail is for leadership overlook only.
     </Text>
     <Section style={{ textAlign: 'center', margin: '20px 0 8px' }}>
-      <Button href={`${APP_URL}/reports`} style={button}>Open Reports</Button>
+      <Button href={ctaUrl || `${APP_URL}/reports`} style={button}>{ctaLabel}</Button>
     </Section>
   </EmailShell>
 )
 
 export const template = {
   component: WeeklyLeadershipInsightEmail,
-  subject: (d) => d.title || 'Weekly leadership insight',
+  subject: (d) => d.title || `Friday leadership overlook — ${d.totalPending || 0} open tasks`,
   displayName: 'Weekly leadership insight',
   previewData: {
-    title: 'Weekly leadership insight — 24 open tasks',
+    title: 'Friday leadership overlook — 24 open tasks',
     recipientName: 'Pawan',
-    weekLabel: 'Week 24, 2026',
+    weekLabel: 'Week ending Fri 31 Jul 2026',
     totalPending: 24,
     totalOverdue: 5,
     departments: [
