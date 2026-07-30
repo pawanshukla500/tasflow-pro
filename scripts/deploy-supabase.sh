@@ -53,6 +53,22 @@ if [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
   echo "==> Applying database migrations..."
   ENCODED_PW="$(urlencode "$SUPABASE_DB_PASSWORD")"
   export SUPABASE_DB_URL="postgresql://postgres.${PROJECT_REF}:${ENCODED_PW}@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres"
+
+  # Remote-only migration versions that block `db push` (not present in this repo).
+  # Mark them reverted so pending local migrations (e.g. daily digest 10:00 IST) can apply.
+  ORPHAN_REMOTE_MIGRATIONS=(
+    20260613072959
+    20260613085540
+    20260613085627
+    20260619103203
+    20260622143347
+    20260713070615
+    20260713071104
+  )
+  echo "==> Repairing known orphan remote migration history (if present)..."
+  $SUPABASE_CLI migration repair --status reverted "${ORPHAN_REMOTE_MIGRATIONS[@]}" --yes 2>/dev/null \
+    || echo "    (repair skipped or already clean — continuing)"
+
   if $SUPABASE_CLI db push --include-all --yes; then
     echo "==> Migrations applied."
   else
@@ -63,6 +79,14 @@ if [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
 else
   echo "==> Skipping db push (SUPABASE_DB_PASSWORD not set)."
 fi
+
+# Branding + app URL for transactional/auth emails (safe to re-set).
+echo "==> Ensuring EMAIL_LOGO_URL + APP_URL edge secrets..."
+$SUPABASE_CLI secrets set \
+  "EMAIL_LOGO_URL=https://task.youthnic.shop/youthnic-logo.png" \
+  "APP_URL=https://task.youthnic.shop" \
+  --project-ref "$PROJECT_REF" \
+  || echo "    WARNING: could not set EMAIL_LOGO_URL/APP_URL (continuing)"
 
 if [[ -n "${GOOGLE_AI_API_KEY:-}" ]]; then
   echo "==> Setting GOOGLE_AI_API_KEY for edge functions (polish-note, daily-motivation)..."
@@ -84,8 +108,8 @@ CORE_FUNCTIONS=(
   process-email-queue send-daily-digest send-department-daily-summary
   send-weekly-pending-report send-due-reminders send-transactional-email
   send-password-reset complete-password-reset polish-note handle-email-unsubscribe
+  auth-email-hook
 )
-
 for fn in "${MCP_FUNCTIONS[@]}"; do
   echo "  - $fn"
   if [[ "$fn" == "mcp-server" ]]; then
