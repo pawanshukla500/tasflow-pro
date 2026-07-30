@@ -6,6 +6,7 @@ import CreateTaskModal from "@/components/CreateTaskModal";
 import SearchOverlay from "@/components/SearchOverlay";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const AppLayout = () => {
   const [showNewTask, setShowNewTask] = useState(false);
@@ -54,7 +55,7 @@ const AppLayout = () => {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <img src="/youthnic-logo.svg" alt="" className="w-7 h-7 object-contain" width={28} height={28} decoding="async" />
+            <BrandLogo size="sm" tone="auto" alt="" />
             <span className="font-display font-bold text-sm tracking-tight truncate">TaskFlow Pro</span>
           </div>
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowSearch(true)}>
