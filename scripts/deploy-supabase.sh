@@ -55,7 +55,7 @@ if [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
   export SUPABASE_DB_URL="postgresql://postgres.${PROJECT_REF}:${ENCODED_PW}@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres"
 
   # Remote-only migration versions that block `db push` (not present in this repo).
-  # Mark them reverted so pending local migrations (e.g. daily digest 10:00 IST) can apply.
+  # Mark them reverted so pending local migrations can apply.
   ORPHAN_REMOTE_MIGRATIONS=(
     20260613072959
     20260613085540
@@ -69,12 +69,43 @@ if [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
   $SUPABASE_CLI migration repair --status reverted "${ORPHAN_REMOTE_MIGRATIONS[@]}" --yes 2>/dev/null \
     || echo "    (repair skipped or already clean — continuing)"
 
+  # Local versions whose SQL is already on remote (applied under orphan/dashboard history,
+  # or renamed duplicate of an existing version). Mark applied so `db push` can proceed.
+  PREAPPLIED_LOCAL_MIGRATIONS=(
+    20260614120100
+    20260615120000
+    20260616120000
+    20260617120000
+    20260622120000
+    20260623120000
+    20260720140000
+    20260729150000
+    20260729170000
+  )
+  echo "==> Marking already-applied local migrations in remote history..."
+  $SUPABASE_CLI migration repair --status applied "${PREAPPLIED_LOCAL_MIGRATIONS[@]}" --yes 2>/dev/null \
+    || echo "    (pre-applied repair skipped — continuing)"
+
   if $SUPABASE_CLI db push --include-all --yes; then
     echo "==> Migrations applied."
   else
     DB_PUSH_OK=0
     echo "WARNING: db push failed (migration history drift?). Edge functions will still deploy." >&2
-    echo "         If this persists after git pull, open an issue with the full error output." >&2
+    echo "         Ensuring email crons via direct SQL next." >&2
+  fi
+
+  # Belt-and-suspenders: always set digest 10:00 IST + Friday leadership cron (idempotent).
+  echo "==> Ensuring email report crons (10:00 IST digest + Friday leadership)..."
+  if $SUPABASE_CLI db query --db-url "$SUPABASE_DB_URL" -f "$REPO_DIR/scripts/fix-email-crons.sql"; then
+    echo "==> Email crons verified/applied."
+    $SUPABASE_CLI migration repair --status applied \
+      20260730090000 \
+      20260730110000 \
+      --yes 2>/dev/null \
+      || true
+  else
+    echo "WARNING: could not run scripts/fix-email-crons.sql — run it in the SQL Editor." >&2
+    DB_PUSH_OK=0
   fi
 else
   echo "==> Skipping db push (SUPABASE_DB_PASSWORD not set)."
