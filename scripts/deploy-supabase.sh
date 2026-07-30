@@ -97,7 +97,10 @@ if [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
   # Belt-and-suspenders: always set digest 10:00 IST + Friday leadership cron (idempotent).
   echo "==> Ensuring email report crons (10:00 IST digest + Friday leadership)..."
   if $SUPABASE_CLI db query --db-url "$SUPABASE_DB_URL" -f "$REPO_DIR/scripts/fix-email-crons.sql"; then
-    echo "==> Email crons verified/applied."
+    echo "==> Email crons ensured."
+    $SUPABASE_CLI db query --db-url "$SUPABASE_DB_URL" \
+      "SELECT jobname, schedule, active FROM cron.job WHERE jobname IN ('send-daily-digest','send-weekly-pending-report') ORDER BY jobname;" \
+      || true
     $SUPABASE_CLI migration repair --status applied \
       20260730090000 \
       20260730110000 \
