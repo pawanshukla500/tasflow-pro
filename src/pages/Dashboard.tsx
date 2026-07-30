@@ -321,9 +321,7 @@ const Dashboard = () => {
       />
 
       <div className="relative space-y-5">
-        {accessScope.tier !== "member" && (
-          <ScopeBanner scope={accessScope} departmentNames={deptNames} />
-        )}
+        <ScopeBanner scope={accessScope} departmentNames={deptNames} />
 
         {motivation && (
           <p className="text-sm text-muted-foreground flex items-start gap-2 animate-fade-in border-l-2 border-primary/30 pl-3">

@@ -1,11 +1,16 @@
 /** Shared Google Generative Language API helper for edge functions. */
 
-const MODELS = [
+/** Preferred model for generation / polish / report-style AI workflows. */
+export const PRIMARY_AI_MODEL = "gemma-4-31b-it";
+
+/** Fallbacks if the primary model is unavailable for the API key. */
+const FALLBACK_MODELS = [
   "gemini-2.0-flash",
   "gemini-2.0-flash-lite",
   "gemini-1.5-flash",
-  "gemini-1.5-flash-8b",
 ] as const;
+
+const MODELS = [PRIMARY_AI_MODEL, ...FALLBACK_MODELS] as const;
 
 export interface GenerateTextOptions {
   prompt: string;
@@ -24,7 +29,7 @@ export function getGoogleAiApiKey(): string | null {
   return key || null;
 }
 
-/** Try multiple Gemini models until one returns text. */
+/** Try preferred Gemma model, then Gemini fallbacks, until one returns text. */
 export async function generateWithGoogleAi(
   options: GenerateTextOptions,
 ): Promise<GenerateTextResult> {
@@ -73,5 +78,5 @@ export async function generateWithGoogleAi(
     }
   }
 
-  throw new Error(`All Gemini models failed: ${errors.join("; ")}`);
+  throw new Error(`All AI models failed: ${errors.join("; ")}`);
 }
