@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/edgeFunctions";
+import { extractPolishedText } from "@/lib/polishText";
 import { useToast } from "@/hooks/use-toast";
 import { formatDateIST } from "@/lib/time";
 
@@ -106,12 +107,18 @@ export function ScratchNotesPanel({ compact = false }: { compact?: boolean }) {
         throw new Error(result.error);
       }
 
-      const polished = result?.polished?.trim();
+      const rawPolished = result?.polished?.trim();
+      if (!rawPolished) {
+        throw new Error("AI returned no polished text");
+      }
+
+      // Client-side safety net: keep corrected sentence only (never save AI reasoning dumps)
+      const polished = extractPolishedText(rawPolished, note.content);
       if (!polished) {
         throw new Error("AI returned no polished text");
       }
 
-      if (!result.changed && polished === note.content.trim()) {
+      if (polished === note.content.trim()) {
         toast({ title: "Already polished", description: "No grammar changes were needed." });
         return;
       }

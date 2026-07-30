@@ -1,6 +1,7 @@
-// Polish scratch-note text with gemma-4-31b-it — correct English, preserve meaning.
+// Polish scratch-note text with gemma-4-31b-it — return corrected text only.
 import { generateWithGoogleAi, getGoogleAiApiKey } from "../_shared/google-ai.ts";
 import { corsHeaders, json, requireUser } from "../_shared/google-oauth.ts";
+import { buildPolishPrompt, extractPolishedText } from "../_shared/polish-text.ts";
 
 const MAX_CONTENT_CHARS = 8000;
 
@@ -30,20 +31,22 @@ Deno.serve(async (req) => {
       }, 503);
     }
 
-    const prompt =
-      `You are a helpful writing assistant. Fix grammar, spelling, and clarity in the following note while keeping the original meaning and tone. Return ONLY the corrected text — no quotes, no explanation, no markdown fences.\n\nNote:\n${trimmed}`;
-
     const { text, model } = await generateWithGoogleAi({
-      prompt,
-      temperature: 0.2,
-      maxOutputTokens: 1024,
+      prompt: buildPolishPrompt(trimmed),
+      temperature: 0.1,
+      maxOutputTokens: 512,
+      responseMimeType: "application/json",
     });
 
-    // Strip accidental markdown code fences from model output
-    const polished = text.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
+    const polished = extractPolishedText(text, trimmed);
 
     if (!polished) {
       return json({ error: "AI returned an empty response. Try again." }, 502);
+    }
+
+    // Guard: never save a long reasoning dump as the note
+    if (polished.length > Math.max(trimmed.length * 6, 400) && /input:|task:|checklist|word-by-word/i.test(polished)) {
+      return json({ error: "AI returned analysis instead of corrected text. Try again." }, 502);
     }
 
     return json({
