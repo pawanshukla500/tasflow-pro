@@ -56,10 +56,10 @@ const GmailLogo = ({ className = "h-6 w-6" }: { className?: string }) => (
 );
 
 const notificationEvents = [
-  { label: "Task assigned to me", dbKey: "task_assigned" as const },
+  { label: "Urgent task assignment emails", dbKey: "task_assigned" as const },
   { label: "Task due / overdue reminders", dbKey: "task_due_reminder" as const },
   { label: "Monthly report email", dbKey: "monthly_report" as const },
-  { label: "Daily digest summary", dbKey: "daily_digest" as const },
+  { label: "Daily morning briefing (10 AM IST)", dbKey: "daily_digest" as const },
 ];
 
 const SettingsPage = () => {
