@@ -31,4 +31,10 @@
 npx supabase db push --include-all
 npx supabase functions deploy notify-task-assigned send-daily-digest send-weekly-pending-report send-transactional-email auth-email-hook --project-ref nekdjoquirhecmejuoba
 ```
-Confirm Edge secret `EMAIL_LOGO_URL=https://task.youthnic.shop/youthnic-logo.png`.
+Or let GitHub Actions run `scripts/deploy-supabase.sh` on push to `main` (repairs known migration drift, then pushes).
+
+If cron still shows 08:00 IST, run `scripts/fix-daily-digest-10am.sql` in the SQL Editor.
+
+Confirm Edge secrets:
+- `EMAIL_LOGO_URL=https://task.youthnic.shop/youthnic-logo.png`
+- `APP_URL=https://task.youthnic.shop`
