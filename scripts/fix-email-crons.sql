@@ -1,4 +1,3 @@
--- Alias of scripts/fix-email-crons.sql (kept for older docs/links).
 -- Idempotent: email report crons for TaskFlow Pro.
 -- Safe to re-run via SQL Editor or `supabase db query -f`.
 --
