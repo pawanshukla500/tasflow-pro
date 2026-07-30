@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { format } from "date-fns";
+import { addDays, format, startOfDay } from "date-fns";
 import {
   X, CalendarIcon, Paperclip, FileIcon, Loader2,
-  ClipboardList, Users, Clock, Layers, Search,
+  Users, Search, ChevronDown, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/edgeFunctions";
@@ -39,33 +40,6 @@ const priorityColorMap: Record<Priority, string> = {
 interface DeptOption { id: string; name: string; }
 interface UserOption { id: string; name: string; department_id: string | null; }
 
-function SectionCard({
-  icon: Icon,
-  title,
-  subtitle,
-  children,
-}: {
-  icon: React.ElementType;
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-xl border bg-muted/20 p-4 space-y-3">
-      <div className="flex items-start gap-2.5">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-          {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
-        </div>
-      </div>
-      {children}
-    </section>
-  );
-}
-
 const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalProps) => {
   const { user } = useAuth();
   const [priority, setPriority] = useState<Priority>("medium");
@@ -83,6 +57,7 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
   const [assigneeSearch, setAssigneeSearch] = useState("");
   const [requiresReview, setRequiresReview] = useState(false);
   const [reviewerUserId, setReviewerUserId] = useState("");
+  const [moreOpen, setMoreOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [departments, setDepartments] = useState<DeptOption[]>([]);
@@ -110,6 +85,37 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
     u.name.toLowerCase().includes(assigneeSearch.toLowerCase()),
   );
 
+  const today = useMemo(() => startOfDay(new Date()), []);
+  const tomorrow = useMemo(() => addDays(today, 1), [today]);
+  const nextWeek = useMemo(() => addDays(today, 7), [today]);
+
+  const isSameDay = (a?: Date, b?: Date) =>
+    !!a && !!b && format(a, "yyyy-MM-dd") === format(b, "yyyy-MM-dd");
+
+  const duePreset = isSameDay(dueDate, today)
+    ? "today"
+    : isSameDay(dueDate, tomorrow)
+      ? "tomorrow"
+      : isSameDay(dueDate, nextWeek)
+        ? "week"
+        : dueDate
+          ? "custom"
+          : "none";
+
+  const extrasCount = useMemo(() => {
+    let n = 0;
+    if (status !== (initialStatus || "todo")) n += 1;
+    if (deptId) n += 1;
+    if (frequency !== "none") n += 1;
+    if (requiresReview) n += 1;
+    if (subtasks.some((s) => s.title.trim())) n += 1;
+    if (pendingFiles.length > 0) n += 1;
+    if (dueTime) n += 1;
+    return n;
+  }, [status, initialStatus, deptId, frequency, requiresReview, subtasks, pendingFiles, dueTime]);
+
+  const canCreate = title.trim().length > 0 && assignees.length > 0 && !saving;
+
   const handleCreate = async () => {
     if (!title.trim()) {
       toast.error("Title is required");
@@ -135,7 +141,7 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
         frequency,
         requires_review: requiresReview,
         reviewer_user_id: requiresReview && reviewerUserId ? reviewerUserId : null,
-      } as any).select("id").single();
+      }).select("id").single();
 
       if (error) throw error;
 
@@ -158,7 +164,7 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
       const subtaskRows = subtasks
         .map((s) => s.title.trim())
         .filter(Boolean)
-        .map((title, position) => ({ task_id: task!.id, title, position }));
+        .map((stTitle, position) => ({ task_id: task!.id, title: stTitle, position }));
       if (subtaskRows.length > 0) {
         const { error: subErr } = await supabase.from("task_subtasks").insert(subtaskRows);
         if (subErr) console.warn("Subtasks insert failed:", subErr.message);
@@ -183,8 +189,9 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
                 mime_type: file.type || null,
                 size_bytes: file.size,
               });
-            } catch (e: any) {
-              toast.error(`Attachment "${file.name}" failed: ${e.message || e}`);
+            } catch (e: unknown) {
+              const message = e instanceof Error ? e.message : String(e);
+              toast.error(`Attachment "${file.name}" failed: ${message}`);
             }
           }
           window.dispatchEvent(new CustomEvent("task:created", { detail: { taskId } }));
@@ -197,275 +204,353 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
       if (!pendingFiles.length) {
         window.dispatchEvent(new CustomEvent("task:created", { detail: { taskId: task?.id } }));
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to create task");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to create task";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
   };
 
-  const readyCount = [title.trim(), assignees.length > 0].filter(Boolean).length;
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canCreate) {
+      e.preventDefault();
+      void handleCreate();
+    }
+  };
 
   return (
     <>
       <div className="fixed inset-0 bg-foreground/25 backdrop-blur-[2px] z-50 animate-fade-in" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-card rounded-2xl border shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col animate-fade-in overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b bg-gradient-to-r from-primary/5 to-transparent">
-            <div>
-              <h2 className="text-lg font-bold text-foreground">New Task</h2>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+        <div
+          className="bg-card rounded-2xl border shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col animate-fade-in overflow-hidden"
+          onKeyDown={onKeyDown}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-task-title"
+        >
+          <div className="flex items-start justify-between gap-3 px-5 py-4 border-b">
+            <div className="min-w-0">
+              <h2 id="create-task-title" className="text-lg font-bold text-foreground tracking-tight">
+                New Task
+              </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {readyCount}/2 required fields complete
+                Title + assignee required · ⌘/Ctrl+Enter to create
               </p>
             </div>
-            <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose} aria-label="Close">
+              <X className="h-4 w-4" />
+            </Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            <SectionCard icon={ClipboardList} title="Task details" subtitle="What needs to be done?">
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="title">Title *</Label>
-                  <Input
-                    id="title"
-                    placeholder="e.g. Review Q2 export orders"
-                    value={title}
-                    onChange={e => setTitle(e.target.value)}
-                    autoFocus
-                    className="font-medium"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Description</Label>
-                  <Textarea
-                    placeholder="Add context, links, or acceptance criteria…"
-                    rows={3}
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Priority</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {priorities.map(p => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setPriority(p)}
-                        className={cn(
-                          "px-3.5 py-1.5 rounded-full text-xs font-semibold capitalize transition-all",
-                          priority === p ? priorityColorMap[p] : "bg-background border text-muted-foreground hover:border-primary/30",
-                        )}
-                      >{p}</button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+            {/* Essentials */}
+            <div className="space-y-1.5">
+              <Label htmlFor="title">Title *</Label>
+              <Input
+                id="title"
+                placeholder="What needs to be done?"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                autoFocus
+                className="h-11 text-base font-medium"
+              />
+            </div>
 
-            <SectionCard icon={Users} title="Assignment" subtitle="Assign to any active team member in your organization.">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Assign To *</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start font-normal h-auto min-h-10 py-2">
-                        {assignees.length === 0 ? (
-                          <span className="text-muted-foreground">Select one or more doers</span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {assignees.map(id => {
-                              const u = users.find(x => x.id === id);
-                              return <Badge key={id} variant="secondary" className="text-xs">{u?.name || "Unknown"}</Badge>;
-                            })}
-                          </div>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0 max-h-72 overflow-hidden flex flex-col" align="start">
-                      <div className="p-2 border-b">
-                        <div className="relative">
-                          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                          <Input
-                            placeholder="Search team members…"
-                            value={assigneeSearch}
-                            onChange={(e) => setAssigneeSearch(e.target.value)}
-                            className="pl-8 h-8 text-sm"
-                          />
-                        </div>
-                      </div>
-                      <div className="overflow-y-auto p-2 space-y-0.5 flex-1">
-                        {filteredUsers.length === 0 ? (
-                          <p className="text-xs text-muted-foreground px-2 py-3 text-center">No members found</p>
-                        ) : filteredUsers.map(u => {
-                          const checked = assignees.includes(u.id);
-                          return (
-                            <label key={u.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer">
-                              <Checkbox checked={checked} onCheckedChange={(c) => {
-                                setAssignees(prev => {
-                                  const next = c ? [...prev, u.id] : prev.filter(x => x !== u.id);
-                                  if (c && u.department_id) setDeptId(u.department_id);
-                                  return next;
-                                });
-                              }} />
-                              <span className="text-sm">{u.name}</span>
-                            </label>
-                          );
+            <div className="space-y-1.5">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="Optional context or acceptance criteria…"
+                rows={2}
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                className="resize-none min-h-[64px]"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Assign to *</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start font-normal h-auto min-h-11 py-2.5">
+                    {assignees.length === 0 ? (
+                      <span className="text-muted-foreground flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        Select one or more people
+                      </span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {assignees.map(id => {
+                          const u = users.find(x => x.id === id);
+                          return <Badge key={id} variant="secondary" className="text-xs">{u?.name || "Unknown"}</Badge>;
                         })}
                       </div>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0 max-h-72 overflow-hidden flex flex-col" align="start">
+                  <div className="p-2 border-b">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        placeholder="Search team members…"
+                        value={assigneeSearch}
+                        onChange={(e) => setAssigneeSearch(e.target.value)}
+                        className="pl-8 h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="overflow-y-auto p-2 space-y-0.5 flex-1">
+                    {filteredUsers.length === 0 ? (
+                      <p className="text-xs text-muted-foreground px-2 py-3 text-center">No members found</p>
+                    ) : filteredUsers.map(u => {
+                      const checked = assignees.includes(u.id);
+                      return (
+                        <label key={u.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer">
+                          <Checkbox checked={checked} onCheckedChange={(c) => {
+                            setAssignees(prev => {
+                              const next = c ? [...prev, u.id] : prev.filter(x => x !== u.id);
+                              if (c && u.department_id) setDeptId(u.department_id);
+                              return next;
+                            });
+                          }} />
+                          <span className="text-sm">{u.name}</span>
+                          {checked && <Check className="h-3.5 w-3.5 ml-auto text-primary" />}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Due date</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { id: "today", label: "Today", date: today },
+                    { id: "tomorrow", label: "Tomorrow", date: tomorrow },
+                    { id: "week", label: "Next week", date: nextWeek },
+                  ].map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setDueDate(duePreset === preset.id ? undefined : preset.date)}
+                      className={cn(
+                        "px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors",
+                        duePreset === preset.id
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors",
+                          duePreset === "custom"
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        )}
+                      >
+                        <CalendarIcon className="h-3 w-3" />
+                        {duePreset === "custom" && dueDate ? format(dueDate, "MMM d") : "Pick"}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={dueDate}
+                        onSelect={setDueDate}
+                        initialFocus
+                        className={cn("p-3 pointer-events-auto")}
+                      />
+                      {dueDate && (
+                        <div className="border-t p-2">
+                          <Button type="button" variant="ghost" size="sm" className="w-full" onClick={() => { setDueDate(undefined); setDueTime(""); }}>
+                            Clear due date
+                          </Button>
+                        </div>
+                      )}
                     </PopoverContent>
                   </Popover>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Department</Label>
-                  <Select value={deptId} onValueChange={setDeptId}>
-                    <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                    <SelectContent>
-                      {departments.map(d => (
-                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Status</Label>
-                  <Select value={status} onValueChange={setStatus}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todo">To Do</SelectItem>
-                      <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="pending_review">Pending Review</SelectItem>
-                      <SelectItem value="done">Done</SelectItem>
-                    </SelectContent>
-                  </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Priority</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {priorities.map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPriority(p)}
+                      className={cn(
+                        "px-2.5 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all",
+                        priority === p ? priorityColorMap[p] : "bg-background border text-muted-foreground hover:border-primary/30",
+                      )}
+                    >{p}</button>
+                  ))}
                 </div>
               </div>
-              <div className="rounded-lg border bg-background p-3 space-y-3">
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <Checkbox
-                    checked={requiresReview}
-                    onCheckedChange={(c) => {
-                      const on = !!c;
-                      setRequiresReview(on);
-                      if (!on) setReviewerUserId("");
-                      else if (!reviewerUserId && user?.id) setReviewerUserId(user.id);
-                    }}
-                    className="mt-0.5"
-                  />
-                  <div>
-                    <p className="text-sm font-medium">Requires Audit / Review Before Completion</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      The assignee must submit for review; only the reviewer or task creator can mark it complete.
-                    </p>
-                  </div>
-                </label>
-                {requiresReview && (
-                  <div className="space-y-1.5 pl-6">
-                    <Label>Reviewer (optional)</Label>
-                    <Select
-                      value={reviewerUserId || user?.id || ""}
-                      onValueChange={setReviewerUserId}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Defaults to you" /></SelectTrigger>
+            </div>
+
+            {/* Progressive disclosure for secondary fields */}
+            <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-xl border bg-muted/20 px-3.5 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    More options
+                    {extrasCount > 0 && (
+                      <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{extrasCount}</Badge>
+                    )}
+                  </span>
+                  <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", moreOpen && "rotate-180")} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-4 pt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Department</Label>
+                    <Select value={deptId} onValueChange={setDeptId}>
+                      <SelectTrigger><SelectValue placeholder="Auto from assignee" /></SelectTrigger>
                       <SelectContent>
-                        {assignableUsers.map((u) => (
-                          <SelectItem key={u.id} value={u.id}>{u.name}{u.id === user?.id ? " (you)" : ""}</SelectItem>
+                        {departments.map(d => (
+                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                )}
-              </div>
-            </SectionCard>
-
-            <SectionCard icon={Clock} title="Schedule" subtitle="Due date, time, and recurrence">
-              <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3">
-                <div className="space-y-1.5">
-                  <Label>Due Date</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !dueDate && "text-muted-foreground")}>
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dueDate ? format(dueDate, "PPP") : <span>Pick a date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar mode="single" selected={dueDate} onSelect={setDueDate} initialFocus className={cn("p-3 pointer-events-auto")} />
-                    </PopoverContent>
-                  </Popover>
+                  <div className="space-y-1.5">
+                    <Label>Status</Label>
+                    <Select value={status} onValueChange={setStatus}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todo">To Do</SelectItem>
+                        <SelectItem value="in_progress">In Progress</SelectItem>
+                        <SelectItem value="pending_review">Pending Review</SelectItem>
+                        <SelectItem value="done">Done</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Time</Label>
+                    <Input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Frequency</Label>
+                    <Select value={frequency} onValueChange={setFrequency}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">One-time</SelectItem>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="biweekly">Bi-Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Time</Label>
-                  <Input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Frequency</Label>
-                <Select value={frequency} onValueChange={setFrequency}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">One-time</SelectItem>
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="biweekly">Bi-Weekly</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="quarterly">Quarterly</SelectItem>
-                  </SelectContent>
-                </Select>
                 {frequency !== "none" && (
-                  <p className="text-[11px] text-muted-foreground">A new task auto-creates each time this one is completed.</p>
+                  <p className="text-[11px] text-muted-foreground -mt-2">
+                    A new task auto-creates each time this one is completed.
+                  </p>
                 )}
-              </div>
-            </SectionCard>
 
-            <SectionCard icon={Layers} title="Extras" subtitle="Subtasks and file attachments">
-              <SubtaskEditor subtasks={subtasks} onChange={setSubtasks} disabled={saving} />
-              <div className="space-y-2 pt-2 border-t border-dashed">
-                <div className="flex items-center justify-between">
-                  <Label>Attachments</Label>
-                  <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
-                    <Paperclip className="h-3.5 w-3.5 mr-1.5" /> Add files
-                  </Button>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => {
-                      if (e.target.files) setPendingFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
-                      if (fileRef.current) fileRef.current.value = "";
-                    }}
-                  />
+                <div className="rounded-lg border bg-background p-3 space-y-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <Checkbox
+                      checked={requiresReview}
+                      onCheckedChange={(c) => {
+                        const on = !!c;
+                        setRequiresReview(on);
+                        if (!on) setReviewerUserId("");
+                        else if (!reviewerUserId && user?.id) setReviewerUserId(user.id);
+                      }}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <p className="text-sm font-medium">Requires review before completion</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Assignee submits for review; only the reviewer or creator can mark it done.
+                      </p>
+                    </div>
+                  </label>
+                  {requiresReview && (
+                    <div className="space-y-1.5 pl-6">
+                      <Label>Reviewer</Label>
+                      <Select
+                        value={reviewerUserId || user?.id || ""}
+                        onValueChange={setReviewerUserId}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Defaults to you" /></SelectTrigger>
+                        <SelectContent>
+                          {assignableUsers.map((u) => (
+                            <SelectItem key={u.id} value={u.id}>{u.name}{u.id === user?.id ? " (you)" : ""}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
-                {pendingFiles.length > 0 && (
-                  <ul className="space-y-1.5">
-                    {pendingFiles.map((f, i) => (
-                      <li key={i} className="flex items-center gap-2 rounded-lg border bg-background px-2.5 py-1.5 text-sm">
-                        <FileIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="flex-1 truncate">{f.name}</span>
-                        <span className="text-xs text-muted-foreground">{(f.size / 1024).toFixed(1)} KB</span>
-                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPendingFiles(prev => prev.filter((_, idx) => idx !== i))}>
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className="text-[11px] text-muted-foreground">Files upload after the task is created.</p>
-              </div>
-            </SectionCard>
+
+                <div className="rounded-lg border bg-background p-3">
+                  <SubtaskEditor subtasks={subtasks} onChange={setSubtasks} disabled={saving} />
+                </div>
+
+                <div className="space-y-2 rounded-lg border bg-background p-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Attachments</Label>
+                    <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
+                      <Paperclip className="h-3.5 w-3.5 mr-1.5" /> Add files
+                    </Button>
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files) setPendingFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+                        if (fileRef.current) fileRef.current.value = "";
+                      }}
+                    />
+                  </div>
+                  {pendingFiles.length > 0 && (
+                    <ul className="space-y-1.5">
+                      {pendingFiles.map((f, i) => (
+                        <li key={i} className="flex items-center gap-2 rounded-lg border bg-card px-2.5 py-1.5 text-sm">
+                          <FileIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="flex-1 truncate">{f.name}</span>
+                          <span className="text-xs text-muted-foreground">{(f.size / 1024).toFixed(1)} KB</span>
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPendingFiles(prev => prev.filter((_, idx) => idx !== i))}>
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">Files upload after the task is created.</p>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
 
-          <div className="flex items-center justify-between gap-2 px-5 py-4 border-t bg-muted/30">
-            <p className="text-xs text-muted-foreground hidden sm:block">
-              * Title and at least one assignee required
-            </p>
-            <div className="flex items-center gap-2 ml-auto">
-              <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button onClick={handleCreate} disabled={saving || assignees.length === 0 || !title.trim()} className="min-w-[120px]">
-                {saving ? (<><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Creating…</>) : "Create Task"}
-              </Button>
-            </div>
+          <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t bg-muted/30">
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button onClick={handleCreate} disabled={!canCreate} className="min-w-[120px]">
+              {saving ? (<><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Creating…</>) : "Create Task"}
+            </Button>
           </div>
         </div>
       </div>
