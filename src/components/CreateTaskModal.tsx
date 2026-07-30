@@ -152,13 +152,18 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
           await supabase.from("tasks").delete().eq("id", task.id);
           throw assigneeError;
         }
-        supabase.functions.invoke("notify-task-assigned", {
-          body: {
-            taskId: task.id,
-            assigneeUserIds: assignees,
-            assignedByName: user?.profile?.name || user?.email || "A teammate",
-          },
-        }).catch((e) => console.warn("notify-task-assigned failed", e));
+        try {
+          await invokeEdgeFunction("notify-task-assigned", {
+            body: {
+              taskId: task.id,
+              assigneeUserIds: assignees,
+              assignedByName: user?.profile?.name || user?.email || "A teammate",
+            },
+          });
+        } catch (notifyErr) {
+          console.warn("notify-task-assigned failed", notifyErr);
+          toast.warning("Task created, but assignment email could not be sent");
+        }
       }
 
       const subtaskRows = subtasks

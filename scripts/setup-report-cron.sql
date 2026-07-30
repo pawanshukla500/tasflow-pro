@@ -72,13 +72,13 @@ select cron.schedule(
   $$
 );
 
--- Weekly executive insight — Monday 09:00 IST (03:30 UTC)
+-- Weekly executive insight — Friday 09:00 IST (03:30 UTC)
 select cron.unschedule('send-weekly-pending-report') where exists (
   select 1 from cron.job where jobname = 'send-weekly-pending-report'
 );
 select cron.schedule(
   'send-weekly-pending-report',
-  '30 3 * * 1',
+  '30 3 * * 5',
   $$
   select net.http_post(
     url := 'https://nekdjoquirhecmejuoba.supabase.co/functions/v1/send-weekly-pending-report',

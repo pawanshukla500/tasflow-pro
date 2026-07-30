@@ -17,7 +17,7 @@
 | `GOOGLE_AI_API_KEY` | AI polish notes, daily motivation (`gemma-4-31b-it`) | `supabase/functions/_shared/google-ai.ts`, `polish-note`, `daily-motivation` |
 | `RESEND_API_KEY` | Transactional email via Resend | `supabase/functions/_shared/send-email.ts`, `_shared/env.ts` |
 | `EMAIL_FROM` / `EMAIL_FROM_NAME` | From address / display name | `_shared/send-email.ts`, `_shared/env.ts` |
-| `EMAIL_LOGO_URL` | Email header logo | `_shared/transactional-email-templates/_layout.tsx` |
+| `EMAIL_LOGO_URL` | Email header logo (**PNG**, not SVG) | `_shared/transactional-email-templates/_layout.tsx` |
 | `APP_URL` | Deep links in emails | `_shared/env.ts`, email templates |
 | `SUPABASE_URL` | Edge function DB / function calls | Most edge functions + `_shared/env.ts` |
 | `SUPABASE_ANON_KEY` | User-scoped Supabase clients | `firebase-auth`, `mcp-auth`, etc. |
