@@ -199,12 +199,12 @@ export function filterTasksInScope<
 }
 
 export function scopeDescription(scope: AccessScope, departmentNames: string[]): string {
-  if (scope.hasFullAccess) return "Organization-wide view — full access";
-  if (scope.isHR) return "People operations — all departments";
+  if (scope.hasFullAccess) return "Organization-wide";
+  if (scope.isHR) return "People ops · all departments";
   if (scope.isManager) {
-    if (departmentNames.length === 0) return "Your department — team & task performance";
-    if (departmentNames.length === 1) return `${departmentNames[0]} — team & task performance`;
-    return `${departmentNames.join(", ")} — team & task performance`;
+    if (departmentNames.length === 0) return "Your department";
+    if (departmentNames.length === 1) return departmentNames[0];
+    return departmentNames.join(", ");
   }
   return "Personal workspace";
 }

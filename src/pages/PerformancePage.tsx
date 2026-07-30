@@ -244,9 +244,7 @@ const PerformancePage = () => {
           </div>
         }
       />
-      {accessScope.tier !== "member" && (
-        <ScopeBanner scope={accessScope} />
-      )}
+      <ScopeBanner scope={accessScope} />
 
       <Tabs defaultValue={canSeeOthers ? "analytics" : "kra"}>
         <TabsList>

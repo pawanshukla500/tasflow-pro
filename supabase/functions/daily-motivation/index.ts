@@ -1,5 +1,6 @@
-// Returns a daily motivational quote. Tries Google AI (Gemini) first, falls back to a curated bank.
+// Returns a daily motivational quote. Tries Google AI (gemma-4-31b-it) first, falls back to a curated bank.
 import { istToday } from "../_shared/ist.ts";
+import { generateWithGoogleAi, getGoogleAiApiKey } from "../_shared/google-ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,32 +36,18 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const today = istToday();
-  const apiKey = Deno.env.get("GOOGLE_AI_API_KEY");
 
-  // Try Google AI first
-  if (apiKey) {
+  if (getGoogleAiApiKey()) {
     try {
       const prompt = `Give me ONE short, punchy motivational quote (max 18 words) suitable for a workplace task management dashboard for today (${today}). Themes: focus, ownership, momentum, teamwork, exports/operations. Return strict JSON only: {"quote":"...","author":"..."}. If you author it yourself, use "TaskFlow Pro".`;
-      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
-      const r = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.9, responseMimeType: "application/json" },
-        }),
+      const { text } = await generateWithGoogleAi({
+        prompt,
+        temperature: 0.9,
+        responseMimeType: "application/json",
       });
-      if (r.ok) {
-        const data = await r.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          const parsed = JSON.parse(text);
-          if (parsed?.quote) {
-            return json({ quote: parsed.quote, author: parsed.author || "TaskFlow Pro", source: "ai", date: today });
-          }
-        }
-      } else {
-        console.warn("Google AI non-OK:", r.status, await r.text());
+      const parsed = JSON.parse(text);
+      if (parsed?.quote) {
+        return json({ quote: parsed.quote, author: parsed.author || "TaskFlow Pro", source: "ai", date: today });
       }
     } catch (e) {
       console.warn("Google AI failed:", (e as Error).message);

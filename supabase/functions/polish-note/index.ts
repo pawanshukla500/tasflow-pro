@@ -1,4 +1,4 @@
-// Polish scratch-note text with Gemini — correct English, preserve meaning.
+// Polish scratch-note text with gemma-4-31b-it — correct English, preserve meaning.
 import { generateWithGoogleAi, getGoogleAiApiKey } from "../_shared/google-ai.ts";
 import { corsHeaders, json, requireUser } from "../_shared/google-oauth.ts";
 

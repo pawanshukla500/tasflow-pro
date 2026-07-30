@@ -452,9 +452,7 @@ const TeamPage = () => {
         }}
       />
 
-      {accessScope.tier !== "member" && !accessScope.hasFullAccess && (
-        <ScopeBanner scope={accessScope} departmentNames={departments.map((d) => d.name)} />
-      )}
+      <ScopeBanner scope={accessScope} departmentNames={departments.map((d) => d.name)} />
 
       <PageHeader
         className="relative mb-0"

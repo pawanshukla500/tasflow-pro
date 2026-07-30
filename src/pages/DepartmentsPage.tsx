@@ -148,9 +148,7 @@ const DepartmentsPage = () => {
           ) : undefined
         }
       />
-      {accessScope.tier !== "member" && !accessScope.hasFullAccess && (
-        <ScopeBanner scope={accessScope} departmentNames={departments.map((d) => d.name)} />
-      )}
+      <ScopeBanner scope={accessScope} departmentNames={departments.map((d) => d.name)} />
 
       {loading ? (
         <div className="text-center text-muted-foreground py-8">Loading…</div>

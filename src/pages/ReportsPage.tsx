@@ -171,9 +171,7 @@ const ReportsPage = () => {
           <Button variant="outline" size="sm" onClick={handleExport}><Download className="h-3.5 w-3.5 mr-1" />Export</Button>
         }
       />
-      {accessScope.tier !== "member" && (
-        <ScopeBanner scope={accessScope} departmentNames={deptNames} />
-      )}
+      <ScopeBanner scope={accessScope} departmentNames={deptNames} />
 
       <div className="flex gap-1 mb-2">
         {["Overview", "Workflows", "Performance", "Tasks"].map(tab => (
