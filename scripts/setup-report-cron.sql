@@ -32,13 +32,13 @@ select cron.schedule(
   $$
 );
 
--- Daily user digest — 10:00 IST (04:30 UTC)
+-- Daily user digest — Mon–Sat 09:30 IST (04:00 UTC); skips empty inboxes in the edge function
 select cron.unschedule('send-daily-digest') where exists (
   select 1 from cron.job where jobname = 'send-daily-digest'
 );
 select cron.schedule(
   'send-daily-digest',
-  '30 4 * * *',
+  '0 4 * * 1-6',
   $$
   select net.http_post(
     url := 'https://nekdjoquirhecmejuoba.supabase.co/functions/v1/send-daily-digest',

@@ -59,7 +59,7 @@ const notificationEvents = [
   { label: "Urgent task assignment emails", dbKey: "task_assigned" as const },
   { label: "Task due / overdue reminders", dbKey: "task_due_reminder" as const },
   { label: "Monthly report email", dbKey: "monthly_report" as const },
-  { label: "Daily morning briefing (10 AM IST)", dbKey: "daily_digest" as const },
+  { label: "Daily pending briefing (9:30 AM IST, Mon–Sat)", dbKey: "daily_digest" as const },
 ];
 
 const SettingsPage = () => {

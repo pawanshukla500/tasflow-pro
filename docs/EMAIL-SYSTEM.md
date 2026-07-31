@@ -2,7 +2,7 @@
 
 ## Policy
 - **No email on every task create/import** — in-app notification only (`notify-task-assigned` with `sendEmail: false`).
-- **Daily pending briefing** at **10:00 IST** via `send-daily-digest` for every active user (opt-out: Settings → Daily digest).
+- **Daily pending briefing** Mon–Sat at **09:30 IST** via `send-daily-digest` for every active user who has due/pending work (skipped if empty; opt-out: Settings → Daily digest).
 - **Friday management overview** at **09:00 IST** via `send-weekly-pending-report` for System Admin / MD.
 - Assignment email template remains for rare/urgent cases (`sendEmail: true`).
 

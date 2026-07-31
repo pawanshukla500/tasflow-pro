@@ -164,7 +164,7 @@ const WeeklyLeadershipInsightEmail = ({
     )}
 
     <Text style={mutedText}>
-      Personal pending-task briefings go to everyone each morning at 10:00 IST.
+      Personal pending-task briefings go to everyone Mon–Sat at 09:30 IST (skipped when they have no pending work).
       This Friday mail is for leadership overlook only.
     </Text>
     <Section style={{ textAlign: 'center', margin: '20px 0 8px' }}>

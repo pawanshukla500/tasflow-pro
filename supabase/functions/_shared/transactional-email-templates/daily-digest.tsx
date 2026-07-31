@@ -90,12 +90,12 @@ const DailyDigestEmail = ({
     <EmailShell
       preview={`Morning briefing — ${total} pending task${total === 1 ? '' : 's'}`}
       heroTitle="Your morning task briefing"
-      heroSubtitle={`Daily pending summary · ${dateLabel || 'today'} · 10:00 IST`}
+      heroSubtitle={`Daily pending summary · ${dateLabel || 'today'} · 09:30 IST · Mon–Sat`}
     >
       <Heading style={h1}>Good morning{recipientName ? `, ${recipientName}` : ''}</Heading>
       <Text style={text}>
-        Here is your personal pending-work summary. New tasks no longer trigger a separate email —
-        everything you need is in this morning briefing.
+        Here is your personal pending-work summary. You only receive this when you have
+        due or pending work — new task creates no longer send a separate email.
       </Text>
 
       <StatRow

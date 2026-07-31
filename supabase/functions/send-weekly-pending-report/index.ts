@@ -189,7 +189,7 @@ Deno.serve(async (req) => {
       recommendations.push('Schedule a short overdue scrub this week — clear critical/high items first.')
     }
     if (recommendations.length === 0) {
-      recommendations.push('Keep the daily 10:00 IST briefings enabled so individuals stay on top of pending work.')
+      recommendations.push('Keep the Mon–Sat 09:30 IST briefings enabled so individuals stay on top of pending work.')
     }
 
     try {
