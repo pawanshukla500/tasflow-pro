@@ -19,7 +19,7 @@ node scripts/upload-firebase-secret.mjs
 | Job | Time (IST) | Recipients |
 |-----|------------|------------|
 | `send-due-reminders-daily` | 08:00 Mon–Sat | Users with overdue / due-today / due-soon tasks |
-| `send-daily-digest` | **10:00** daily | Each user — morning pending-task briefing (create/import no longer email) |
+| `send-daily-digest` | **09:30 Mon–Sat** | Each user with pending/due work — consolidated briefing (skipped if empty; create/import no longer email) |
 | `send-department-daily-summary` | 08:30 daily | Department managers |
 | `send-weekly-pending-report` | **Friday** 09:00 | MD / System Admin — weekly management overview |
 | `send-monthly-report` | 1st of month 09:00 | MD / System Admin |
