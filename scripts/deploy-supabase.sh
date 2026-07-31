@@ -94,8 +94,8 @@ if [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
     echo "         Ensuring email crons via direct SQL next." >&2
   fi
 
-  # Belt-and-suspenders: always set digest 10:00 IST + Friday leadership cron (idempotent).
-  echo "==> Ensuring email report crons (10:00 IST digest + Friday leadership)..."
+  # Belt-and-suspenders: always set digest Mon–Sat 09:30 IST + Friday leadership cron (idempotent).
+  echo "==> Ensuring email report crons (Mon–Sat 09:30 IST digest + Friday leadership)..."
   if $SUPABASE_CLI db query --db-url "$SUPABASE_DB_URL" -f "$REPO_DIR/scripts/fix-email-crons.sql"; then
     echo "==> Email crons ensured."
     $SUPABASE_CLI db query --db-url "$SUPABASE_DB_URL" \
@@ -104,6 +104,7 @@ if [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
     $SUPABASE_CLI migration repair --status applied \
       20260730090000 \
       20260730110000 \
+      20260731093000 \
       --yes 2>/dev/null \
       || true
   else

@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -15,7 +14,6 @@ export function AdminSettingsPanel() {
   const [orgName, setOrgName] = useState("");
   const [orgDomain, setOrgDomain] = useState("");
   const [dailyDigest, setDailyDigest] = useState(true);
-  const [digestHour, setDigestHour] = useState("8");
   const [auditLogs, setAuditLogs] = useState<{ action: string; created_at: string; metadata: unknown }[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -23,9 +21,8 @@ export function AdminSettingsPanel() {
     if (!user?.organization) return;
     setOrgName(user.organization.name);
     setOrgDomain(user.organization.domain || "");
-    const settings = user.organization.settings as { email?: { daily_digest_enabled?: boolean; digest_hour_ist?: number } };
+    const settings = user.organization.settings as { email?: { daily_digest_enabled?: boolean } };
     setDailyDigest(settings?.email?.daily_digest_enabled !== false);
-    setDigestHour(String(settings?.email?.digest_hour_ist ?? 10));
   }, [user?.organization]);
 
   useEffect(() => {
@@ -49,7 +46,7 @@ export function AdminSettingsPanel() {
     try {
       const settings = {
         ...(user.organization.settings || {}),
-        email: { daily_digest_enabled: dailyDigest, digest_hour_ist: Number(digestHour) },
+        email: { daily_digest_enabled: dailyDigest, digest_hour_ist: 9.5 },
       };
       const { error } = await supabase.from("organizations").update({
         name: orgName,
@@ -106,7 +103,7 @@ export function AdminSettingsPanel() {
             <div>
               <p className="font-medium text-sm">Daily digest emails</p>
               <p className="text-xs text-muted-foreground">
-                Morning pending-task briefing at 10:00 IST (creating a task no longer sends a separate email)
+                Consolidated pending-task briefing Mon–Sat at 9:30 AM IST. Users with no due or pending work are skipped.
               </p>
             </div>
             <Switch checked={dailyDigest} onCheckedChange={setDailyDigest} />
@@ -116,17 +113,6 @@ export function AdminSettingsPanel() {
             <p className="text-xs text-muted-foreground">
               Admins and Managing Directors receive a weekly department performance overview every Friday (completion %, overdue, top teams, recommendations).
             </p>
-          </div>
-          <div className="space-y-2">
-            <Label>Digest send hour (IST)</Label>
-            <Select value={digestHour} onValueChange={setDigestHour}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {[6, 7, 8, 9, 10].map((h) => (
-                  <SelectItem key={h} value={String(h)}>{h}:00 AM</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
         </div>
       </section>

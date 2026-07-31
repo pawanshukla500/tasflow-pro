@@ -46,7 +46,7 @@ const TaskAssignedEmail = ({ recipientName, taskTitle, taskDescription, priority
       <InsightCard
         title="Tip"
         tone="neutral"
-        body="Your full pending list arrives every morning at 10:00 IST in the daily digest."
+        body="Your full pending list arrives Mon–Sat at 09:30 IST in the daily digest."
       />
       <Section style={{ textAlign: 'center', margin: '20px 0 8px' }}>
         <Button href={deepLink} style={button}>Open this task</Button>

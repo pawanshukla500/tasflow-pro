@@ -2,7 +2,7 @@
 -- Idempotent: email report crons for TaskFlow Pro.
 -- Safe to re-run via SQL Editor or `supabase db query -f` (single statement).
 --
--- Daily digest: 10:00 IST = 04:30 UTC
+-- Daily digest: Mon–Sat 09:30 IST = 04:00 UTC (no Sunday)
 -- Weekly leadership (Admin/MD): Friday 09:00 IST = 03:30 UTC
 --
 -- Dashboard: https://supabase.com/dashboard/project/nekdjoquirhecmejuoba/sql/new
@@ -31,7 +31,7 @@ BEGIN
 
   PERFORM cron.schedule(
     'send-daily-digest',
-    '30 4 * * *', -- 10:00 IST
+    '0 4 * * 1-6', -- Mon–Sat 09:30 IST
     $cron$
     SELECT net.http_post(
       url := 'https://nekdjoquirhecmejuoba.supabase.co/functions/v1/send-daily-digest',
@@ -73,5 +73,5 @@ BEGIN
     $cron$
   );
 
-  RAISE NOTICE 'Email crons set: daily digest 10:00 IST; weekly leadership Friday 09:00 IST.';
+  RAISE NOTICE 'Email crons set: daily digest Mon–Sat 09:30 IST; weekly leadership Friday 09:00 IST.';
 END $$;

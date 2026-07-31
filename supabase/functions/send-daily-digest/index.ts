@@ -1,5 +1,5 @@
-// Daily digest: pending tasks bifurcated (delayed / due soon / pending) per user.
-// Schedule via pg_cron daily at 10:00 IST (04:30 UTC).
+// Daily digest: consolidated pending / due / overdue tasks (+ workflow stages) per active user.
+// Schedule via pg_cron Mon–Sat at 09:30 IST (04:00 UTC). Skips users with nothing pending.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { istToday, istAddDays } from "../_shared/ist.ts";
 
@@ -38,10 +38,29 @@ Deno.serve(async (req) => {
     .select("id, name, email, active, organization_id")
     .eq("active", true);
 
+  const orgDigestCache = new Map<string, boolean>();
   const results: { email: string; status: string }[] = [];
 
   for (const profile of profiles || []) {
     if (!profile.email) continue;
+
+    if (profile.organization_id) {
+      let orgEnabled = orgDigestCache.get(profile.organization_id);
+      if (orgEnabled === undefined) {
+        const { data: org } = await supabase
+          .from("organizations")
+          .select("settings")
+          .eq("id", profile.organization_id)
+          .maybeSingle();
+        const settings = (org?.settings || {}) as { email?: { daily_digest_enabled?: boolean } };
+        orgEnabled = settings.email?.daily_digest_enabled !== false;
+        orgDigestCache.set(profile.organization_id, orgEnabled);
+      }
+      if (!orgEnabled) {
+        results.push({ email: profile.email, status: "skipped_org_disabled" });
+        continue;
+      }
+    }
 
     const { data: prefs } = await supabase
       .from("notification_preferences")
@@ -131,6 +150,7 @@ Deno.serve(async (req) => {
     const overdueWorkflows = workflowItems.filter((w) => w.overdue);
     const activeWorkflows = workflowItems.filter((w) => !w.overdue);
 
+    // No email when the user has nothing due / pending (tasks or workflow stages).
     if (allTasks.length === 0 && workflowItems.length === 0) {
       results.push({ email: profile.email, status: "skipped_empty" });
       continue;

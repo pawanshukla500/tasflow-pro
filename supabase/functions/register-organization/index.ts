@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
       created_by: userId,
       settings: {
         branding: { name: orgNameTrimmed },
-        email: { daily_digest_enabled: true, digest_hour_ist: 8 },
+        email: { daily_digest_enabled: true, digest_hour_ist: 9.5 },
       },
     }).select("id, name, slug, domain").single();
 

@@ -87,7 +87,7 @@ const WelcomeUserEmail = ({ name, email, password, role, loginUrl }: Props) => {
       </Section>
 
       <Text style={mutedText}>
-        This is a one-time welcome email with your temporary password. Pending work appears in your daily 10:00 IST briefing.
+        This is a one-time welcome email with your temporary password. Pending work appears in your Mon–Sat 09:30 IST briefing.
       </Text>
     </EmailShell>
   )
