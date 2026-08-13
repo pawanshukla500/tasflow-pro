@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
 
     const { data: prefs } = await supabase
       .from("notification_preferences")
-      .select("daily_digest, task_due_reminder")
+      .select("daily_digest")
       .eq("user_id", profile.id)
       .maybeSingle();
 

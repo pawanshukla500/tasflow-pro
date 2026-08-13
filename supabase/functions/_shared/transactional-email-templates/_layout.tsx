@@ -142,9 +142,20 @@ export const footer = {
   color: colors.muted,
   margin: '0',
   lineHeight: '1.7',
-  padding: '16px 28px 24px',
+  padding: '16px 28px 4px',
   background: colors.bg,
   borderTop: `1px solid ${colors.border}`,
+}
+
+export const footerWarning = {
+  textAlign: 'center' as const,
+  fontSize: '10px',
+  color: colors.muted,
+  opacity: 0.85,
+  margin: '0',
+  lineHeight: '1.6',
+  padding: '4px 28px 20px',
+  background: colors.bg,
 }
 
 /** @deprecated kept for older template imports */
@@ -201,6 +212,18 @@ export const EmailShell = ({ preview, heroTitle: hero, heroSubtitle, children }:
             <Link href={APP_URL} style={{ color: colors.primary, textDecoration: 'none', fontWeight: 600 }}>
               Open TaskFlow Pro →
             </Link>
+            {' · '}
+            <Link
+              href={`${APP_URL}/settings?tab=notifications`}
+              style={{ color: colors.primary, textDecoration: 'none', fontWeight: 600 }}
+            >
+              Manage email preferences
+            </Link>
+          </Text>
+          <Text style={footerWarning}>
+            This is an automated, system-generated message from {SITE_NAME} — please do not reply
+            directly to this email. It may contain confidential {COMPANY_LEGAL} work information;
+            if you received it in error, delete it and notify your administrator.
           </Text>
         </Section>
       </Container>
