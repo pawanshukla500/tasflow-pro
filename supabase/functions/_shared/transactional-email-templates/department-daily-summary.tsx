@@ -63,18 +63,18 @@ const DepartmentDailySummaryEmail = ({
         ))}
         {delayed.length > 0 && (
           <>
-            <Text style={{ ...text, fontWeight: 700, color: '#dc2626', marginTop: '12px' }}>
+            <Text style={{ ...text, fontWeight: 700, color: colors.danger, marginTop: '12px' }}>
               Overdue ({delayed.length})
             </Text>
-            {delayed.slice(0, 8).map((t) => taskRow(t, '#dc2626'))}
+            {delayed.slice(0, 8).map((t) => taskRow(t, colors.danger))}
           </>
         )}
         {dueSoon.length > 0 && (
           <>
-            <Text style={{ ...text, fontWeight: 700, color: '#f59e0b', marginTop: '12px' }}>
+            <Text style={{ ...text, fontWeight: 700, color: colors.warning, marginTop: '12px' }}>
               Due soon ({dueSoon.length})
             </Text>
-            {dueSoon.slice(0, 8).map((t) => taskRow(t, '#f59e0b'))}
+            {dueSoon.slice(0, 8).map((t) => taskRow(t, colors.warning))}
           </>
         )}
         {pending.length > 0 && (

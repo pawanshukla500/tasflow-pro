@@ -19,7 +19,7 @@ const CredentialRow = ({ label, value, highlight }: { label: string; value: stri
         {label}
       </Text>
       <div style={{
-        background: highlight ? 'rgba(13,148,136,0.08)' : colors.bg,
+        background: highlight ? `rgba(${colors.primaryRgb},0.08)` : colors.bg,
         border: `1px solid ${highlight ? colors.primary : colors.border}`,
         borderRadius: '10px',
         padding: '12px 14px',
@@ -66,7 +66,7 @@ const WelcomeUserEmail = ({ name, email, password, role, loginUrl }: Props) => {
       <Section style={{
         ...infoCard,
         border: `2px solid ${colors.primary}`,
-        boxShadow: '0 8px 24px rgba(13,148,136,0.12)',
+        boxShadow: `0 8px 24px rgba(${colors.primaryRgb},0.12)`,
       }}>
         <Text style={{ ...text, fontWeight: 700, margin: '0 0 14px', color: colors.primary, fontSize: '14px' }}>
           Your sign-in details

@@ -15,10 +15,13 @@ Separately, `send-transactional-email` accepted an `idempotencyKey` from every d
 
 ## Branding
 - Shell: `supabase/functions/_shared/transactional-email-templates/_layout.tsx` — every transactional **and** auth template renders through this one shell, so logo/palette/footer are identical across all mail kinds (verified 2026-08-13: no template bypasses it).
-- Palette: Soft UI teal (`#0D9488`), Plus Jakarta Sans stack, PNG logo (`EMAIL_LOGO_URL` / `youthnic-logo.png`)
-- Auth emails (signup, invite, magic link, OTP, recovery) use the same shell
+- Palette: Soft UI teal, Plus Jakarta Sans stack, PNG logo (`EMAIL_LOGO_URL` / `youthnic-logo.png`).
+- **Palette accuracy (fixed 2026-08-13):** `colors` in `_layout.tsx` is now every hex value converted directly from `src/index.css`'s light-theme HSL tokens (see the comment block above `colors` for the conversion table). `warning` and `success` had drifted to generic Tailwind swatches (`#F59E0B`/`#16A34A`) instead of the app's actual `--warning`/`--success` (`#DB7706`/`#25935F`); `text` was noticeably lighter than the app's real `--foreground`. `primary`/`background`/`border`/`danger` were already accurate (within 1-2 hex digits) and untouched. `department-daily-summary.tsx` had its own hardcoded `#dc2626`/`#f59e0b` bypassing the shared tokens entirely (now uses `colors.danger`/`colors.warning`); `_layout.tsx`'s own card/button shadows and `welcome-user.tsx`'s credential-row glow had the primary's RGB hardcoded too (now `colors.primaryRgb`, kept in sync with `colors.primary`). If `src/index.css` tokens ever change, regenerate hex here the same way — don't hand-pick a "close enough" replacement, and don't hardcode a color/rgba directly in a template; always reference `colors.*`.
+- Fonts: same Plus Jakarta Sans stack as `tailwind.config.ts`. Email clients that block remote `@font-face`/Google Fonts (most webmail, Outlook desktop) fall back to the declared system-font stack, same as the CSS `font-family` fallback chain — this is a client limitation, not a config gap.
+- **Graphic parity:** added `ProgressBar` to `_layout.tsx` — a table-based percentage bar matching the app's actual `<Progress>` component (`src/components/ui/progress.tsx`: solid primary-teal fill on a pale track, fully rounded; no red/amber/green traffic-light, because the app doesn't do that either). Wired into `weekly-leadership-insight` (per-department completion) and `monthly-report` (org completion), which previously had numbers only, no graphic.
+- Auth emails (signup, invite, magic link, OTP, recovery) use the same shell.
 - Footer (added 2026-08-13): copyright line + "Manage email preferences" link (→ `/settings?tab=notifications`) + a visible automated-message / confidentiality warning line, in addition to the existing `List-Unsubscribe` header (RFC 8058 one-click).
-- `supabase/functions/_shared/gmail-templates.ts` and `_shared/gmail-send.ts` are legacy/unused (no importers) — safe to delete in a follow-up cleanup.
+- (Removed 2026-08-13) `_shared/gmail-templates.ts` / `_shared/gmail-send.ts` were a second, hand-maintained copy of this same shell/palette with no importers — deleted so there's exactly one place the brand theme is defined.
 
 ## Templates
 | Key | Purpose |

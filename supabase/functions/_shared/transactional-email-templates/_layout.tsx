@@ -17,25 +17,46 @@ export const EMAIL_LOGO_URL =
   `${APP_URL}/youthnic-logo.png`
 
 /**
- * Soft-UI teal palette — matches `src/index.css` primary (hsl 174 84% 32%).
- * Kept hex for email-client compatibility.
+ * Soft-UI teal palette — hex values converted directly from `src/index.css`
+ * HSL design tokens (light theme) so email always tracks the live app theme
+ * instead of drifting to hand-picked "close enough" colors. Emails render
+ * with a fixed light palette (email clients don't reliably support
+ * `prefers-color-scheme` custom-property overrides), so this mirrors the
+ * app's `:root` tokens rather than `.dark`.
+ *
+ *   token              index.css HSL        hex
+ *   primary            174 84% 32%          #0D9688
+ *   background         166 35% 97%          #F5FAF9
+ *   secondary/track     166 25% 93%          #E9F2F0
+ *   border             168 20% 88%          #DAE7E4
+ *   foreground (text)  175 45% 14%          #143431
+ *   muted-foreground   175 12% 40%          #5A7270
+ *   destructive        0 72% 51%            #DC2828
+ *   success             152 60% 36%          #25935F
+ *   warning            32 95% 44%           #DB7706
+ *
+ * Regenerate with `python3 -c "import colorsys; ..."` (see PR history) if
+ * src/index.css tokens change — don't hand-pick a "nice" replacement color.
  */
 export const colors = {
-  primary: '#0D9488',
-  primaryMid: '#0F766E',
-  primaryDark: '#115E59',
-  gradientStart: '#0D9488',
-  gradientMid: '#0F766E',
-  gradientEnd: '#134E4A',
-  text: '#134E4A',
-  muted: '#5B7A75',
-  border: '#D5E5E2',
-  bg: '#F3FAF8',
+  primary: '#0D9688',
+  primaryMid: '#0B7A6F',
+  primaryDark: '#085E55',
+  gradientStart: '#0D9688',
+  gradientMid: '#0B7A6F',
+  gradientEnd: '#143431',
+  text: '#143431',
+  muted: '#5A7270',
+  border: '#DAE7E4',
+  track: '#E9F2F0',
+  bg: '#F5FAF9',
   cardBg: '#ffffff',
-  danger: '#DC2626',
-  warning: '#F59E0B',
-  success: '#16A34A',
+  danger: '#DC2828',
+  warning: '#DB7706',
+  success: '#25935F',
   chipBg: '#ffffff',
+  /** `primary` as "r,g,b" for rgba() glows/tints — keep in sync with `primary` above. */
+  primaryRgb: '13,150,136',
 }
 
 export const main = {
@@ -53,7 +74,7 @@ export const outerCard = {
   borderRadius: '16px',
   overflow: 'hidden' as const,
   border: `1px solid ${colors.border}`,
-  boxShadow: '0 18px 40px rgba(13,148,136,0.12)',
+  boxShadow: `0 18px 40px rgba(${colors.primaryRgb},0.12)`,
 }
 
 export const landscapeHero = {
@@ -125,7 +146,7 @@ export const button = {
   fontWeight: 700,
   textDecoration: 'none',
   display: 'inline-block',
-  boxShadow: '0 8px 20px rgba(13,148,136,0.35)',
+  boxShadow: `0 8px 20px rgba(${colors.primaryRgb},0.35)`,
 }
 
 export const infoCard = {
@@ -363,5 +384,54 @@ export function CtaBlock({ href, label }: { href: string; label: string }) {
     <Section style={{ textAlign: 'center' as const, margin: '22px 0 8px' }}>
       <Link href={href} style={button}>{label}</Link>
     </Section>
+  )
+}
+
+/**
+ * Percentage bar matching the app's actual `<Progress>` component
+ * (`src/components/ui/progress.tsx`): solid primary-teal fill on a pale
+ * track, fully rounded — not a red/amber/green traffic light, since that
+ * isn't how the app renders progress either. Built with nested tables at
+ * explicit pixel/percent widths (not flex/grid) because that's the one
+ * layout technique that renders consistently across email clients,
+ * including Outlook's Word engine.
+ */
+export function ProgressBar({
+  percent,
+  height = 8,
+  fillColor,
+}: {
+  percent: number
+  height?: number
+  fillColor?: string
+}) {
+  const pct = Math.max(0, Math.min(100, Math.round(percent)))
+  const heightPx = `${height}px`
+  return (
+    <table role="presentation" width="100%" cellPadding={0} cellSpacing={0} style={{ borderCollapse: 'collapse' as const }}>
+      <tbody>
+        <tr>
+          <td style={{ background: colors.track, borderRadius: heightPx, padding: 0 }}>
+            <table role="presentation" width={`${pct}%`} cellPadding={0} cellSpacing={0} style={{ borderCollapse: 'collapse' as const }}>
+              <tbody>
+                <tr>
+                  <td
+                    style={{
+                      background: fillColor || colors.primary,
+                      borderRadius: heightPx,
+                      height: heightPx,
+                      fontSize: '1px',
+                      lineHeight: heightPx,
+                    }}
+                  >
+                    &nbsp;
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      </tbody>
+    </table>
   )
 }
