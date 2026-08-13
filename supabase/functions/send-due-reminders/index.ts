@@ -1,3 +1,16 @@
+// DEPRECATED — superseded by `send-daily-digest` (see docs/EMAIL-SYSTEM.md).
+//
+// The `send-due-reminders-daily` pg_cron job that invoked this function was
+// unscheduled in migration 20260813120000_dedupe_daily_emails_and_idempotency
+// because it duplicated `send-daily-digest`: every active user was getting
+// two near-identical "your pending tasks" emails each weekday morning (this
+// one at 08:00 IST, daily-digest at 09:30 IST). `send-daily-digest` is the
+// fuller-featured, currently documented system (workflow stages, priority
+// breakdown, org-level opt-out). Do not re-schedule this function's cron job
+// without retiring send-daily-digest first, or the duplicate-email bug comes
+// back. Kept here (undeployed-from-cron) only in case its simpler org-wide
+// "urgent overview for leaders" behavior is wanted again in a merged form.
+//
 // Cron-driven: sends a daily pending-task reminder Mon–Sat (skips Sunday).
 //
 // Each active user with task_due_reminder enabled receives one email listing

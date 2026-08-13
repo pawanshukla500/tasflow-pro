@@ -152,7 +152,34 @@ Deno.serve(async (req) => {
     )
   }
 
-  // 2. Check suppression list (fail-closed: if we can't verify, don't send)
+  // 2. Idempotency guard — cron-driven digests/reports pass a stable key
+  // (e.g. `daily-digest-2026-08-13-<user>`) so a double cron fire, a caller
+  // retry, or a manual re-trigger never re-sends the same logical email.
+  // idempotencyKey defaults to messageId (always unique) when the caller
+  // doesn't pass one, so this only ever matches on genuine repeats.
+  const { data: existingSend } = await supabase
+    .from('email_send_log')
+    .select('id, status')
+    .eq('idempotency_key', idempotencyKey)
+    .in('status', ['pending', 'sent'])
+    .maybeSingle()
+
+  if (existingSend) {
+    console.log('Duplicate send suppressed by idempotency key', {
+      templateName,
+      idempotencyKey,
+      existingStatus: existingSend.status,
+    })
+    return new Response(
+      JSON.stringify({ success: true, deduped: true, reason: 'duplicate_idempotency_key' }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    )
+  }
+
+  // 3. Check suppression list (fail-closed: if we can't verify, don't send)
   const { data: suppressed, error: suppressionError } = await supabase
     .from('suppressed_emails')
     .select('id')
@@ -180,6 +207,7 @@ Deno.serve(async (req) => {
       template_name: templateName,
       recipient_email: effectiveRecipient,
       status: 'suppressed',
+      idempotency_key: idempotencyKey,
     })
 
     console.log('Email suppressed', { effectiveRecipient, templateName })
@@ -192,7 +220,7 @@ Deno.serve(async (req) => {
     )
   }
 
-  // 3. Get or create unsubscribe token (one token per email address)
+  // 4. Get or create unsubscribe token (one token per email address)
   const normalizedEmail = effectiveRecipient.toLowerCase()
   let unsubscribeToken: string
 
@@ -214,6 +242,7 @@ Deno.serve(async (req) => {
       recipient_email: effectiveRecipient,
       status: 'failed',
       error_message: 'Failed to look up unsubscribe token',
+      idempotency_key: idempotencyKey,
     })
     return new Response(
       JSON.stringify({ error: 'Failed to prepare email' }),
@@ -247,6 +276,7 @@ Deno.serve(async (req) => {
         recipient_email: effectiveRecipient,
         status: 'failed',
         error_message: 'Failed to create unsubscribe token',
+        idempotency_key: idempotencyKey,
       })
       return new Response(
         JSON.stringify({ error: 'Failed to prepare email' }),
@@ -276,6 +306,7 @@ Deno.serve(async (req) => {
         recipient_email: effectiveRecipient,
         status: 'failed',
         error_message: 'Failed to confirm unsubscribe token storage',
+        idempotency_key: idempotencyKey,
       })
       return new Response(
         JSON.stringify({ error: 'Failed to prepare email' }),
@@ -299,6 +330,7 @@ Deno.serve(async (req) => {
       status: 'suppressed',
       error_message:
         'Unsubscribe token used but email missing from suppressed list',
+      idempotency_key: idempotencyKey,
     })
     return new Response(
       JSON.stringify({ success: false, reason: 'email_suppressed' }),
@@ -309,7 +341,7 @@ Deno.serve(async (req) => {
     )
   }
 
-  // 4. Render React Email template to HTML and plain text
+  // 5. Render React Email template to HTML and plain text
   const html = await renderAsync(
     React.createElement(template.component, templateData)
   )
@@ -324,16 +356,37 @@ Deno.serve(async (req) => {
       ? template.subject(templateData)
       : template.subject
 
-  // 5. Enqueue the pre-rendered email for async processing by the dispatcher.
+  // 6. Enqueue the pre-rendered email for async processing by the dispatcher.
   // The dispatcher (process-email-queue) handles sending, retries, and rate-limit backoff.
 
-  // Log pending BEFORE enqueue so we have a record even if enqueue crashes
-  await supabase.from('email_send_log').insert({
+  // Log pending BEFORE enqueue so we have a record even if enqueue crashes.
+  // idempotency_key has a unique DB index — if a near-simultaneous request
+  // raced us past the check above, this insert loses the race and we bail
+  // out cleanly instead of enqueueing a second copy of the same email.
+  const { error: pendingLogError } = await supabase.from('email_send_log').insert({
     message_id: messageId,
     template_name: templateName,
     recipient_email: effectiveRecipient,
     status: 'pending',
+    idempotency_key: idempotencyKey,
   })
+
+  if (pendingLogError) {
+    if (pendingLogError.code === '23505') {
+      console.log('Duplicate send suppressed by idempotency key (race)', {
+        templateName,
+        idempotencyKey,
+      })
+      return new Response(
+        JSON.stringify({ success: true, deduped: true, reason: 'duplicate_idempotency_key' }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
+    }
+    console.error('Failed to write pending email_send_log row', { error: pendingLogError })
+  }
 
   const { error: enqueueError } = await supabase.rpc('enqueue_email', {
     queue_name: 'transactional_emails',
@@ -359,13 +412,14 @@ Deno.serve(async (req) => {
       effectiveRecipient,
     })
 
-    await supabase.from('email_send_log').insert({
-      message_id: messageId,
-      template_name: templateName,
-      recipient_email: effectiveRecipient,
-      status: 'failed',
-      error_message: 'Failed to enqueue email',
-    })
+    // Flip the pending row to failed (rather than inserting a second row)
+    // so a stuck 'pending' status never permanently blocks a retry with the
+    // same idempotency key.
+    await supabase
+      .from('email_send_log')
+      .update({ status: 'failed', error_message: 'Failed to enqueue email' })
+      .eq('message_id', messageId)
+      .eq('status', 'pending')
 
     return new Response(JSON.stringify({ error: 'Failed to enqueue email' }), {
       status: 500,

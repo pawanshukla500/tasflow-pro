@@ -31,28 +31,38 @@ Deno.serve(async (req) => {
   })
   const monthKey = `${prevYear}-${String(prevMonth).padStart(2, '0')}`
 
+  // organization_id included so each recipient only sees their own tenant's
+  // numbers — matches the scoping already used by send-weekly-pending-report
+  // and send-daily-digest. (Previously this query had no org filter at all,
+  // so an MD/System Admin in one organization received monthly totals that
+  // silently included every other organization's tasks too.)
   const { data: tasks } = await supabase
-    .from('tasks').select('id, status, department_id, completed_at, created_at, due_date')
+    .from('tasks').select('id, status, department_id, completed_at, created_at, due_date, organization_id')
     .gte('created_at', new Date(startIso).toISOString()).lt('created_at', new Date(endIso).toISOString())
-
-  const totalTasks = tasks?.length || 0
-  const completedTasks = tasks?.filter((t) => t.status === 'done').length || 0
-  const overdueTasks = tasks?.filter((t) =>
-    t.status !== 'done' && t.due_date && t.due_date < today
-  ).length || 0
 
   const { data: roles } = await supabase
     .from('user_roles').select('user_id, role')
     .in('role', ['managing_director', 'system_admin'])
   const recipientIds = Array.from(new Set((roles || []).map((r) => r.user_id)))
   const { data: recipients } = await supabase
-    .from('profiles').select('id, name, email').in('id', recipientIds)
+    .from('profiles').select('id, name, email, active, organization_id').in('id', recipientIds)
 
   const results = []
   for (const r of recipients || []) {
+    if (!r.email || r.active === false) continue
+
     const { data: prefs } = await supabase
       .from('notification_preferences').select('monthly_report').eq('user_id', r.id).maybeSingle()
     if (prefs && prefs.monthly_report === false) continue
+
+    const orgTasks = (tasks || []).filter((t) =>
+      !r.organization_id || !t.organization_id || t.organization_id === r.organization_id
+    )
+    const totalTasks = orgTasks.length
+    const completedTasks = orgTasks.filter((t) => t.status === 'done').length
+    const overdueTasks = orgTasks.filter((t) =>
+      t.status !== 'done' && t.due_date && t.due_date < today
+    ).length
 
     const { error } = await supabase.functions.invoke('send-transactional-email', {
       body: {
