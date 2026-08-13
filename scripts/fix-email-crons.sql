@@ -24,12 +24,6 @@ BEGIN
     );
   END IF;
 
-  -- send-due-reminders-daily duplicated send-daily-digest (two "pending
-  -- tasks" emails every weekday, 08:00 and 09:30 IST). Never reschedule it.
-  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'send-due-reminders-daily') THEN
-    PERFORM cron.unschedule('send-due-reminders-daily');
-  END IF;
-
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'send-daily-digest') THEN
     PERFORM cron.unschedule('send-daily-digest');
   END IF;

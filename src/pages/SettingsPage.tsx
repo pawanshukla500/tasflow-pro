@@ -55,14 +55,9 @@ const GmailLogo = ({ className = "h-6 w-6" }: { className?: string }) => (
   </svg>
 );
 
-// Note: "Task due / overdue reminders" (task_due_reminder) is intentionally
-// not listed here — it used to gate the separate send-due-reminders cron,
-// which was retired for duplicating daily_digest (see docs/EMAIL-SYSTEM.md).
-// The column is kept in notification_preferences for backward compatibility
-// but no longer controls any send path, so it's hidden from this list to
-// avoid a toggle that silently does nothing.
 const notificationEvents = [
   { label: "Urgent task assignment emails", dbKey: "task_assigned" as const },
+  { label: "Task due / overdue reminders", dbKey: "task_due_reminder" as const },
   { label: "Monthly report email", dbKey: "monthly_report" as const },
   { label: "Daily pending briefing (9:30 AM IST, Mon–Sat)", dbKey: "daily_digest" as const },
 ];
