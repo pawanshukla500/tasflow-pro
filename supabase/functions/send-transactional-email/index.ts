@@ -2,6 +2,7 @@ import * as React from 'npm:react@18.3.1'
 import { renderAsync } from 'npm:@react-email/components@0.0.22'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { TEMPLATES } from '../_shared/transactional-email-templates/registry.ts'
+import { flushEmailQueue } from '../_shared/flush-email-queue.ts'
 
 // Configuration — sender uses Resend API (see _shared/send-email.ts)
 const FROM_NAME = Deno.env.get('EMAIL_FROM_NAME')?.trim() || Deno.env.get('GMAIL_FROM_NAME')?.trim() || 'TaskFlow Pro'
@@ -429,11 +430,8 @@ Deno.serve(async (req) => {
 
   console.log('Transactional email enqueued', { templateName, effectiveRecipient })
 
-  // Flush queue immediately so welcome/assignment emails arrive without waiting for cron
-  fetch(`${supabaseUrl}/functions/v1/process-email-queue`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${supabaseServiceKey}` },
-  }).catch((e) => console.warn('process-email-queue trigger failed', e))
+  // Flush queue immediately so welcome/assignment emails arrive without waiting for cron.
+  flushEmailQueue(supabaseUrl, supabaseServiceKey)
 
   return new Response(
     JSON.stringify({ success: true, queued: true }),

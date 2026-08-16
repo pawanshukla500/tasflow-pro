@@ -1,5 +1,32 @@
 # Email notification system
 
+## Delivery pipeline actually sending (fixed 2026-08-16)
+Users reported the 09:30 IST digest wasn't arriving. The cron *was* firing on schedule and
+`send-daily-digest` *was* successfully enqueueing an email per recipient (confirmed live via CI
+deploy logs: `cron.job` showed `send-daily-digest` active on `0 4 * * 1-6`) — the break was one
+step later, in what actually sends a queued message:
+
+1. Every enqueue (`send-transactional-email`, `auth-email-hook`) tried to flush the queue
+   immediately with a bare, un-awaited `fetch('.../process-email-queue')`. Supabase Edge
+   Functions run on an isolate that can be torn down right after the response is sent, so that
+   background request isn't guaranteed to finish — the email would sit in `email_send_log` as
+   `pending` forever. Fixed in `_shared/flush-email-queue.ts`, used by both callers: it now hands
+   the fetch to `EdgeRuntime.waitUntil()` (Supabase's documented API for exactly this) so the
+   isolate stays alive until the request actually completes.
+2. The only *scheduled* backstop for `process-email-queue` was `supabase/setup-email-cron.sql` —
+   a file explicitly marked "OPTIONAL one-time setup" that required a human to paste a
+   service-role key into the SQL Editor and run it by hand. It was never a migration, was never
+   re-asserted by CI the way `send-daily-digest`/`send-weekly-pending-report` are, and nothing
+   would have surfaced if it had never been run or had quietly been dropped. Fixed by migration
+   `20260816090000_ensure_process_email_queue_cron.sql`, which schedules `process-email-queue`
+   every minute using the already-provisioned `report_cron_service_role_key`, and by adding the
+   same job to `scripts/fix-email-crons.sql` so CI re-asserts it on every deploy like the others.
+
+Net effect before this fix: the system looked completely healthy (cron active, function
+succeeds, no errors in logs) while the actual Resend send might never happen. After this fix,
+either the immediate flush completes reliably, or the once-a-minute cron backstop picks up
+anything it missed — so a message can't sit unsent for more than ~60 seconds.
+
 ## Policy
 - **No email on every task create/import** — in-app notification only (`notify-task-assigned` with `sendEmail: false`).
 - **Daily pending briefing** Mon–Sat at **09:30 IST** via `send-daily-digest` for every active user who has due/pending work (skipped if empty; opt-out: Settings → Daily digest). This is the **only** personal "pending tasks" email — see Deduping below.
@@ -49,8 +76,12 @@ Or let GitHub Actions run `scripts/deploy-supabase.sh` on push to `main`
 `db push` applies `20260813120000_dedupe_daily_emails_and_idempotency.sql`, which unschedules the
 duplicate `send-due-reminders-daily` cron and adds the `email_send_log.idempotency_key` unique index —
 run it before/with the function deploy above, not after, so the dedupe guard is live before any digest fires.
+It also applies `20260816090000_ensure_process_email_queue_cron.sql` — see "Delivery pipeline
+actually sending" above; without this one, digests get enqueued but nothing durable sends them.
 
-If cron still shows the old time, run `scripts/fix-email-crons.sql` in the SQL Editor.
+If cron still shows the old time, or you need to confirm delivery is actually wired up, run
+`scripts/fix-email-crons.sql` in the SQL Editor — it re-asserts `send-daily-digest`,
+`send-weekly-pending-report`, and `process-email-queue` together and is safe to re-run anytime.
 
 Confirm Edge secrets:
 - `EMAIL_LOGO_URL=https://task.youthnic.shop/youthnic-logo.png`
