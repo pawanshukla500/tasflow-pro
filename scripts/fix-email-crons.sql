@@ -78,5 +78,34 @@ BEGIN
     $cron$
   );
 
-  RAISE NOTICE 'Email crons set: daily digest Mon–Sat 09:30 IST; weekly leadership Friday 09:00 IST.';
+  -- process-email-queue is what actually calls Resend and sends a queued
+  -- email — send-transactional-email also flushes it immediately on every
+  -- send, but this is the durable backstop when that immediate flush
+  -- doesn't complete (see migration 20260816090000 for the full story).
+  -- Re-asserted here every deploy so it can never silently go missing again.
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'process-email-queue') THEN
+    PERFORM cron.unschedule('process-email-queue');
+  END IF;
+
+  PERFORM cron.schedule(
+    'process-email-queue',
+    '* * * * *',
+    $cron$
+    SELECT net.http_post(
+      url := 'https://nekdjoquirhecmejuoba.supabase.co/functions/v1/process-email-queue',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || (
+          SELECT decrypted_secret FROM vault.decrypted_secrets
+          WHERE name = 'report_cron_service_role_key'
+        )
+      ),
+      body := '{}'::jsonb
+    )
+    WHERE EXISTS (SELECT 1 FROM pgmq.q_transactional_emails LIMIT 1)
+       OR EXISTS (SELECT 1 FROM pgmq.q_auth_emails LIMIT 1);
+    $cron$
+  );
+
+  RAISE NOTICE 'Email crons set: daily digest Mon–Sat 09:30 IST; weekly leadership Friday 09:00 IST; queue flush every minute.';
 END $$;

@@ -1,31 +1,23 @@
--- OPTIONAL one-time setup: retry sweep for the email queue.
--- Run in Supabase Dashboard → SQL Editor.
+-- DEPRECATED — process-email-queue is now provisioned automatically.
 --
--- Normal sends are flushed immediately by send-transactional-email.
--- This cron job re-processes messages that failed transiently (Gmail rate
--- limits, network errors) every minute.
+-- This file used to be the *only* place the process-email-queue cron was
+-- ever scheduled, and it required a human to paste a service-role key here
+-- and run it by hand in the SQL Editor. Nothing re-asserted it, and nothing
+-- would notice if it had never been run or had been dropped — which is the
+-- root cause behind digest/report emails being enqueued successfully every
+-- day but never actually delivered (see migration 20260816090000 for the
+-- full writeup).
 --
--- BEFORE RUNNING: replace <SERVICE_ROLE_KEY> below with the key from
--- Dashboard → Settings → API → service_role. Do not commit the filled-in file.
-
-select vault.create_secret('<SERVICE_ROLE_KEY>', 'email_queue_service_role_key');
-
-select cron.schedule(
-  'process-email-queue',
-  '* * * * *',
-  $$
-  select net.http_post(
-    url := 'https://nekdjoquirhecmejuoba.supabase.co/functions/v1/process-email-queue',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || (
-        select decrypted_secret from vault.decrypted_secrets
-        where name = 'email_queue_service_role_key'
-      )
-    ),
-    body := '{}'::jsonb
-  )
-  where exists (select 1 from pgmq.q_transactional_emails limit 1)
-     or exists (select 1 from pgmq.q_auth_emails limit 1);
-  $$
-);
+-- process-email-queue is now scheduled by:
+--   - migration supabase/migrations/20260816090000_ensure_process_email_queue_cron.sql
+--     (applied automatically by `supabase db push`)
+--   - scripts/fix-email-crons.sql (re-asserted on every CI deploy, belt-and-suspenders)
+--
+-- Both reuse the already-provisioned `report_cron_service_role_key` vault
+-- secret — no separate `email_queue_service_role_key` needed. If you ran an
+-- older copy of this file that created `email_queue_service_role_key`, it's
+-- harmless to leave in vault (or delete it); the cron job itself now always
+-- points at `report_cron_service_role_key`.
+--
+-- Nothing to run here. Kept only so old bookmarks/history find an explanation
+-- instead of a stale, silently-wrong setup script.

@@ -8,6 +8,7 @@ import { RecoveryEmail } from '../_shared/email-templates/recovery.tsx'
 import { EmailChangeEmail } from '../_shared/email-templates/email-change.tsx'
 import { ReauthenticationEmail } from '../_shared/email-templates/reauthentication.tsx'
 import { getFromEmail, getFromName } from '../_shared/send-email.ts'
+import { flushEmailQueue } from '../_shared/flush-email-queue.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -253,10 +254,7 @@ async function handleSendEmailHook(req: Request): Promise<Response> {
     })
   }
 
-  fetch(`${supabaseUrl}/functions/v1/process-email-queue`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${supabaseServiceKey}` },
-  }).catch((e) => console.warn('process-email-queue trigger failed', e))
+  flushEmailQueue(supabaseUrl, supabaseServiceKey)
 
   console.log('Auth email enqueued', { emailType, recipient })
 

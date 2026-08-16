@@ -4,7 +4,7 @@ import { Button, Heading, Text, Section } from 'npm:@react-email/components@0.0.
 import type { TemplateEntry } from './registry.ts'
 import {
   EmailShell, h1, text, mutedText, button, APP_URL, colors,
-  StatRow, InsightCard,
+  StatRow, InsightCard, ProgressBar,
 } from './_layout.tsx'
 
 interface DeptRow {
@@ -117,6 +117,9 @@ const WeeklyLeadershipInsightEmail = ({
             {d.name}
             <span style={{ color: colors.primary, fontWeight: 800 }}> · {d.completionPct}%</span>
           </Text>
+          <Section style={{ margin: '2px 0 6px' }}>
+            <ProgressBar percent={d.completionPct} />
+          </Section>
           <Text style={{ ...mutedText, margin: 0 }}>
             {d.completed} completed · {d.total} open · {d.overdue} overdue · {d.dueSoon} due soon
             {d.doneThisWeek > 0 ? ` · ${d.doneThisWeek} finished this week` : ''}

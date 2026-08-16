@@ -63,6 +63,7 @@ Deno.serve(async (req) => {
     const overdueTasks = orgTasks.filter((t) =>
       t.status !== 'done' && t.due_date && t.due_date < today
     ).length
+    const completionPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
 
     const { error } = await supabase.functions.invoke('send-transactional-email', {
       body: {
@@ -75,6 +76,7 @@ Deno.serve(async (req) => {
           totalTasks,
           completedTasks,
           overdueTasks,
+          completionPct,
         },
       },
     })
