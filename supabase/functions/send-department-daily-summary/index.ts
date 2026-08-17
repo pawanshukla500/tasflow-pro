@@ -2,6 +2,7 @@
 // Schedule via pg_cron daily at 08:30 IST (after user digests).
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { istToday, istAddDays } from "../_shared/ist.ts";
+import { dispatchTransactionalEmail } from "../_shared/dispatch-transactional-email.ts";
 
 const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*" };
 
@@ -23,7 +24,8 @@ Deno.serve(async (req) => {
     });
   }
 
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceRoleKey);
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
   const appUrl = (Deno.env.get("APP_URL") || "https://task.youthnic.shop").replace(/\/$/, "");
   const today = istToday();
   const dueSoonEnd = istAddDays(today, 3);
@@ -51,7 +53,7 @@ Deno.serve(async (req) => {
     managerDepts.get(m.user_id)!.add(m.department_id);
   }
 
-  const results: { email: string; status: string }[] = [];
+  const results: { email: string; status: string; reason?: string }[] = [];
 
   for (const [userId, deptIds] of managerDepts) {
     const { data: profile } = await supabase
@@ -111,34 +113,24 @@ Deno.serve(async (req) => {
       url: `${appUrl}/my-tasks?task=${t.id}`,
     });
 
-    try {
-      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-transactional-email`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${serviceRoleKey}`,
-          "Content-Type": "application/json",
-          "x-internal-service-key": serviceRoleKey,
-        },
-        body: JSON.stringify({
-          templateName: "department-daily-summary",
-          recipientEmail: profile.email,
-          idempotencyKey: `dept-daily-${today}-${userId}`,
-          templateData: {
-            title: `Department summary — ${deptTasks.length} open tasks`,
-            recipientName: profile.name,
-            dateLabel,
-            departments: deptSummaries,
-            delayed: delayed.map(fmt),
-            dueSoon: dueSoon.map(fmt),
-            pending: pending.map(fmt),
-            ctaUrl: `${appUrl}/reports`,
-          },
-        }),
-      });
-      results.push({ email: profile.email, status: "sent" });
-    } catch {
-      results.push({ email: profile.email, status: "failed" });
-    }
+    const dispatch = await dispatchTransactionalEmail({
+      supabaseUrl,
+      serviceRoleKey,
+      templateName: "department-daily-summary",
+      recipientEmail: profile.email,
+      idempotencyKey: `dept-daily-${today}-${userId}`,
+      templateData: {
+        title: `Department summary — ${deptTasks.length} open tasks`,
+        recipientName: profile.name,
+        dateLabel,
+        departments: deptSummaries,
+        delayed: delayed.map(fmt),
+        dueSoon: dueSoon.map(fmt),
+        pending: pending.map(fmt),
+        ctaUrl: `${appUrl}/reports`,
+      },
+    });
+    results.push({ email: profile.email, status: dispatch.status, reason: dispatch.reason });
   }
 
   return new Response(JSON.stringify({ ok: true, date: today, results }), {

@@ -1,6 +1,7 @@
 // Sends task-assignment emails via the branded transactional email pipeline.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createInAppNotification } from '../_shared/in-app-notifications.ts'
+import { dispatchTransactionalEmail } from '../_shared/dispatch-transactional-email.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -139,32 +140,24 @@ Deno.serve(async (req) => {
       continue
     }
 
-    const resp = await fetch(`${supabaseUrl}/functions/v1/send-transactional-email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${serviceKey}`,
-        'apikey': serviceKey,
-        'x-internal-service-key': serviceKey,
+    const dispatch = await dispatchTransactionalEmail({
+      supabaseUrl,
+      serviceRoleKey: serviceKey,
+      templateName: 'task-assigned',
+      recipientEmail: p.email,
+      idempotencyKey: `task-assigned-${taskId}-${p.id}`,
+      templateData: {
+        recipientName: p.name,
+        taskTitle: task.title,
+        taskDescription: task.description,
+        priority: task.priority,
+        dueDate: task.due_date,
+        assignedBy: assignedByName,
+        taskId,
       },
-      body: JSON.stringify({
-        templateName: 'task-assigned',
-        recipientEmail: p.email,
-        idempotencyKey: `task-assigned-${taskId}-${p.id}`,
-        templateData: {
-          recipientName: p.name,
-          taskTitle: task.title,
-          taskDescription: task.description,
-          priority: task.priority,
-          dueDate: task.due_date,
-          assignedBy: assignedByName,
-          taskId,
-        },
-      }),
     })
-    const ok = resp.ok
-    const errText = ok ? undefined : await resp.text().catch(() => 'unknown')
-    results.push({ user_id: p.id, ok, error: errText, email: true, inApp: true })
+    const ok = dispatch.status === 'sent' || dispatch.status === 'deduped'
+    results.push({ user_id: p.id, ok, error: ok ? undefined : (dispatch.reason || dispatch.status), email: true, inApp: true })
   }
 
   return new Response(JSON.stringify({ results, sendEmail }), {
