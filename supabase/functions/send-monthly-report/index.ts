@@ -1,6 +1,7 @@
 // Cron-driven monthly report for Managing Directors and System Admins via branded transactional pipeline.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { istToday } from '../_shared/ist.ts'
+import { dispatchTransactionalEmail } from '../_shared/dispatch-transactional-email.ts'
 
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }
 
@@ -14,10 +15,8 @@ Deno.serve(async (req) => {
     })
   }
 
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    serviceKey
-  )
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+  const supabase = createClient(supabaseUrl, serviceKey)
 
   // Previous calendar month in IST
   const today = istToday()
@@ -65,22 +64,26 @@ Deno.serve(async (req) => {
     ).length
     const completionPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
 
-    const { error } = await supabase.functions.invoke('send-transactional-email', {
-      body: {
-        templateName: 'monthly-report',
-        recipientEmail: r.email,
-        idempotencyKey: `monthly-report-${r.id}-${monthKey}`,
-        templateData: {
-          recipientName: r.name,
-          monthLabel,
-          totalTasks,
-          completedTasks,
-          overdueTasks,
-          completionPct,
-        },
+    const dispatch = await dispatchTransactionalEmail({
+      supabaseUrl,
+      serviceRoleKey: serviceKey,
+      templateName: 'monthly-report',
+      recipientEmail: r.email,
+      idempotencyKey: `monthly-report-${r.id}-${monthKey}`,
+      templateData: {
+        recipientName: r.name,
+        monthLabel,
+        totalTasks,
+        completedTasks,
+        overdueTasks,
+        completionPct,
       },
     })
-    results.push({ user: r.email, ok: !error, error: error?.message })
+    results.push({
+      user: r.email,
+      ok: dispatch.status === 'sent' || dispatch.status === 'deduped',
+      error: dispatch.status === 'sent' || dispatch.status === 'deduped' ? undefined : (dispatch.reason || dispatch.status),
+    })
   }
 
   return new Response(JSON.stringify({ ok: true, month: monthLabel, recipients: results }), {

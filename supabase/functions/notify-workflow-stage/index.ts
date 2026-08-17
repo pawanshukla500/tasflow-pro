@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createInAppNotification } from '../_shared/in-app-notifications.ts'
+import { dispatchTransactionalEmail } from '../_shared/dispatch-transactional-email.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -207,51 +208,42 @@ Deno.serve(async (req) => {
     })
     inAppNotified++
 
-    try {
-      const res = await fetch(`${supabaseUrl}/functions/v1/send-transactional-email`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${serviceKey}`,
-          'Content-Type': 'application/json',
-          'x-internal-service-key': serviceKey,
-        },
-        body: JSON.stringify({
-          templateName: 'workflow-stage-assigned',
-          recipientEmail: p.email,
-          idempotencyKey: `wf-stage-${stage.id}-${p.id}-${changeType}`,
-          templateData: {
-            recipientName: p.name,
-            workflowTitle: workflow.title,
-            stageName: stage.name,
-            stagePosition: stage.position,
-            totalStages,
-            tatHours: stage.tat_hours,
-            raisedBy: raiserProfile?.name || 'A team member',
-            isOverdue: changeType === 'overdue',
-            changeType,
-            workflowId,
-            stageId,
-            trackingNumber,
-            referenceId: trackingNumber,
-            priority: workflow.priority,
-            dueDate,
-            assigneeName: assigneeProfile?.name || undefined,
-            status: stageStatus,
-          },
-        }),
-      })
-      if (!res.ok) skipped.push({ user_id: p.id, reason: `email_failed:${await res.text()}` })
-      else emailsQueued++
-    } catch (e) {
-      skipped.push({ user_id: p.id, reason: `email_failed:${e instanceof Error ? e.message : 'unknown'}` })
-    }
+    const dispatch = await dispatchTransactionalEmail({
+      supabaseUrl,
+      serviceRoleKey: serviceKey,
+      templateName: 'workflow-stage-assigned',
+      recipientEmail: p.email,
+      idempotencyKey: `wf-stage-${stage.id}-${p.id}-${changeType}`,
+      templateData: {
+        recipientName: p.name,
+        workflowTitle: workflow.title,
+        stageName: stage.name,
+        stagePosition: stage.position,
+        totalStages,
+        tatHours: stage.tat_hours,
+        raisedBy: raiserProfile?.name || 'A team member',
+        isOverdue: changeType === 'overdue',
+        changeType,
+        workflowId,
+        stageId,
+        trackingNumber,
+        referenceId: trackingNumber,
+        priority: workflow.priority,
+        dueDate,
+        assigneeName: assigneeProfile?.name || undefined,
+        status: stageStatus,
+      },
+    })
+    const emailSent = dispatch.status === 'sent' || dispatch.status === 'deduped'
+    if (!emailSent) skipped.push({ user_id: p.id, reason: `email_${dispatch.status}:${dispatch.reason || ''}` })
+    else emailsQueued++
 
     await supabase.from('notification_log').insert({
       recipient_user_id: p.id,
       recipient_email: p.email,
       notification_type: `workflow_stage_${changeType}`,
       subject: notifTitle,
-      status: 'sent',
+      status: emailSent ? 'sent' : dispatch.status,
       metadata: { workflow_id: workflowId, stage_id: stageId, tracking_number: trackingNumber },
     })
   }

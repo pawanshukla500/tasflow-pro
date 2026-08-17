@@ -2,6 +2,7 @@
 // Schedule via pg_cron every Friday 09:00 IST (03:30 UTC).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { istToday, istAddDays } from '../_shared/ist.ts'
+import { dispatchTransactionalEmail } from '../_shared/dispatch-transactional-email.ts'
 
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }
 
@@ -193,38 +194,36 @@ Deno.serve(async (req) => {
     }
 
     try {
-      const res = await fetch(`${supabaseUrl}/functions/v1/send-transactional-email`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${serviceRoleKey}`,
-          'Content-Type': 'application/json',
-          'x-internal-service-key': serviceRoleKey,
+      const dispatch = await dispatchTransactionalEmail({
+        supabaseUrl,
+        serviceRoleKey,
+        templateName: 'weekly-leadership-insight',
+        recipientEmail: r.email,
+        idempotencyKey: `weekly-insight-friday-${r.id}-${weekKey}`,
+        templateData: {
+          title: `Friday management overview — ${companyCompletionPct}% completion · ${totalPending} open`,
+          recipientName: r.name,
+          weekLabel: fridayLabel,
+          totalPending,
+          totalOverdue,
+          totalCompleted,
+          totalDoneThisWeek,
+          companyCompletionPct,
+          departments: rows,
+          topPerformers,
+          needsAttention,
+          topEmployees,
+          insights,
+          recommendations,
+          ctaLabel: 'Open Reports',
+          ctaUrl: `${appUrl}/reports`,
         },
-        body: JSON.stringify({
-          templateName: 'weekly-leadership-insight',
-          recipientEmail: r.email,
-          idempotencyKey: `weekly-insight-friday-${r.id}-${weekKey}`,
-          templateData: {
-            title: `Friday management overview — ${companyCompletionPct}% completion · ${totalPending} open`,
-            recipientName: r.name,
-            weekLabel: fridayLabel,
-            totalPending,
-            totalOverdue,
-            totalCompleted,
-            totalDoneThisWeek,
-            companyCompletionPct,
-            departments: rows,
-            topPerformers,
-            needsAttention,
-            topEmployees,
-            insights,
-            recommendations,
-            ctaLabel: 'Open Reports',
-            ctaUrl: `${appUrl}/reports`,
-          },
-        }),
       })
-      results.push({ user: r.email, ok: res.ok, error: res.ok ? undefined : await res.text() })
+      results.push({
+        user: r.email,
+        ok: dispatch.status === 'sent' || dispatch.status === 'deduped',
+        error: dispatch.status === 'sent' || dispatch.status === 'deduped' ? undefined : (dispatch.reason || dispatch.status),
+      })
     } catch (e) {
       results.push({ user: r.email, ok: false, error: (e as Error).message })
     }
