@@ -34,6 +34,8 @@ project_id = "nekdjoquirhecmejuoba"
     verify_jwt = true
   [functions.delete-team-member]
     verify_jwt = true
+  [functions.manage-email-suppression]
+    verify_jwt = true
   [functions.firebase-auth]
     verify_jwt = false
   [functions.register-organization]

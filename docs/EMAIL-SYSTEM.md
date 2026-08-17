@@ -27,6 +27,24 @@ succeeds, no errors in logs) while the actual Resend send might never happen. Af
 either the immediate flush completes reliably, or the once-a-minute cron backstop picks up
 anything it missed — so a message can't sit unsent for more than ~60 seconds.
 
+## Silent suppression was invisible too (fixed 2026-08-17)
+Even with delivery actually running, one more failure mode looked identical to success:
+`send-transactional-email` returns **HTTP 200** both for a real send *and* for a recipient on the
+`suppressed_emails` list (bounce, complaint, or a one-click "Unsubscribe" — trivially triggered by
+accident, e.g. via Gmail's automatic `List-Unsubscribe` handling, and plausible during the period
+the duplicate-daily-email bug above was live and annoying people) or a deduped idempotency key.
+Every caller (`send-daily-digest`, `send-department-daily-summary`, `send-weekly-pending-report`,
+`send-monthly-report`, `notify-task-assigned`, `notify-workflow-stage`) was logging **"sent"** as
+long as the HTTP call didn't throw, never checking the response body — so a suppressed recipient
+got zero emails forever while every log kept reporting success. `_shared/dispatch-transactional-email.ts`
+is now used by all six callers and returns the real status (`sent` / `deduped` / `suppressed` /
+`failed`) with a reason.
+
+There was also no way to *fix* a suppressed recipient short of a raw SQL `DELETE` — added
+`manage-email-suppression` (Admin/MD only, `verify_jwt = true`) plus an "Email Delivery
+Diagnostics" panel in Settings → Admin: look up an address, see its suppression status and last
+10 send attempts, and remove a suppression in one click (logged to `audit_logs`).
+
 ## Policy
 - **No email on every task create/import** — in-app notification only (`notify-task-assigned` with `sendEmail: false`).
 - **Daily pending briefing** Mon–Sat at **09:30 IST** via `send-daily-digest` for every active user who has due/pending work (skipped if empty; opt-out: Settings → Daily digest). This is the **only** personal "pending tasks" email — see Deduping below.
