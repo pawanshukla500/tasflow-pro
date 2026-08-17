@@ -3,11 +3,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/edgeFunctions";
 import { toast } from "sonner";
-import { Shield, Building2, Mail, ScrollText, Users, Workflow } from "lucide-react";
+import { Shield, Building2, Mail, ScrollText, Users, Workflow, SearchCheck, MailWarning, MailCheck } from "lucide-react";
 import { formatDateTimeIST } from "@/lib/time";
+
+interface EmailDeliveryLookup {
+  email: string;
+  suppressed: boolean;
+  suppression: { reason: string; created_at: string } | null;
+  recentSends: { template_name: string; status: string; error_message?: string | null; created_at: string }[];
+}
 
 export function AdminSettingsPanel() {
   const { user, isAdminOrMD, refetchProfile } = useAuth();
@@ -16,6 +25,10 @@ export function AdminSettingsPanel() {
   const [dailyDigest, setDailyDigest] = useState(true);
   const [auditLogs, setAuditLogs] = useState<{ action: string; created_at: string; metadata: unknown }[]>([]);
   const [saving, setSaving] = useState(false);
+  const [lookupEmail, setLookupEmail] = useState("");
+  const [lookupResult, setLookupResult] = useState<EmailDeliveryLookup | null>(null);
+  const [checkingDelivery, setCheckingDelivery] = useState(false);
+  const [removingSuppression, setRemovingSuppression] = useState(false);
 
   useEffect(() => {
     if (!user?.organization) return;
@@ -73,6 +86,39 @@ export function AdminSettingsPanel() {
     }
   };
 
+  const checkEmailDelivery = async () => {
+    const email = lookupEmail.trim().toLowerCase();
+    if (!email) return;
+    setCheckingDelivery(true);
+    try {
+      const data = await invokeEdgeFunction<EmailDeliveryLookup>("manage-email-suppression", {
+        body: { email, action: "lookup" },
+      });
+      setLookupResult(data);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Lookup failed");
+      setLookupResult(null);
+    } finally {
+      setCheckingDelivery(false);
+    }
+  };
+
+  const removeSuppression = async () => {
+    if (!lookupResult) return;
+    setRemovingSuppression(true);
+    try {
+      await invokeEdgeFunction("manage-email-suppression", {
+        body: { email: lookupResult.email, action: "unsuppress" },
+      });
+      toast.success(`${lookupResult.email} can receive email again`);
+      await checkEmailDelivery();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove suppression");
+    } finally {
+      setRemovingSuppression(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <section className="space-y-4">
@@ -114,6 +160,110 @@ export function AdminSettingsPanel() {
               Admins and Managing Directors receive a weekly department performance overview every Friday (completion %, overdue, top teams, recommendations).
             </p>
           </div>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <SearchCheck className="h-5 w-5 text-primary" />
+          <h3 className="font-semibold text-lg">Email Delivery Diagnostics</h3>
+        </div>
+        <p className="text-xs text-muted-foreground max-w-lg -mt-2">
+          A recipient who bounced, complained, or clicked "Unsubscribe" on any TaskFlow email gets
+          zero further emails (digests, reports, assignments) with no notice — check here instead
+          of guessing why someone isn't receiving mail.
+        </p>
+        <div className="max-w-lg space-y-3">
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              placeholder="name@company.com"
+              value={lookupEmail}
+              onChange={(e) => setLookupEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && checkEmailDelivery()}
+            />
+            <Button onClick={checkEmailDelivery} disabled={checkingDelivery || !lookupEmail.trim()}>
+              {checkingDelivery ? "Checking…" : "Check"}
+            </Button>
+          </div>
+
+          {lookupResult && (
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {lookupResult.suppressed ? (
+                    <MailWarning className="h-4 w-4 text-destructive shrink-0" />
+                  ) : (
+                    <MailCheck className="h-4 w-4 text-success shrink-0" />
+                  )}
+                  <span className="text-sm font-medium">{lookupResult.email}</span>
+                </div>
+                {lookupResult.suppressed ? (
+                  <Badge variant="destructive">Suppressed</Badge>
+                ) : (
+                  <Badge variant="secondary">Deliverable</Badge>
+                )}
+              </div>
+
+              {lookupResult.suppressed && lookupResult.suppression && (
+                <div className="rounded-md bg-destructive/5 border border-destructive/20 p-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Reason: <span className="font-medium text-foreground capitalize">{lookupResult.suppression.reason}</span>
+                    {" · "}
+                    {formatDateTimeIST(lookupResult.suppression.created_at)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Every digest, report, and assignment email to this address is being silently
+                    skipped. Only remove this if you've confirmed with the recipient they want
+                    email again — an unsubscribe/complaint suppression exists to respect that choice.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={removeSuppression}
+                    disabled={removingSuppression}
+                  >
+                    {removingSuppression ? "Removing…" : "Remove suppression"}
+                  </Button>
+                </div>
+              )}
+
+              {lookupResult.recentSends.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Recent send attempts</p>
+                  <div className="rounded-md border divide-y max-h-48 overflow-y-auto">
+                    {lookupResult.recentSends.map((s, i) => (
+                      <div key={i} className="p-2 text-xs flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="font-medium">{s.template_name}</span>
+                          {s.error_message && (
+                            <p className="text-muted-foreground truncate">{s.error_message}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Badge
+                            variant={
+                              s.status === "sent" ? "secondary"
+                                : s.status === "pending" ? "outline"
+                                : "destructive"
+                            }
+                            className="capitalize"
+                          >
+                            {s.status}
+                          </Badge>
+                          <span className="text-muted-foreground">{formatDateTimeIST(s.created_at)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {lookupResult.recentSends.length === 0 && (
+                <p className="text-xs text-muted-foreground">No send attempts logged for this address yet.</p>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
