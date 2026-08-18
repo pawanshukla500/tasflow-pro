@@ -52,6 +52,28 @@ BEGIN
     $cron$
   );
 
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'send-admin-daily-overview') THEN
+    PERFORM cron.unschedule('send-admin-daily-overview');
+  END IF;
+
+  PERFORM cron.schedule(
+    'send-admin-daily-overview',
+    '0 4 * * 1-6', -- Mon–Sat 09:30 IST — company-wide pending snapshot for Admin/MD
+    $cron$
+    SELECT net.http_post(
+      url := 'https://nekdjoquirhecmejuoba.supabase.co/functions/v1/send-admin-daily-overview',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'x-internal-service-key', (
+          SELECT decrypted_secret FROM vault.decrypted_secrets
+          WHERE name = 'report_cron_service_role_key'
+        )
+      ),
+      body := '{}'::jsonb
+    );
+    $cron$
+  );
+
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'send-weekly-pending-report') THEN
     PERFORM cron.unschedule('send-weekly-pending-report');
   END IF;
@@ -107,5 +129,5 @@ BEGIN
     $cron$
   );
 
-  RAISE NOTICE 'Email crons set: daily digest Mon–Sat 09:30 IST; weekly leadership Friday 09:00 IST; queue flush every minute.';
+  RAISE NOTICE 'Email crons set: daily digest + admin daily overview Mon–Sat 09:30 IST; weekly leadership Friday 09:00 IST; queue flush every minute.';
 END $$;

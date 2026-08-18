@@ -199,16 +199,21 @@ Deno.serve(async (req) => {
   const adminRecipients = members.filter((m) =>
     m.roles.includes("managing_director") || m.roles.includes("system_admin")
   );
+  const hasOpenTasks = (openTasks || []).length > 0;
 
   return json({
     checkedAt: new Date().toISOString(),
     todayIST: today,
     resend: resendCheck,
+    // Same recipient set (managing_director / system_admin) serves both the
+    // Mon–Sat 09:30 IST admin daily overview and the Friday leadership report.
     weeklyLeadershipReport: {
       recipientCount: adminRecipients.length,
       warning: adminRecipients.length === 0
-        ? "No user has the managing_director or system_admin role — the Friday leadership report and any admin-targeted email have nobody to send to."
-        : undefined,
+        ? "No user has the managing_director or system_admin role — the daily admin overview, the Friday leadership report, and any admin-targeted email have nobody to send to."
+        : !hasOpenTasks
+          ? "Recipients exist, but there are zero open (non-done) tasks org-wide today, so send-admin-daily-overview will skip everyone until something is open."
+          : undefined,
       recipients: adminRecipients.map((m) => ({ name: m.name, email: m.email, roles: m.roles })),
     },
     recentFailures: recentFailures || [],
