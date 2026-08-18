@@ -20,6 +20,7 @@ import { template as dailyDigest } from './daily-digest.tsx'
 import { template as weeklyLeadershipInsight } from './weekly-leadership-insight.tsx'
 import { template as passwordReset } from './password-reset.tsx'
 import { template as departmentDailySummary } from './department-daily-summary.tsx'
+import { template as adminDailyOverview } from './admin-daily-overview.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'welcome-user': welcomeUser,
@@ -32,5 +33,6 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   'daily-digest': dailyDigest,
   'weekly-leadership-insight': weeklyLeadershipInsight,
   'department-daily-summary': departmentDailySummary,
+  'admin-daily-overview': adminDailyOverview,
   'password-reset': passwordReset,
 }

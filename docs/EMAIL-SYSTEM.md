@@ -58,23 +58,35 @@ a dry run — sends nothing — and checks, in one click:
    never verified, Resend accepts mail to the account owner's own address and silently rejects
    everyone else — which matches "password reset arrived, a teammate's digest never did" exactly.
    The check calls Resend's own `/domains` API to report real verification status, not a guess.
-2. **Whether the weekly leadership report (and any Admin/MD-targeted mail) has any recipients at
-   all** — if nobody currently holds the `managing_director` or `system_admin` role, that mail has
-   nowhere to go, silently.
+2. **Whether the daily admin overview and Friday leadership report (same recipient set) have any
+   recipients at all** — if nobody currently holds the `managing_director` or `system_admin`
+   role, that mail has nowhere to go, silently. Also flags when recipients exist but there are
+   zero open tasks org-wide, so the daily overview correctly has nothing to send today.
 3. **Every active team member, evaluated against send-daily-digest's exact eligibility rules**
    (profile active, org digest enabled, personal preference, suppression, pending-task count) —
    so "would this specific person get today's digest, and if not, which single check stopped it"
    is answered per person instead of guessed. Admins/MDs are marked with a badge in this same
-   list, since they go through identical eligibility rules for their own personal digest — there
-   is no separate "admin digest" to build; the gap (if any) is the same one every other row can
-   show.
+   list, since they go through identical eligibility rules for their own *personal* digest.
 4. **Real send failures from `email_send_log` in the last 48h** — surfaces the actual Resend
    rejection error text when #1 is the cause, without needing dashboard access.
+
+## Admin daily team overview (added 2026-08-18)
+Personal digest and the Friday report left a gap: an admin/MD with no tasks personally assigned
+to them got no daily visibility into the team's work at all (`send-daily-digest` correctly has
+nothing to send them — that's not a bug, see the smoke test section above). Added
+`send-admin-daily-overview` — Mon–Sat 09:30 IST, same time as the personal digest — a lean
+company-wide pending-tasks snapshot (open/overdue/due-soon totals, department breakdown with a
+completion-% progress bar, a "needs attention" callout for departments with 2+ overdue) sent to
+every `managing_director`/`system_admin`, skipped when their org has nothing open. Distinct from
+`send-weekly-pending-report` (Friday-only, adds top performers / employee productivity / a week's
+worth of insights — a heavier weekly retrospective, not a daily one) — the two are complementary,
+not duplicates: daily pulse vs. weekly analysis.
 
 ## Policy
 - **No email on every task create/import** — in-app notification only (`notify-task-assigned` with `sendEmail: false`).
 - **Daily pending briefing** Mon–Sat at **09:30 IST** via `send-daily-digest` for every active user who has due/pending work (skipped if empty; opt-out: Settings → Daily digest). This is the **only** personal "pending tasks" email — see Deduping below.
 - **Department manager summary** daily at **08:30 IST** via `send-department-daily-summary` for users in `department_managers` (team-wide rollup, separate from their own personal digest).
+- **Admin daily team overview** Mon–Sat at **09:30 IST** via `send-admin-daily-overview` for System Admin / MD — company-wide open/overdue/due-soon totals + department breakdown, skipped when nothing's open. See "Admin daily team overview" below.
 - **Friday management overview** at **09:00 IST** via `send-weekly-pending-report` for System Admin / MD — department-wise completion, top performers, departments needing attention, employee productivity, insights, recommendations.
 - **Monthly rollup** on the 1st at **09:00 IST** via `send-monthly-report` for System Admin / MD — org-scoped totals (fixed 2026-08-13: previously mixed every organization's tasks into one number for every recipient).
 - Assignment email template remains for rare/urgent cases (`sendEmail: true`).
@@ -99,6 +111,7 @@ Separately, `send-transactional-email` accepted an `idempotencyKey` from every d
 |-----|---------|
 | `daily-digest` | Morning pending summary |
 | `weekly-leadership-insight` | Friday Admin/MD department + productivity overview |
+| `admin-daily-overview` | Mon–Sat Admin/MD company-wide pending snapshot |
 | `welcome-user` | New member credentials |
 | `password-reset` | App-initiated reset |
 | `task-assigned` | Optional urgent assignment |
@@ -112,7 +125,7 @@ Separately, `send-transactional-email` accepted an `idempotencyKey` from every d
 ## Deploy
 ```bash
 npx supabase db push --include-all
-npx supabase functions deploy notify-task-assigned send-daily-digest send-department-daily-summary send-weekly-pending-report send-monthly-report send-transactional-email auth-email-hook --project-ref nekdjoquirhecmejuoba
+npx supabase functions deploy notify-task-assigned send-daily-digest send-department-daily-summary send-admin-daily-overview send-weekly-pending-report send-monthly-report send-transactional-email auth-email-hook --project-ref nekdjoquirhecmejuoba
 ```
 Or let GitHub Actions run `scripts/deploy-supabase.sh` on push to `main`
 (repairs migration drift, marks already-applied locals, pushes, then runs `scripts/fix-email-crons.sql`).
@@ -121,7 +134,8 @@ Or let GitHub Actions run `scripts/deploy-supabase.sh` on push to `main`
 duplicate `send-due-reminders-daily` cron and adds the `email_send_log.idempotency_key` unique index —
 run it before/with the function deploy above, not after, so the dedupe guard is live before any digest fires.
 It also applies `20260816090000_ensure_process_email_queue_cron.sql` — see "Delivery pipeline
-actually sending" above; without this one, digests get enqueued but nothing durable sends them.
+actually sending" above; without this one, digests get enqueued but nothing durable sends them —
+and `20260818070000_admin_daily_overview_cron.sql`, which schedules `send-admin-daily-overview`.
 
 If cron still shows the old time, or you need to confirm delivery is actually wired up, run
 `scripts/fix-email-crons.sql` in the SQL Editor — it re-asserts `send-daily-digest`,

@@ -28,6 +28,8 @@ project_id = "nekdjoquirhecmejuoba"
     verify_jwt = false
   [functions.send-weekly-pending-report]
     verify_jwt = false
+  [functions.send-admin-daily-overview]
+    verify_jwt = false
   [functions.firebase-upload]
     verify_jwt = true
   [functions.create-team-member]

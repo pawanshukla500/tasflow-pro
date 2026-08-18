@@ -212,6 +212,12 @@ export function AdminSettingsPanel() {
             <Switch checked={dailyDigest} onCheckedChange={setDailyDigest} />
           </div>
           <div className="rounded-lg border border-dashed p-4 space-y-1">
+            <p className="font-medium text-sm">Admin daily team overview</p>
+            <p className="text-xs text-muted-foreground">
+              Admins and Managing Directors also receive a company-wide pending-tasks snapshot Mon–Sat at 9:30 AM IST — separate from their own personal digest above, skipped when the team has nothing open.
+            </p>
+          </div>
+          <div className="rounded-lg border border-dashed p-4 space-y-1">
             <p className="font-medium text-sm">Friday management overview</p>
             <p className="text-xs text-muted-foreground">
               Admins and Managing Directors receive a weekly department performance overview every Friday (completion %, overdue, top teams, recommendations).
@@ -366,7 +372,7 @@ export function AdminSettingsPanel() {
 
             <div className={`rounded-lg border p-4 space-y-2 ${smokeTest.weeklyLeadershipReport.warning ? "border-destructive/30 bg-destructive/5" : "border-success/30 bg-success/5"}`}>
               <p className="text-sm font-medium">
-                Weekly leadership report — {smokeTest.weeklyLeadershipReport.recipientCount} recipient{smokeTest.weeklyLeadershipReport.recipientCount === 1 ? "" : "s"}
+                Admin/MD mail (daily overview + Friday report) — {smokeTest.weeklyLeadershipReport.recipientCount} recipient{smokeTest.weeklyLeadershipReport.recipientCount === 1 ? "" : "s"}
               </p>
               {smokeTest.weeklyLeadershipReport.warning ? (
                 <p className="text-xs text-muted-foreground">{smokeTest.weeklyLeadershipReport.warning}</p>
