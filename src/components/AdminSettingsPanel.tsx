@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/edgeFunctions";
 import { toast } from "sonner";
-import { Shield, Building2, Mail, ScrollText, Users, Workflow, SearchCheck, MailWarning, MailCheck } from "lucide-react";
+import { Shield, Building2, Mail, ScrollText, Users, Workflow, SearchCheck, MailWarning, MailCheck, FlaskConical, TriangleAlert } from "lucide-react";
 import { formatDateTimeIST } from "@/lib/time";
 
 interface EmailDeliveryLookup {
@@ -17,6 +17,43 @@ interface EmailDeliveryLookup {
   suppression: { reason: string; created_at: string } | null;
   recentSends: { template_name: string; status: string; error_message?: string | null; created_at: string }[];
 }
+
+interface SmokeTestMember {
+  name: string;
+  email: string | null;
+  roles: string[];
+  active: boolean;
+  pendingTaskCount: number;
+  verdict: string;
+}
+
+interface SmokeTestResult {
+  checkedAt: string;
+  todayIST: string;
+  resend: {
+    apiKeyConfigured: boolean;
+    fromEmail: string;
+    domains: { name: string; status: string }[];
+    warning?: string;
+  };
+  weeklyLeadershipReport: {
+    recipientCount: number;
+    warning?: string;
+    recipients: { name: string; email: string | null; roles: string[] }[];
+  };
+  recentFailures: { template_name: string; recipient_email: string; status: string; error_message?: string | null; created_at: string }[];
+  members: SmokeTestMember[];
+}
+
+const VERDICT_LABEL: Record<string, string> = {
+  would_send: "Would send today",
+  skipped_no_pending_tasks: "No pending tasks (healthy)",
+  skipped_pref_off: "Digest turned off (their setting)",
+  skipped_org_disabled: "Org digest disabled",
+  skipped_suppressed: "Suppressed — see above",
+  skipped_inactive: "Inactive profile",
+  skipped_no_email: "No email on profile",
+};
 
 export function AdminSettingsPanel() {
   const { user, isAdminOrMD, refetchProfile } = useAuth();
@@ -29,6 +66,8 @@ export function AdminSettingsPanel() {
   const [lookupResult, setLookupResult] = useState<EmailDeliveryLookup | null>(null);
   const [checkingDelivery, setCheckingDelivery] = useState(false);
   const [removingSuppression, setRemovingSuppression] = useState(false);
+  const [smokeTest, setSmokeTest] = useState<SmokeTestResult | null>(null);
+  const [runningSmokeTest, setRunningSmokeTest] = useState(false);
 
   useEffect(() => {
     if (!user?.organization) return;
@@ -116,6 +155,24 @@ export function AdminSettingsPanel() {
       toast.error(err instanceof Error ? err.message : "Failed to remove suppression");
     } finally {
       setRemovingSuppression(false);
+    }
+  };
+
+  const runSmokeTest = async () => {
+    setRunningSmokeTest(true);
+    try {
+      const data = await invokeEdgeFunction<SmokeTestResult>("email-system-smoke-test", { body: {} });
+      setSmokeTest(data);
+      const problems = data.members.filter((m) => m.verdict !== "would_send" && m.verdict !== "skipped_no_pending_tasks").length;
+      if (data.resend.warning || data.weeklyLeadershipReport.warning || problems > 0) {
+        toast.warning(`Smoke test found ${problems} member issue${problems === 1 ? "" : "s"}${data.resend.warning ? " + a Resend warning" : ""} — see below`);
+      } else {
+        toast.success("Smoke test passed — no issues found");
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Smoke test failed to run");
+    } finally {
+      setRunningSmokeTest(false);
     }
   };
 
@@ -265,6 +322,114 @@ export function AdminSettingsPanel() {
             </div>
           )}
         </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <FlaskConical className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold text-lg">System Smoke Test</h3>
+          </div>
+          <Button onClick={runSmokeTest} disabled={runningSmokeTest} size="sm">
+            {runningSmokeTest ? "Running…" : "Run smoke test"}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground max-w-2xl -mt-2">
+          Dry run — sends nothing. Checks whether Resend is actually able to deliver mail to
+          anyone besides the account owner, whether the weekly leadership report has any
+          Admin/MD recipients at all, and evaluates every active team member against the same
+          eligibility rules the daily digest uses, so you can see who'd get today's digest and
+          why anyone else wouldn't.
+        </p>
+
+        {smokeTest && (
+          <div className="max-w-3xl space-y-4">
+            <div className={`rounded-lg border p-4 space-y-2 ${smokeTest.resend.warning ? "border-destructive/30 bg-destructive/5" : "border-success/30 bg-success/5"}`}>
+              <div className="flex items-center gap-2">
+                {smokeTest.resend.warning ? (
+                  <TriangleAlert className="h-4 w-4 text-destructive shrink-0" />
+                ) : (
+                  <MailCheck className="h-4 w-4 text-success shrink-0" />
+                )}
+                <span className="text-sm font-medium">
+                  Resend — sending as {smokeTest.resend.fromEmail}
+                </span>
+              </div>
+              {smokeTest.resend.warning ? (
+                <p className="text-xs text-muted-foreground">{smokeTest.resend.warning}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Domain verified: {smokeTest.resend.domains.map((d) => `${d.name} (${d.status})`).join(", ") || "—"}
+                </p>
+              )}
+            </div>
+
+            <div className={`rounded-lg border p-4 space-y-2 ${smokeTest.weeklyLeadershipReport.warning ? "border-destructive/30 bg-destructive/5" : "border-success/30 bg-success/5"}`}>
+              <p className="text-sm font-medium">
+                Weekly leadership report — {smokeTest.weeklyLeadershipReport.recipientCount} recipient{smokeTest.weeklyLeadershipReport.recipientCount === 1 ? "" : "s"}
+              </p>
+              {smokeTest.weeklyLeadershipReport.warning ? (
+                <p className="text-xs text-muted-foreground">{smokeTest.weeklyLeadershipReport.warning}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {smokeTest.weeklyLeadershipReport.recipients.map((r) => r.name).join(", ")}
+                </p>
+              )}
+            </div>
+
+            {smokeTest.recentFailures.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Real send failures — last 48h ({smokeTest.recentFailures.length})
+                </p>
+                <div className="rounded-md border divide-y max-h-48 overflow-y-auto">
+                  {smokeTest.recentFailures.map((f, i) => (
+                    <div key={i} className="p-2 text-xs flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="font-medium">{f.recipient_email}</span>
+                        <span className="text-muted-foreground"> · {f.template_name}</span>
+                        {f.error_message && <p className="text-muted-foreground truncate">{f.error_message}</p>}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="destructive" className="capitalize">{f.status}</Badge>
+                        <span className="text-muted-foreground">{formatDateTimeIST(f.created_at)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Every team member — daily digest eligibility for {smokeTest.todayIST}
+              </p>
+              <div className="rounded-md border divide-y max-h-96 overflow-y-auto">
+                {smokeTest.members.map((m, i) => (
+                  <div key={i} className="p-2.5 text-xs flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="font-medium">{m.name || "(no name)"}</span>
+                      <span className="text-muted-foreground"> · {m.email || "no email"}</span>
+                      {(m.roles.includes("managing_director") || m.roles.includes("system_admin")) && (
+                        <Badge variant="outline" className="ml-2 text-[10px]">Admin/MD</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-muted-foreground">{m.pendingTaskCount} pending</span>
+                      <Badge variant={m.verdict === "would_send" ? "secondary" : m.verdict === "skipped_no_pending_tasks" ? "outline" : "destructive"}>
+                        {VERDICT_LABEL[m.verdict] || m.verdict}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground">
+              Checked {formatDateTimeIST(smokeTest.checkedAt)}
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="space-y-4">

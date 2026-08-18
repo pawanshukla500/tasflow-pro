@@ -139,7 +139,7 @@ GOOGLE_FUNCTIONS=(
 )
 CORE_FUNCTIONS=(
   firebase-auth create-team-member delete-team-member register-organization
-  manage-email-suppression
+  manage-email-suppression email-system-smoke-test
   firebase-upload daily-motivation notify-task-assigned notify-workflow-stage
   process-email-queue send-daily-digest send-department-daily-summary
   send-weekly-pending-report send-due-reminders send-transactional-email
