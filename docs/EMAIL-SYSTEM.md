@@ -45,6 +45,32 @@ There was also no way to *fix* a suppressed recipient short of a raw SQL `DELETE
 Diagnostics" panel in Settings → Admin: look up an address, see its suppression status and last
 10 send attempts, and remove a suppression in one click (logged to `audit_logs`).
 
+## System Smoke Test (added 2026-08-17)
+Every prior fix here closed a real gap, but "digest still not arriving after N deploys" needed a
+tool that answers the question directly instead of another round of hypothesis-and-fix. Added
+`email-system-smoke-test` (Admin/MD only) + a "System Smoke Test" panel in Settings → Admin. It's
+a dry run — sends nothing — and checks, in one click:
+
+1. **Whether Resend can actually deliver to anyone but the account owner.** This is the failure
+   mode nothing else here catches: `send-transactional-email` returns success as soon as a
+   message is *enqueued*; the real Resend API call happens later inside `process-email-queue`. If
+   `EMAIL_FROM` is still the sandbox address (`onboarding@resend.dev`) or the real domain was
+   never verified, Resend accepts mail to the account owner's own address and silently rejects
+   everyone else — which matches "password reset arrived, a teammate's digest never did" exactly.
+   The check calls Resend's own `/domains` API to report real verification status, not a guess.
+2. **Whether the weekly leadership report (and any Admin/MD-targeted mail) has any recipients at
+   all** — if nobody currently holds the `managing_director` or `system_admin` role, that mail has
+   nowhere to go, silently.
+3. **Every active team member, evaluated against send-daily-digest's exact eligibility rules**
+   (profile active, org digest enabled, personal preference, suppression, pending-task count) —
+   so "would this specific person get today's digest, and if not, which single check stopped it"
+   is answered per person instead of guessed. Admins/MDs are marked with a badge in this same
+   list, since they go through identical eligibility rules for their own personal digest — there
+   is no separate "admin digest" to build; the gap (if any) is the same one every other row can
+   show.
+4. **Real send failures from `email_send_log` in the last 48h** — surfaces the actual Resend
+   rejection error text when #1 is the cause, without needing dashboard access.
+
 ## Policy
 - **No email on every task create/import** — in-app notification only (`notify-task-assigned` with `sendEmail: false`).
 - **Daily pending briefing** Mon–Sat at **09:30 IST** via `send-daily-digest` for every active user who has due/pending work (skipped if empty; opt-out: Settings → Daily digest). This is the **only** personal "pending tasks" email — see Deduping below.
