@@ -27,6 +27,16 @@ succeeds, no errors in logs) while the actual Resend send might never happen. Af
 either the immediate flush completes reliably, or the once-a-minute cron backstop picks up
 anything it missed — so a message can't sit unsent for more than ~60 seconds.
 
+### Automatic scheduling is now deployment-enforced (2026-08-21)
+Migration `20260821090000_guarantee_daily_digest_delivery.sql` installs both required jobs as one
+unit: `send-daily-digest` at `0 4 * * 1-6` (09:30 IST, Mon–Sat) and
+`process-email-queue` every minute when mail is waiting. Earlier scheduling migrations emitted a
+notice and completed successfully when `report_cron_service_role_key` was missing. Since applied
+migrations are not retried after a secret is later created, production could remain permanently
+unscheduled while deploys appeared green. The guarantee migration now copies the already-used
+`gmail_cron_key` when available, otherwise fails the deployment with an actionable error. This
+prevents a successful release from silently depending on somebody manually triggering a digest.
+
 ## Silent suppression was invisible too (fixed 2026-08-17)
 Even with delivery actually running, one more failure mode looked identical to success:
 `send-transactional-email` returns **HTTP 200** both for a real send *and* for a recipient on the
