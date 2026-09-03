@@ -32,6 +32,9 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const DevNewTaskPreview = import.meta.env.DEV
   ? lazy(() => import("./pages/DevNewTaskPreview"))
   : null;
+const DevLeaderboardPreview = import.meta.env.DEV
+  ? lazy(() => import("./pages/DevLeaderboardPreview"))
+  : null;
 
 // Notifications are not needed for first paint — load after shell
 const ActivityNotifications = lazy(() => import("./components/ActivityNotifications"));
@@ -91,6 +94,9 @@ const AppRoutes = () => (
         <Route path="/unsubscribe" element={<Unsubscribe />} />
         {DevNewTaskPreview && (
           <Route path="/__dev__/new-task" element={<DevNewTaskPreview />} />
+        )}
+        {DevLeaderboardPreview && (
+          <Route path="/__dev__/leaderboard" element={<DevLeaderboardPreview />} />
         )}
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
           <Route path="/" element={<Dashboard />} />

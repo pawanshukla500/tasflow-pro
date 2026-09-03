@@ -19,6 +19,7 @@ import { formatDateIST } from "@/lib/time";
 import { usePerformance } from "@/hooks/usePerformance";
 import { useTasks } from "@/hooks/useTasks";
 import { PerformanceBreakdown } from "@/components/PerformanceBreakdown";
+import { PerformanceLeaderboard } from "@/components/PerformanceLeaderboard";
 import { useUserRolesMap } from "@/hooks/useUserRolesMap";
 import {
   filterPerformanceLeaderboardProfiles,
@@ -39,7 +40,8 @@ interface KPI {
   id: string; user_id: string; kra_id: string | null; title: string; metric: string | null;
   target_value: number; current_value: number; unit: string | null; period: string; status: string;
 }
-interface Member { id: string; name: string; }
+interface Member { id: string; name: string; avatar_url?: string | null; }
+interface ProfileRow { id: string; name: string; department_id?: string | null; avatar_url?: string | null; }
 
 const statusColors: Record<string, string> = {
   on_track: "bg-success/15 text-success border-success/30",
@@ -50,12 +52,12 @@ const statusColors: Record<string, string> = {
 
 const PerformancePage = () => {
   const { user, accessScope } = useAuth();
-  const { filterProfiles, filterDepartments } = useAccessScope();
+  const { filterProfiles, filterDepartments, scopeLabel } = useAccessScope();
   const { tasks } = useTasks();
   const [scope, setScope] = useState<string>("me");
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [workflows, setWorkflows] = useState<{ raised_by_department_id?: string | null; status: string; completed_at?: string | null }[]>([]);
-  const [allProfiles, setAllProfiles] = useState<{ id: string; name: string; department_id?: string | null }[]>([]);
+  const [allProfiles, setAllProfiles] = useState<ProfileRow[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [kras, setKras] = useState<KRA[]>([]);
   const [kpis, setKpis] = useState<KPI[]>([]);
@@ -92,7 +94,7 @@ const PerformancePage = () => {
     const [kraRes, kpiRes, profilesRes, deptRes, wfRes] = await Promise.all([
       supabase.from("kras" as any).select("*").order("created_at", { ascending: false }),
       supabase.from("kpis" as any).select("*").order("created_at", { ascending: false }),
-      supabase.from("profiles").select("id, name, department_id").eq("active", true).order("name"),
+      supabase.from("profiles").select("id, name, department_id, avatar_url").eq("active", true).order("name"),
       supabase.from("departments").select("id, name").order("name"),
       supabase.from("workflows").select("raised_by_department_id, status, completed_at"),
     ]);
@@ -200,8 +202,16 @@ const PerformancePage = () => {
     return [scope];
   }, [scope, user?.id, leaderboardProfiles]);
 
+  // The leaderboard always ranks everyone in view, so fetch the union of the
+  // selected scope and the leaderboard roster in a single query (RLS still
+  // decides which rows actually come back).
+  const metricsUserIds = useMemo(
+    () => Array.from(new Set([...scopedProfileIds, ...leaderboardProfiles.map((p) => p.id)])),
+    [scopedProfileIds, leaderboardProfiles],
+  );
+
   const { metrics: perfMetrics, loading: perfLoading } = usePerformance(
-    scopedProfileIds.length ? scopedProfileIds : undefined,
+    metricsUserIds.length ? metricsUserIds : undefined,
   );
 
   const leaderboardMetrics = useMemo(
@@ -209,9 +219,19 @@ const PerformancePage = () => {
     [perfMetrics, rolesByUserId],
   );
 
-  const selectedMetrics = scope === "me"
-    ? perfMetrics.find((m) => m.user_id === user?.id)
-    : perfMetrics[0];
+  const scopedMetrics = useMemo(
+    () => leaderboardMetrics.filter((m) => scopedProfileIds.includes(m.user_id)),
+    [leaderboardMetrics, scopedProfileIds],
+  );
+
+  const selectedMetrics = scope === "all"
+    ? undefined
+    : perfMetrics.find((m) => m.user_id === (scope === "me" ? user?.id : scope));
+
+  // Regular employees only ever see themselves in scope; showing the
+  // multi-person leaderboard to them would expose coworkers' names, scores,
+  // and completion counts despite lacking department-performance permission.
+  const showLeaderboard = canSeeOthers && leaderboardProfiles.length > 1;
 
   return (
     <div className="p-6 max-w-6xl space-y-6">
@@ -254,6 +274,16 @@ const PerformancePage = () => {
         </TabsList>
 
         <TabsContent value="analytics" className="space-y-4 mt-4">
+          {showLeaderboard && (
+            <PerformanceLeaderboard
+              profiles={leaderboardProfiles}
+              metrics={leaderboardMetrics}
+              currentUserId={user?.id}
+              scopeLabel={scopeLabel}
+              loading={perfLoading}
+            />
+          )}
+
           {accessScope.hasFullAccess && scope === "all" ? (
             <Suspense fallback={<p className="text-sm text-muted-foreground">Loading analytics…</p>}>
               <ExecutiveDashboard
@@ -282,7 +312,7 @@ const PerformancePage = () => {
                     />
                   </CardContent>
                 </Card>
-              ) : (
+              ) : scope === "all" ? null : (
                 <p className="text-sm text-muted-foreground col-span-2">No performance data yet — complete tasks to build your score.</p>
               )}
               {accessScope.hasFullAccess && scope !== "all" && (
@@ -302,11 +332,11 @@ const PerformancePage = () => {
                   </CardContent>
                 </Card>
               )}
-              {canSeeOthers && scope !== "me" && leaderboardMetrics.length > 1 && (
+              {canSeeOthers && scope !== "me" && scopedMetrics.length > 1 && (
                 <Card className="md:col-span-2">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Team breakdown</CardTitle></CardHeader>
                   <CardContent className="grid sm:grid-cols-2 gap-4">
-                    {leaderboardMetrics.map((m) => {
+                    {scopedMetrics.map((m) => {
                       const member = allProfiles.find((p) => p.id === m.user_id);
                       return (
                         <div key={m.user_id} className="border rounded-lg p-3">
