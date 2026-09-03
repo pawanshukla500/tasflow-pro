@@ -20,8 +20,9 @@ interface LeaderboardRunOption {
 interface LeaderboardCardProps extends React.HTMLAttributes<HTMLDivElement> {
   title?: string;
   description?: string;
-  fromDate: string | Date;
-  toDate: string | Date;
+  /** Omit both `fromDate`/`toDate` to hide the range (e.g. a lifetime metric). */
+  fromDate?: string | Date;
+  toDate?: string | Date;
   podiumRankings: LeaderboardPodiumRanking[];
   rankings: LeaderboardRankingItem[];
   currentUserId?: string;
@@ -35,6 +36,8 @@ interface LeaderboardCardProps extends React.HTMLAttributes<HTMLDivElement> {
   loading?: boolean;
   emptyMessage?: string;
   footer?: React.ReactNode;
+  /** Resets ranking pagination back to page one when this value changes. */
+  resetKey?: string | number;
 }
 
 function formatRangeDate(date: string | Date) {
@@ -63,12 +66,15 @@ const LeaderboardCard = React.forwardRef<HTMLDivElement, LeaderboardCardProps>(
       loading = false,
       emptyMessage,
       footer,
+      resetKey,
       ...props
     },
     ref,
   ) => {
-    const fromLabel = formatRangeDate(fromDate);
-    const toLabel = formatRangeDate(toDate);
+    const hasDateRange = Boolean(fromDate && toDate);
+    const rangeText = hasDateRange
+      ? `${formatRangeDate(fromDate as string | Date)} – ${formatRangeDate(toDate as string | Date)}${description ? ` · ${description}` : ""}`
+      : description ?? "";
     const resolvedRunId = selectedRunId ?? runOptions?.[0]?.id ?? "";
     const hasOnRunChange = Boolean(onRunChange);
     const [localRunId, setLocalRunId] = React.useState(resolvedRunId);
@@ -89,10 +95,7 @@ const LeaderboardCard = React.forwardRef<HTMLDivElement, LeaderboardCardProps>(
         <div className="mb-6 flex items-start justify-between gap-4">
           <div className="space-y-1">
             <h3 className="text-xl font-semibold">{title}</h3>
-            <p className="text-muted-foreground text-sm">
-              {fromLabel} – {toLabel}
-              {description ? ` · ${description}` : ""}
-            </p>
+            {rangeText ? <p className="text-muted-foreground text-sm">{rangeText}</p> : null}
           </div>
 
           {runOptions && runOptions.length > 0 ? (
@@ -140,6 +143,7 @@ const LeaderboardCard = React.forwardRef<HTMLDivElement, LeaderboardCardProps>(
               emptyMessage={emptyMessage}
               showPagination
               defaultPageSize={10}
+              resetKey={resetKey}
             />
           </>
         )}

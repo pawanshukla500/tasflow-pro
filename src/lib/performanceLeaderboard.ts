@@ -32,6 +32,13 @@ export interface LeaderboardProfile {
   department_id?: string | null;
 }
 
+/**
+ * Callers must supply the *complete* set of tasks completed within the
+ * target period (e.g. via a query filtered by `completed_at`), not a
+ * recency-bounded cache — this ranking logic does not know if its input
+ * was truncated and will silently undercount anyone whose completions fell
+ * outside the supplied slice.
+ */
 export interface LeaderboardTask {
   status: string;
   completed_at?: string | null;

@@ -228,7 +228,10 @@ const PerformancePage = () => {
     ? undefined
     : perfMetrics.find((m) => m.user_id === (scope === "me" ? user?.id : scope));
 
-  const showLeaderboard = leaderboardProfiles.length > 1;
+  // Regular employees only ever see themselves in scope; showing the
+  // multi-person leaderboard to them would expose coworkers' names, scores,
+  // and completion counts despite lacking department-performance permission.
+  const showLeaderboard = canSeeOthers && leaderboardProfiles.length > 1;
 
   return (
     <div className="p-6 max-w-6xl space-y-6">
@@ -275,7 +278,6 @@ const PerformancePage = () => {
             <PerformanceLeaderboard
               profiles={leaderboardProfiles}
               metrics={leaderboardMetrics}
-              tasks={tasks}
               currentUserId={user?.id}
               scopeLabel={scopeLabel}
               loading={perfLoading}

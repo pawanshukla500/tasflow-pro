@@ -57,4 +57,50 @@ describe("LeaderboardCard", () => {
     // Rank 1 appears on the podium and in the list.
     expect(screen.getAllByText("Member 1")).toHaveLength(2);
   });
+
+  it("hides the date range when fromDate/toDate are omitted (e.g. a lifetime metric)", () => {
+    render(
+      <LeaderboardCard
+        title="Team leaderboard"
+        description="cumulative performance score"
+        valueLabel="score"
+        podiumRankings={rankings.slice(0, 3)}
+        rankings={rankings}
+      />,
+    );
+
+    expect(screen.getByText("cumulative performance score")).toBeInTheDocument();
+    expect(screen.queryByText(/May 2026/)).not.toBeInTheDocument();
+  });
+
+  it("resets to page one when resetKey changes (e.g. switching periods)", () => {
+    const { rerender } = render(
+      <LeaderboardCard
+        title="Team leaderboard"
+        fromDate="2026-05-04"
+        toDate="2026-05-07"
+        valueLabel="score"
+        podiumRankings={rankings.slice(0, 3)}
+        rankings={rankings}
+        resetKey="week"
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Next page"));
+    expect(screen.getByText("11–12 of 12")).toBeInTheDocument();
+
+    rerender(
+      <LeaderboardCard
+        title="Team leaderboard"
+        fromDate="2026-05-01"
+        toDate="2026-05-07"
+        valueLabel="score"
+        podiumRankings={rankings.slice(0, 3)}
+        rankings={rankings}
+        resetKey="month"
+      />,
+    );
+
+    expect(screen.getByText("1–10 of 12")).toBeInTheDocument();
+  });
 });

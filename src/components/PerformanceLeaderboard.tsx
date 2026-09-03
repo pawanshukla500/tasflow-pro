@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { LeaderboardCard } from "@/components/ui/leaderboard-card";
 import type { UserPerformanceMetrics } from "@/hooks/usePerformance";
+import { useLeaderboardTaskCompletions } from "@/hooks/useLeaderboardTaskCompletions";
 import {
   LEADERBOARD_PERIOD_OPTIONS,
   buildLeaderboard,
@@ -9,16 +10,15 @@ import {
   resolveLeaderboardPeriod,
   type LeaderboardPeriodId,
   type LeaderboardProfile,
-  type LeaderboardTask,
 } from "@/lib/performanceLeaderboard";
 
 interface Props {
   profiles: LeaderboardProfile[];
   metrics: UserPerformanceMetrics[];
-  tasks: LeaderboardTask[];
   currentUserId?: string;
   /** Scope label shown next to the date range (e.g. "Organization-wide"). */
   scopeLabel?: string;
+  /** Loading state for `metrics` — used for the "All time" period. */
   loading?: boolean;
   className?: string;
 }
@@ -26,7 +26,6 @@ interface Props {
 export function PerformanceLeaderboard({
   profiles,
   metrics,
-  tasks,
   currentUserId,
   scopeLabel,
   loading = false,
@@ -34,22 +33,36 @@ export function PerformanceLeaderboard({
 }: Props) {
   const [periodId, setPeriodId] = useState<LeaderboardPeriodId>("week");
 
-  const period = useMemo(() => resolveLeaderboardPeriod(periodId), [periodId]);
+  // Recomputed every render (cheap) rather than memoized on `periodId` alone,
+  // so the IST window rolls over correctly if the tab is left open past
+  // midnight instead of freezing on the day it was first opened.
+  const period = resolveLeaderboardPeriod(periodId);
+
+  // Task completions are fetched directly for the period's date range —
+  // the shared `useTasks` cache is bounded by creation recency and can
+  // silently omit older-created tasks that were completed inside the window.
+  const { tasks: rangeTasks, loading: tasksLoading } = useLeaderboardTaskCompletions(period);
 
   const entries = useMemo(
-    () => buildLeaderboard({ profiles, metrics, tasks, period }),
-    [profiles, metrics, tasks, period],
+    () => buildLeaderboard({ profiles, metrics, tasks: rangeTasks, period }),
+    [profiles, metrics, rangeTasks, period],
   );
 
   const podium = useMemo(() => podiumEntries(entries), [entries]);
+
+  // "All time" is a lifetime cumulative score, not bounded to this
+  // calendar year — showing a fabricated "Jan 1 – today" range would
+  // misrepresent it, so the date range is only shown for windowed periods.
+  const showDateRange = period.id !== "all";
 
   return (
     <LeaderboardCard
       className={className}
       title="Team leaderboard"
       description={scopeLabel ? `${scopeLabel} · ${period.description}` : period.description}
-      fromDate={period.from}
-      toDate={period.to}
+      fromDate={showDateRange ? period.from : undefined}
+      toDate={showDateRange ? period.to : undefined}
+      resetKey={periodId}
       currentUserId={currentUserId}
       podiumRankings={podium.map((e) => ({
         userId: e.userId,
@@ -69,7 +82,7 @@ export function PerformanceLeaderboard({
       }))}
       valueLabel={period.valueLabel}
       formatValue={(value) => value.toLocaleString("en-IN")}
-      loading={loading}
+      loading={period.id === "all" ? loading : tasksLoading}
       emptyMessage={
         period.id === "all"
           ? "No scored members yet — scores appear once work is assigned."

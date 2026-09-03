@@ -24,6 +24,8 @@ interface LeaderboardRankingsProps extends React.HTMLAttributes<HTMLDivElement> 
   formatValue?: (value: number) => string;
   valueLabel?: string;
   emptyMessage?: string;
+  /** Resets pagination back to page one when this value changes (e.g. a period switch). */
+  resetKey?: string | number;
 }
 
 const LeaderboardRankings = React.forwardRef<HTMLDivElement, LeaderboardRankingsProps>(
@@ -37,6 +39,7 @@ const LeaderboardRankings = React.forwardRef<HTMLDivElement, LeaderboardRankings
       formatValue,
       valueLabel,
       emptyMessage = "No ranked members yet.",
+      resetKey,
       ...props
     },
     ref,
@@ -49,6 +52,14 @@ const LeaderboardRankings = React.forwardRef<HTMLDivElement, LeaderboardRankings
     const pageSize = showPagination ? Math.max(1, defaultPageSize) : visible.length || 1;
     const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
     const [page, setPage] = React.useState(0);
+
+    // The dataset can change shape (e.g. switching periods) without
+    // affecting `pageCount` — e.g. going from 15 weekly entries (2 pages) to
+    // 15 monthly entries (also 2 pages) would otherwise leave the user
+    // stranded on page two, hiding the new period's top-ranked members.
+    React.useEffect(() => {
+      setPage(0);
+    }, [resetKey]);
 
     React.useEffect(() => {
       setPage((p) => Math.min(p, pageCount - 1));
