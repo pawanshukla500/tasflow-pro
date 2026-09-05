@@ -84,6 +84,7 @@ export function ProjectPipelineBar({ summary, focusStatus, onSelectStep }: Proje
                 type="button"
                 onClick={() => onSelectStep(step.status)}
                 aria-pressed={isActive}
+                aria-label={`${step.label}, ${count} tasks`}
                 className={cn(
                   "flex items-center gap-1.5 min-w-0 w-full rounded-xl border px-2 py-1.5 text-left transition-all h-full",
                   isActive
