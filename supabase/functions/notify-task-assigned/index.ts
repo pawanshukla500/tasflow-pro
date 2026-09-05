@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceKey)
 
   // Authenticate the caller via JWT (allow internal service-key bypass for server-to-server calls)
-  const isInternal = isInternalServiceRequest(req, serviceKey)
+  const isInternal = await isInternalServiceRequest(req, serviceKey)
   let callerId: string | null = null
   let callerName: string | null = null
   if (!isInternal) {

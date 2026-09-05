@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   bearerToken,
   isInternalServiceRequest,
   isServiceRoleCredential,
+  looksLikeJwt,
   parseJwtClaims,
+  verifyServiceRoleJwt,
 } from "../../supabase/functions/_shared/internal-auth";
 
 function unsignedJwt(payload: Record<string, unknown>): string {
@@ -14,21 +16,27 @@ function unsignedJwt(payload: Record<string, unknown>): string {
 
 describe("internal service auth", () => {
   const secretKey = "sb_secret_current_edge_key";
-  const vaultJwt = unsignedJwt({ role: "service_role", ref: "nekdjoquirhecmejuoba" });
+  const vaultJwt = unsignedJwt({ role: "service_role", ref: "nekdjoquirhecmejuoba", exp: 4102444800 });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it("parses JWT claims from the payload segment", () => {
     expect(parseJwtClaims(vaultJwt)?.role).toBe("service_role");
     expect(parseJwtClaims("not-a-jwt")).toBeNull();
     expect(parseJwtClaims(secretKey)).toBeNull();
+    expect(looksLikeJwt(vaultJwt)).toBe(true);
+    expect(looksLikeJwt(secretKey)).toBe(false);
   });
 
-  it("accepts the current Edge service key by exact match", () => {
+  it("accepts the current Edge service key by exact match only", () => {
     expect(isServiceRoleCredential(secretKey, secretKey)).toBe(true);
     expect(isServiceRoleCredential("other", secretKey)).toBe(false);
   });
 
-  it("accepts a Vault service_role JWT that does not equal the Edge key", () => {
-    expect(isServiceRoleCredential(vaultJwt, secretKey)).toBe(true);
+  it("rejects an unsigned JWT that only claims service_role", () => {
+    expect(isServiceRoleCredential(vaultJwt, secretKey)).toBe(false);
   });
 
   it("rejects a user JWT", () => {
@@ -36,23 +44,48 @@ describe("internal service auth", () => {
     expect(isServiceRoleCredential(userJwt, secretKey)).toBe(false);
   });
 
-  it("accepts x-internal-service-key when it is the Vault JWT", () => {
+  it("does not treat a forged Vault JWT header as authenticated", async () => {
     const req = new Request("https://example.test", {
       headers: { "x-internal-service-key": vaultJwt },
     });
-    expect(isInternalServiceRequest(req, secretKey)).toBe(true);
+    expect(await isInternalServiceRequest(req, secretKey)).toBe(false);
   });
 
-  it("accepts Authorization Bearer with the Edge key", () => {
+  it("accepts Authorization Bearer with the Edge key", async () => {
     const req = new Request("https://example.test", {
       headers: { Authorization: `Bearer ${secretKey}` },
     });
-    expect(isInternalServiceRequest(req, secretKey)).toBe(true);
+    expect(await isInternalServiceRequest(req, secretKey)).toBe(true);
     expect(bearerToken(req)).toBe(secretKey);
   });
 
-  it("rejects an unauthenticated request", () => {
+  it("rejects an unauthenticated request", async () => {
     const req = new Request("https://example.test");
-    expect(isInternalServiceRequest(req, secretKey)).toBe(false);
+    expect(await isInternalServiceRequest(req, secretKey)).toBe(false);
+  });
+
+  it("rejects a forged JWT even when PostgREST is reachable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ message: "Invalid JWT" }), { status: 401 })),
+    );
+    expect(await verifyServiceRoleJwt(vaultJwt, "https://example.supabase.co")).toBe(false);
+    const req = new Request("https://example.test", {
+      headers: { "x-internal-service-key": vaultJwt },
+    });
+    expect(
+      await isInternalServiceRequest(req, secretKey, { supabaseUrl: "https://example.supabase.co" }),
+    ).toBe(false);
+  });
+
+  it("accepts a Vault JWT only after PostgREST verifies the signature", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify([{ id: 1 }]), { status: 200 })));
+    expect(await verifyServiceRoleJwt(vaultJwt, "https://example.supabase.co")).toBe(true);
+    const req = new Request("https://example.test", {
+      headers: { "x-internal-service-key": vaultJwt },
+    });
+    expect(
+      await isInternalServiceRequest(req, secretKey, { supabaseUrl: "https://example.supabase.co" }),
+    ).toBe(true);
   });
 });

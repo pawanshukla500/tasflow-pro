@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-  if (!isInternalServiceRequest(req, supabaseServiceKey)) {
+  if (!await isInternalServiceRequest(req, supabaseServiceKey)) {
     const authHeader = req.headers.get('Authorization')
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : null
     if (!token) {
@@ -203,9 +203,27 @@ Deno.serve(async (req) => {
         }
       )
     }
+    const staleBefore = new Date(Date.now() - STALE_PENDING_MS).toISOString()
+    const { data: claimed } = await supabase
+      .from('email_send_log')
+      .update({ created_at: new Date().toISOString() })
+      .eq('id', existingSend.id)
+      .eq('status', 'pending')
+      .lt('created_at', staleBefore)
+      .select('id, message_id')
+      .maybeSingle()
+    if (!claimed) {
+      return new Response(
+        JSON.stringify({ success: true, deduped: true, reason: 'duplicate_idempotency_key' }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
+    }
     reusePending = true
-    if (typeof existingSend.message_id === 'string' && existingSend.message_id) {
-      messageId = existingSend.message_id
+    if (typeof claimed.message_id === 'string' && claimed.message_id) {
+      messageId = claimed.message_id
     }
   }
 
@@ -415,6 +433,13 @@ Deno.serve(async (req) => {
         )
       }
       console.error('Failed to write pending email_send_log row', { error: pendingLogError })
+      return new Response(
+        JSON.stringify({ error: 'Failed to prepare email' }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
     }
   }
 

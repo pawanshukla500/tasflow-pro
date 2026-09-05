@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get('Authorization')
-  if (!isInternalServiceRequest(req, supabaseServiceKey)) {
+  if (!await isInternalServiceRequest(req, supabaseServiceKey)) {
     const status = authHeader?.startsWith('Bearer ') ? 403 : 401
     return new Response(JSON.stringify({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }), {
       status,

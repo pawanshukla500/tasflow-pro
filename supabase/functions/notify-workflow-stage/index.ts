@@ -32,7 +32,7 @@ function computeDueDate(startedAt: string | null, tatHours: number): string | nu
 
 async function canTriggerNotification(supabase: any, req: Request, workflow: any, stage: any) {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-  if (isInternalServiceRequest(req, serviceKey)) return true
+  if (await isInternalServiceRequest(req, serviceKey)) return true
 
   const token = getToken(req)
   if (!token) return false

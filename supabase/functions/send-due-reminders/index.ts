@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
 
   // Internal cron function: invoked by pg_cron with service role credentials only.
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-  if (!isInternalServiceRequest(req, serviceKey)) {
+  if (!await isInternalServiceRequest(req, serviceKey)) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

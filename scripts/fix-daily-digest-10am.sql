@@ -102,7 +102,7 @@ BEGIN
 
   PERFORM cron.schedule(
     'send-department-daily-summary',
-    '0 3 * * 1-6', -- Mon–Sat 08:30 IST
+    '0 3 * * *', -- daily 08:30 IST
     $cron$
     SELECT net.http_post(
       url := 'https://nekdjoquirhecmejuoba.supabase.co/functions/v1/send-department-daily-summary',
@@ -208,5 +208,5 @@ BEGIN
     $cron$
   );
 
-  RAISE NOTICE 'Email crons set: daily digest + admin overview Mon–Sat 09:30 IST; dept summary Mon–Sat 08:30 IST; weekly leadership Friday 09:00 IST; monthly on the 1st; queue flush every minute. All jobs send Authorization + x-internal-service-key.';
+  RAISE NOTICE 'Email crons set: daily digest + admin overview Mon–Sat 09:30 IST; dept summary daily 08:30 IST; weekly leadership Friday 09:00 IST; monthly on the 1st; queue flush every minute. All jobs send Authorization + x-internal-service-key.';
 END $$;

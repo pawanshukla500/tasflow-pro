@@ -32,9 +32,8 @@ BEGIN
   ) AND NOT EXISTS (
     SELECT 1 FROM vault.decrypted_secrets WHERE name = 'gmail_cron_key'
   ) THEN
-    RAISE EXCEPTION USING
-      MESSAGE = 'Email crons were not installed: service-role credential is missing from Vault',
-      HINT = 'Create report_cron_service_role_key (or gmail_cron_key) in Supabase Vault and redeploy migrations.';
+    RAISE NOTICE 'Skipping email cron re-assert: report_cron_service_role_key / gmail_cron_key missing in vault. Idempotency index still applied.';
+    RETURN;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM vault.secrets WHERE name = 'report_cron_service_role_key') THEN
@@ -105,7 +104,7 @@ BEGIN
   END IF;
   PERFORM cron.schedule(
     'send-department-daily-summary',
-    '0 3 * * 1-6',
+    '0 3 * * *',
     $cron$
     SELECT net.http_post(
       url := 'https://nekdjoquirhecmejuoba.supabase.co/functions/v1/send-department-daily-summary',
