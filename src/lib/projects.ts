@@ -46,10 +46,19 @@ export interface ProjectRow {
   updated_at: string;
 }
 
+export interface ProjectStatusBreakdown {
+  todo: number;
+  in_progress: number;
+  pending_review: number;
+  done: number;
+  blocked: number;
+}
+
 export interface ProjectWithStats extends ProjectRow {
   openTaskCount: number;
   doneTaskCount: number;
   workflowCount: number;
+  statusCounts: ProjectStatusBreakdown;
   departmentName?: string;
 }
 
@@ -60,6 +69,11 @@ export function isProjectView(value: string | null | undefined): value is Projec
 export function projectProgress(done: number, total: number): number {
   if (total <= 0) return 0;
   return Math.min(100, Math.round((done / total) * 100));
+}
+
+/** True for `/projects/:id` including an optional trailing slash. */
+export function isProjectDetailPath(pathname: string): boolean {
+  return /^\/projects\/[^/]+\/?$/.test(pathname);
 }
 
 /** Remap retired Inbox deep-links onto Projects. */

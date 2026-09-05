@@ -7,7 +7,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 import { useProjects, useProjectMutations } from "@/hooks/useProjects";
 import { supabase } from "@/integrations/supabase/client";
-import { projectProgress, type ProjectRow, type ProjectWithStats } from "@/lib/projects";
+import { type ProjectRow, type ProjectStatusBreakdown, type ProjectWithStats } from "@/lib/projects";
+import { PROJECT_FLOW_STEPS, PROJECT_BLOCKED_STEP, pipelineStatusOf } from "@/lib/projectPipeline";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
@@ -27,16 +28,22 @@ export default function ProjectsPage() {
       const { data, error } = await supabase.from("tasks").select("project_id, status");
       if (error) {
         if (/does not exist|42703|PGRST205|schema cache/i.test(error.message)) {
-          return new Map<string, { open: number; done: number }>();
+          return new Map<string, ProjectStatusBreakdown>();
         }
         throw error;
       }
-      const map = new Map<string, { open: number; done: number }>();
+      const empty = (): ProjectStatusBreakdown => ({
+        todo: 0,
+        in_progress: 0,
+        pending_review: 0,
+        done: 0,
+        blocked: 0,
+      });
+      const map = new Map<string, ProjectStatusBreakdown>();
       for (const row of data || []) {
         if (!row.project_id) continue;
-        const cur = map.get(row.project_id) || { open: 0, done: 0 };
-        if (row.status === "done") cur.done += 1;
-        else cur.open += 1;
+        const cur = map.get(row.project_id) || empty();
+        cur[pipelineStatusOf(row.status)] += 1;
         map.set(row.project_id, cur);
       }
       return map;
@@ -64,11 +71,21 @@ export default function ProjectsPage() {
 
   const cards: ProjectWithStats[] = useMemo(() => {
     return projects.map((p) => {
-      const counts = taskCounts?.get(p.id);
+      const statusCounts = taskCounts?.get(p.id) || {
+        todo: 0,
+        in_progress: 0,
+        pending_review: 0,
+        done: 0,
+        blocked: 0,
+      };
+      const doneTaskCount = statusCounts.done;
+      const openTaskCount =
+        statusCounts.todo + statusCounts.in_progress + statusCounts.pending_review + statusCounts.blocked;
       return {
         ...p,
-        openTaskCount: counts?.open || 0,
-        doneTaskCount: counts?.done || 0,
+        statusCounts,
+        openTaskCount,
+        doneTaskCount,
         workflowCount: workflowCounts?.get(p.id) || 0,
       };
     });
@@ -126,7 +143,7 @@ export default function ProjectsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 stagger-children">
           {visible.map((project) => {
             const total = project.openTaskCount + project.doneTaskCount;
-            const pct = projectProgress(project.doneTaskCount, total);
+            const steps = [...PROJECT_FLOW_STEPS, PROJECT_BLOCKED_STEP];
             return (
               <div
                 key={project.id}
@@ -198,31 +215,45 @@ export default function ProjectsPage() {
                     </DropdownMenu>
                   </div>
 
-                  <div className="mt-4 space-y-1.5">
+                  <div className="mt-4 space-y-2">
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>{pct}% complete</span>
-                      <span className="font-mono-num">{project.doneTaskCount}/{total || 0} tasks</span>
+                      <span>
+                        <span className="font-mono-num font-semibold text-foreground">{project.doneTaskCount}</span>
+                        {" of "}
+                        <span className="font-mono-num font-semibold text-foreground">{total}</span>
+                        {" done"}
+                      </span>
+                      {project.workflowCount > 0 && (
+                        <span className="font-mono-num">{project.workflowCount} workflow{project.workflowCount === 1 ? "" : "s"}</span>
+                      )}
                     </div>
-                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{ width: `${pct}%`, backgroundColor: project.color }}
-                      />
+                    <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
+                      {total === 0 ? (
+                        <div className="h-full w-full bg-muted" />
+                      ) : (
+                        steps.map((step) => {
+                          const count = project.statusCounts[step.status];
+                          if (count <= 0) return null;
+                          return (
+                            <div
+                              key={step.id}
+                              className={cn("h-full min-w-[2px]", step.bar)}
+                              style={{ flexGrow: count }}
+                              title={`${step.label}: ${count}`}
+                            />
+                          );
+                        })
+                      )}
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 mt-3">
-                    <div className="text-center p-2 bg-muted/50 rounded-lg">
-                      <p className="text-sm font-mono-num font-bold text-foreground">{project.openTaskCount}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase">Open</p>
-                    </div>
-                    <div className="text-center p-2 bg-muted/50 rounded-lg">
-                      <p className="text-sm font-mono-num font-bold text-foreground">{project.doneTaskCount}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase">Done</p>
-                    </div>
-                    <div className="text-center p-2 bg-muted/50 rounded-lg">
-                      <p className="text-sm font-mono-num font-bold text-foreground">{project.workflowCount}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase">Flows</p>
+                    <div className="grid grid-cols-5 gap-1">
+                      {steps.map((step) => (
+                        <div key={step.id} className="text-center p-1.5 bg-muted/50 rounded-md">
+                          <p className="text-sm font-mono-num font-bold text-foreground leading-none">
+                            {project.statusCounts[step.status]}
+                          </p>
+                          <p className="text-[9px] text-muted-foreground mt-1 truncate">{step.shortLabel}</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
                   {project.status === "archived" && (

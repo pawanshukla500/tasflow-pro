@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isProjectView,
+  isProjectDetailPath,
   projectProgress,
   remapRetiredInboxPath,
   PROJECT_VIEWS,
@@ -25,6 +26,18 @@ describe("isProjectView", () => {
     }
     expect(isProjectView("inbox")).toBe(false);
     expect(isProjectView(undefined)).toBe(false);
+  });
+});
+
+describe("isProjectDetailPath", () => {
+  it("matches a project id with or without a trailing slash", () => {
+    expect(isProjectDetailPath("/projects/b1222b62-c4b5-44df-b031-bbe2c0775286")).toBe(true);
+    expect(isProjectDetailPath("/projects/b1222b62-c4b5-44df-b031-bbe2c0775286/")).toBe(true);
+  });
+
+  it("does not match the projects index", () => {
+    expect(isProjectDetailPath("/projects")).toBe(false);
+    expect(isProjectDetailPath("/projects/")).toBe(false);
   });
 });
 

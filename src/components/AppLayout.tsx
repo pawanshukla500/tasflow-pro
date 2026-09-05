@@ -7,12 +7,15 @@ import SearchOverlay from "@/components/SearchOverlay";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { BrandLogo } from "@/components/BrandLogo";
+import { isProjectDetailPath } from "@/lib/projects";
+import { cn } from "@/lib/utils";
 
 const AppLayout = () => {
   const [showNewTask, setShowNewTask] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
+  const isProjectDetail = isProjectDetailPath(location.pathname);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -64,7 +67,13 @@ const AppLayout = () => {
         </header>
 
         {/* key on pathname so the enter animation replays on every navigation */}
-        <main key={location.pathname} className="flex-1 overflow-y-auto page-enter">
+        <main
+          key={location.pathname}
+          className={cn(
+            "flex-1 min-h-0 page-enter",
+            isProjectDetail ? "overflow-hidden flex flex-col" : "overflow-y-auto",
+          )}
+        >
           <Outlet />
         </main>
       </div>

@@ -29,4 +29,15 @@ describe("projects replace inbox", () => {
     expect(tools).toContain('name: "list_projects"');
     expect(tools).toContain('name: "create_project"');
   });
+
+  it("shows project status as pipeline steps on the detail board", () => {
+    const page = readFileSync(resolve(root, "src/pages/ProjectDetailPage.tsx"), "utf8");
+    expect(page).toContain("ProjectPipelineBar");
+    expect(page).toContain("ProjectBoardView");
+    expect(page).not.toMatch(/%\} complete/);
+    const board = readFileSync(resolve(root, "src/components/ProjectBoardView.tsx"), "utf8");
+    expect(board).toContain("PROJECT_BOARD_COLUMNS");
+    expect(board).toContain("md:min-w-0");
+    expect(board).toContain("onDrop");
+  });
 });
