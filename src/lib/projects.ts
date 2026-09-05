@@ -71,6 +71,11 @@ export function projectProgress(done: number, total: number): number {
   return Math.min(100, Math.round((done / total) * 100));
 }
 
+/** True for `/projects/:id` including an optional trailing slash. */
+export function isProjectDetailPath(pathname: string): boolean {
+  return /^\/projects\/[^/]+\/?$/.test(pathname);
+}
+
 /** Remap retired Inbox deep-links onto Projects. */
 export function remapRetiredInboxPath(path: string): string {
   if (path === "/inbox" || path.startsWith("/inbox/") || path.startsWith("/inbox?")) {

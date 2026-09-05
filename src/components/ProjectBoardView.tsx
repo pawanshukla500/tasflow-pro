@@ -129,7 +129,7 @@ export function ProjectBoardView({
               columnRefs.current[col.status] = el;
             }}
             className={cn(
-              "flex-1 min-w-[13rem] basis-0 flex flex-col rounded-2xl border overflow-hidden transition-all duration-200",
+              "flex-1 min-w-[9.5rem] md:min-w-0 basis-0 flex flex-col rounded-2xl border overflow-hidden transition-all duration-200",
               isOver
                 ? "bg-primary/[0.06] border-primary/35 ring-2 ring-primary/20 ring-inset shadow-md"
                 : isFocused

@@ -37,7 +37,7 @@ describe("projects replace inbox", () => {
     expect(page).not.toMatch(/%\} complete/);
     const board = readFileSync(resolve(root, "src/components/ProjectBoardView.tsx"), "utf8");
     expect(board).toContain("PROJECT_BOARD_COLUMNS");
-    expect(board).toContain("flex-1 min-w-[13rem]");
+    expect(board).toContain("md:min-w-0");
     expect(board).toContain("onDrop");
   });
 });

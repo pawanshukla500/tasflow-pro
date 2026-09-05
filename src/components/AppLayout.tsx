@@ -7,6 +7,7 @@ import SearchOverlay from "@/components/SearchOverlay";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { BrandLogo } from "@/components/BrandLogo";
+import { isProjectDetailPath } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
 const AppLayout = () => {
@@ -14,7 +15,7 @@ const AppLayout = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
-  const isProjectDetail = /^\/projects\/[^/]+$/.test(location.pathname);
+  const isProjectDetail = isProjectDetailPath(location.pathname);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "k") {

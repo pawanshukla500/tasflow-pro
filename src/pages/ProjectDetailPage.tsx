@@ -54,7 +54,14 @@ export default function ProjectDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { project, loading: projectLoading } = useProject(id);
-  const { tasks: projectTasks, loading: tasksLoading, updateTaskStatus } = useTasks({
+  const {
+    tasks: projectTasks,
+    loading: tasksLoading,
+    loadingMore,
+    hasMore,
+    loadMore,
+    updateTaskStatus,
+  } = useTasks({
     projectId: id,
     boundedMax: 800,
   });
@@ -72,10 +79,11 @@ export default function ProjectDetailPage() {
     ? viewParam
     : (project?.default_view || "board");
 
-  const setView = (next: ProjectView) => {
+  const setView = (next: ProjectView, options?: { persist?: boolean }) => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("view", next);
     setSearchParams(nextParams, { replace: true });
+    if (options?.persist === false) return;
     if (project && project.default_view !== next) {
       void update(project.id, { default_view: next }).catch(() => {});
     }
@@ -107,6 +115,11 @@ export default function ProjectDetailPage() {
   const today = todayIST();
 
   useEffect(() => {
+    if (tasksLoading || loadingMore || !hasMore) return;
+    void loadMore();
+  }, [tasksLoading, loadingMore, hasMore, loadMore]);
+
+  useEffect(() => {
     if (!focusStatus) return;
     const target = document.getElementById(`project-step-${focusStatus}`);
     target?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
@@ -115,7 +128,7 @@ export default function ProjectDetailPage() {
   const selectStep = (status: ProjectPipelineStatus) => {
     setFocusStatus(status);
     if (view !== "board" && view !== "list") {
-      setView("board");
+      setView("board", { persist: false });
     }
   };
 
@@ -221,6 +234,9 @@ export default function ProjectDetailPage() {
           focusStatus={focusStatus}
           onSelectStep={selectStep}
         />
+        {(hasMore || loadingMore) && (
+          <p className="text-[11px] text-muted-foreground mt-1.5">Loading remaining tasks…</p>
+        )}
       </div>
 
       <Tabs value={view} onValueChange={(v) => setView(v as ProjectView)} className="shrink-0">
