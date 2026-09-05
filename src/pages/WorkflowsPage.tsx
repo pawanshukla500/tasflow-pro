@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   GitBranch, Plus, Play, Edit, MoreHorizontal, Trash2, X, ChevronDown, ChevronRight,
   Paperclip, AlertCircle, CheckCircle2, Clock, GitFork, Flag, Search, Activity, LayoutTemplate,
@@ -95,6 +96,7 @@ interface Workflow {
   tracking_number?: string | null;
   created_at: string;
   outcome_label: string | null;
+  project_id?: string | null;
   stages: WorkflowStage[];
   fieldValues: FieldValue[];
 }
@@ -113,8 +115,10 @@ const stageDeadline = (s: WorkflowStage) => {
 const WorkflowsPage = () => {
   const { user, isAdminOrMD, isDeptManager, managedDepartments } = useAuth();
   const canManageTemplates = isAdminOrMD || isDeptManager;
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string; icon: string; color: string }[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
@@ -131,6 +135,8 @@ const WorkflowsPage = () => {
   const [wfTitle, setWfTitle] = useState("");
   const [wfDescription, setWfDescription] = useState("");
   const [wfPriority, setWfPriority] = useState("medium");
+  const [wfProjectId, setWfProjectId] = useState("");
+  const [filterProjectId, setFilterProjectId] = useState("all");
   const [launchStages, setLaunchStages] = useState<Array<TemplateStage & { assignee_user_id: string | null }>>([]);
   const [launchFieldValues, setLaunchFieldValues] = useState<Record<string, string>>({});
   const [launchRefId, setLaunchRefId] = useState("");
@@ -164,8 +170,9 @@ const WorkflowsPage = () => {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    const [deptsRes, profRes, tplRes, tplStgRes, tplFldRes, wfRes, wfStgRes, wfValRes] = await Promise.all([
+    const [deptsRes, projRes, profRes, tplRes, tplStgRes, tplFldRes, wfRes, wfStgRes, wfValRes] = await Promise.all([
       supabase.from("departments").select("id, name, color").order("name"),
+      supabase.from("projects").select("id, name, icon, color").eq("status", "active").order("name"),
       supabase.from("profiles").select("id, name, email, department_id").eq("active", true).order("name"),
       supabase.from("workflow_templates").select("*").eq("active", true).order("created_at", { ascending: false }),
       supabase.from("workflow_template_stages").select("*").order("position"),
@@ -175,6 +182,7 @@ const WorkflowsPage = () => {
       supabase.from("workflow_field_values").select("*"),
     ]);
     setDepartments(deptsRes.data || []);
+    setProjects(projRes.data || []);
     setProfiles(profRes.data || []);
     const tplStgs = (tplStgRes.data || []) as TemplateStage[];
     const tplFlds = (tplFldRes.data || []) as any[];
@@ -197,6 +205,29 @@ const WorkflowsPage = () => {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  useEffect(() => {
+    const project = searchParams.get("project");
+    if (project) {
+      setFilterProjectId(project);
+      setWfProjectId(project);
+    }
+    const wf = searchParams.get("wf");
+    if (wf) setExpandedWf(wf);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (searchParams.get("raise") !== "1") return;
+    if (loading) return;
+    if (templates.length === 0) return;
+    if (templates.length === 1) openLaunch(templates[0], searchParams.get("project") || undefined);
+    else setShowRaisePicker(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("raise");
+    setSearchParams(next, { replace: true });
+    // openLaunch is stable enough for this one-shot deep link
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, templates, searchParams, setSearchParams]);
 
   const openCreateTemplate = () => {
     setEditingTemplate(null);
@@ -238,11 +269,18 @@ const WorkflowsPage = () => {
     fetchAll();
   };
 
-  const openLaunch = (t: Template) => {
+  const openLaunch = (t: Template, projectOverride?: string) => {
     setLaunchTemplate(t);
     setWfTitle(t.name);
     setWfDescription("");
     setWfPriority("medium");
+    const fromUrl = searchParams.get("project");
+    const next =
+      projectOverride
+      || (filterProjectId !== "all" && filterProjectId !== "none" ? filterProjectId : "")
+      || fromUrl
+      || wfProjectId;
+    setWfProjectId(next || "");
     setLaunchRefId("");
     setLaunchStages(t.stages.map((s) => ({ ...s, assignee_user_id: s.default_assignee_user_id })));
     const init: Record<string, string> = {};
@@ -258,7 +296,7 @@ const WorkflowsPage = () => {
     const missing = (launchTemplate.fields || []).find((f) => f.required && !(launchFieldValues[f.field_key] || "").trim());
     if (missing) return toast.error(`${missing.label} is required`);
 
-    const { data: wf, error } = await supabase.from("workflows").insert({
+    const payload: Record<string, unknown> = {
       template_id: launchTemplate.id,
       title: wfTitle,
       description: wfDescription,
@@ -267,7 +305,13 @@ const WorkflowsPage = () => {
       raised_by_department_id: user?.profile?.department_id || null,
       current_stage_position: 1,
       status: "active",
-    }).select().single();
+    };
+    if (wfProjectId) payload.project_id = wfProjectId;
+    let { data: wf, error } = await supabase.from("workflows").insert(payload as never).select().single();
+    if (error && payload.project_id && /project_id|42703|PGRST204/i.test(error.message)) {
+      delete payload.project_id;
+      ({ data: wf, error } = await supabase.from("workflows").insert(payload as never).select().single());
+    }
     if (error || !wf) return toast.error(error?.message || "Failed");
 
     const stageRows = launchStages.map((s, i) => ({
@@ -495,16 +539,24 @@ const WorkflowsPage = () => {
     });
   });
 
+  const projectScoped = filterProjectId === "all"
+    ? userScoped
+    : filterProjectId === "none"
+      ? userScoped.filter((w) => !w.project_id)
+      : userScoped.filter((w) => w.project_id === filterProjectId);
+
   const visibleWorkflows = (() => {
     const q = wfSearch.trim().toLowerCase();
-    if (!q) return userScoped;
-    return userScoped.filter((w) => {
+    if (!q) return projectScoped;
+    return projectScoped.filter((w) => {
       if (w.title?.toLowerCase().includes(q)) return true;
       if (w.tracking_number?.toLowerCase().includes(q)) return true;
       if (w.description?.toLowerCase().includes(q)) return true;
       if (w.fieldValues?.some((v) => (v.value || "").toLowerCase().includes(q) || (v.label || "").toLowerCase().includes(q))) return true;
       const raiser = profiles.find((p) => p.id === w.raised_by)?.name?.toLowerCase() || "";
       if (raiser.includes(q)) return true;
+      const projectName = projects.find((p) => p.id === w.project_id)?.name?.toLowerCase() || "";
+      if (projectName.includes(q)) return true;
       return false;
     });
   })();
@@ -746,14 +798,28 @@ const WorkflowsPage = () => {
         <>
           {/* Overview: search + bottleneck snapshot */}
           <div className="space-y-2 mb-3">
-            <div className="relative">
-              <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <Input
-                value={wfSearch}
-                onChange={(e) => setWfSearch(e.target.value)}
-                placeholder="Search by tracking number (WF-…), title or raiser…"
-                className="pl-8 h-9 text-sm"
-              />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <Input
+                  value={wfSearch}
+                  onChange={(e) => setWfSearch(e.target.value)}
+                  placeholder="Search by tracking number (WF-…), title or raiser…"
+                  className="pl-8 h-9 text-sm"
+                />
+              </div>
+              <Select value={filterProjectId} onValueChange={setFilterProjectId}>
+                <SelectTrigger className="h-9 text-xs sm:w-52">
+                  <SelectValue placeholder="All projects" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All projects</SelectItem>
+                  <SelectItem value="none">No project</SelectItem>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.icon} {p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {bottleneckStages.length > 0 && (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
@@ -839,6 +905,12 @@ const WorkflowsPage = () => {
                               ) : null;
                             })()}
                             <p className="text-sm font-medium text-foreground truncate">{wf.title}</p>
+                            {(() => {
+                              const proj = projects.find((p) => p.id === wf.project_id);
+                              return proj ? (
+                                <span className="text-[11px] text-muted-foreground shrink-0">{proj.icon} {proj.name}</span>
+                              ) : null;
+                            })()}
                           </div>
                           <p className="text-xs text-muted-foreground truncate mt-0.5">
                             Stage {wf.current_stage_position}/{wf.stages.length} ·{" "}
@@ -1030,6 +1102,18 @@ const WorkflowsPage = () => {
                     <SelectItem value="medium">Medium</SelectItem>
                     <SelectItem value="high">High</SelectItem>
                     <SelectItem value="critical">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Project</Label>
+                <Select value={wfProjectId || "none"} onValueChange={(v) => setWfProjectId(v === "none" ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No project</SelectItem>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.icon} {p.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

@@ -7,14 +7,16 @@ export const workflowTools: McpTool[] = [
       "List workflows visible to the current user (those they raised, are assigned a stage in, or can see by role).",
     inputSchema: objectSchema({
       status: { type: "string", description: "Filter by workflow status (e.g. active, completed)." },
+      project_id: { type: "string", description: "Filter by project UUID." },
       limit: { type: "number", description: "Max rows (default 50, max 200)." },
     }),
     handler: async ({ client }, args) => {
       let q = client
         .from("workflows")
-        .select("id, title, description, status, priority, current_stage_position, raised_by, raised_by_department_id, created_at, completed_at")
+        .select("id, title, description, status, priority, current_stage_position, raised_by, raised_by_department_id, project_id, created_at, completed_at")
         .order("created_at", { ascending: false });
       if (args.status) q = q.eq("status", String(args.status));
+      if (args.project_id) q = q.eq("project_id", String(args.project_id));
       q = q.limit(Math.min(Number(args.limit) || 50, 200));
       const { data, error } = await q;
       if (error) throw new Error(error.message);

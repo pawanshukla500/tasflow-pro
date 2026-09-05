@@ -21,4 +21,9 @@ describe("notificationActionToPath", () => {
   it("normalizes bare paths", () => {
     expect(notificationActionToPath("my-tasks")).toBe("/my-tasks");
   });
+
+  it("remaps retired Inbox links to Projects", () => {
+    expect(notificationActionToPath("/inbox")).toBe("/projects");
+    expect(notificationActionToPath("https://task.youthnic.shop/inbox")).toBe("/projects");
+  });
 });

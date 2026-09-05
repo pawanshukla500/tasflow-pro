@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapEmbeddedTask, TASK_PAGE_SIZE, TASK_PAGE_SIZE_MAX } from "@/lib/tasksApi";
+import { mapEmbeddedTask, TASK_PAGE_SIZE, TASK_PAGE_SIZE_MAX, selectIncludesProjectId } from "@/lib/tasksApi";
 
 describe("tasksApi pagination constants", () => {
   it("keeps a bounded default page size", () => {
@@ -19,6 +19,7 @@ describe("mapEmbeddedTask", () => {
       due_date: null,
       start_date: null,
       department_id: "d1",
+      project_id: "p1",
       created_by: "u1",
       completed_at: null,
       created_at: "2026-07-20T00:00:00Z",
@@ -26,6 +27,7 @@ describe("mapEmbeddedTask", () => {
       blocked_by: ["t2"],
       depends_on: ["t3"],
       departments: { id: "d1", name: "Engineering", color: "#336699" },
+      projects: { id: "p1", name: "Website", color: "#0D9488", icon: "🚀" },
       task_assignees: [
         {
           user_id: "u2",
@@ -41,6 +43,9 @@ describe("mapEmbeddedTask", () => {
     expect(task.assignees[0]?.name).toBe("Alex Chen");
     expect(task.department_name).toBe("Engineering");
     expect(task.department_color).toBe("#336699");
+    expect(task.project_id).toBe("p1");
+    expect(task.project_name).toBe("Website");
+    expect(task.project_icon).toBe("🚀");
     expect(task.comment_count).toBe(2);
     expect(task.attachment_count).toBe(1);
     expect(task.subtasks).toHaveLength(1);
@@ -75,5 +80,13 @@ describe("mapEmbeddedTask", () => {
     expect(task.comment_count).toBe(0);
     expect(task.blocked_by).toEqual([]);
     expect(task.depends_on).toEqual([]);
+  });
+});
+
+describe("selectIncludesProjectId", () => {
+  it("detects project_id in the select list but not in fallbacks without it", () => {
+    expect(selectIncludesProjectId("id, title, project_id, created_at")).toBe(true);
+    expect(selectIncludesProjectId("id, title, department_id, created_at")).toBe(false);
+    expect(selectIncludesProjectId("projects ( id, name )")).toBe(false);
   });
 });

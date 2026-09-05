@@ -26,6 +26,7 @@ interface CreateTaskModalProps {
   onClose: () => void;
   onCreated?: () => void;
   initialStatus?: string;
+  initialProjectId?: string | null;
 }
 
 type Priority = "critical" | "high" | "medium" | "low";
@@ -40,14 +41,16 @@ const priorityColorMap: Record<Priority, string> = {
 
 interface DeptOption { id: string; name: string; }
 interface UserOption { id: string; name: string; department_id: string | null; }
+interface ProjectOption { id: string; name: string; icon: string; color: string; }
 
-const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalProps) => {
+const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }: CreateTaskModalProps) => {
   const { user } = useAuth();
   const [priority, setPriority] = useState<Priority>("medium");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assignees, setAssignees] = useState<string[]>([]);
   const [deptId, setDeptId] = useState("");
+  const [projectId, setProjectId] = useState(initialProjectId || "");
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [dueTime, setDueTime] = useState<string>("");
   const [status, setStatus] = useState(initialStatus || "todo");
@@ -62,17 +65,24 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [departments, setDepartments] = useState<DeptOption[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
 
   useEffect(() => {
     Promise.all([
       supabase.from("departments").select("id, name").order("name"),
       supabase.from("profiles").select("id, name, department_id").eq("active", true).order("name"),
-    ]).then(([d, u]) => {
+      supabase.from("projects").select("id, name, icon, color").eq("status", "active").order("name"),
+    ]).then(([d, u, p]) => {
       setDepartments(d.data || []);
       setUsers(u.data || []);
+      setProjects((p.data || []) as ProjectOption[]);
     });
   }, []);
+
+  useEffect(() => {
+    setProjectId(initialProjectId || "");
+  }, [initialProjectId]);
 
   const assignableUsers = users;
 
@@ -129,7 +139,7 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
     setSaving(true);
     try {
       const orgId = (user?.profile as { organization_id?: string | null } | undefined)?.organization_id;
-      const { data: task, error } = await supabase.from("tasks").insert({
+      const insertRow: Record<string, unknown> = {
         title: title.trim(),
         description: description || null,
         priority,
@@ -142,7 +152,9 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
         frequency,
         requires_review: requiresReview,
         reviewer_user_id: requiresReview && reviewerUserId ? reviewerUserId : null,
-      }).select("id").single();
+      };
+      if (projectId) insertRow.project_id = projectId;
+      const { data: task, error } = await supabase.from("tasks").insert(insertRow as never).select("id").single();
 
       if (error) throw error;
 
@@ -330,6 +342,27 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
                   </div>
                 </PopoverContent>
               </Popover>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Project</Label>
+              <Select
+                value={projectId || "none"}
+                onValueChange={(v) => setProjectId(v === "none" ? "" : v)}
+                disabled={!!initialProjectId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Optional space for this work" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No project</SelectItem>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.icon} {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

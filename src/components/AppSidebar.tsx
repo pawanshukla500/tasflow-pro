@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  Home, CheckSquare, Inbox, LayoutGrid, Calendar, GitBranch,
+  Home, CheckSquare, FolderKanban, LayoutGrid, Calendar, GitBranch,
   Target, Users, Building2, BarChart3, Settings, Plus, TrendingUp,
   Search, ChevronLeft, ChevronRight, LogOut, Sun, Moon, StickyNote,
 } from "lucide-react";
@@ -25,7 +25,7 @@ const navItems: { group: string | null; items: NavItem[] }[] = [
   { group: "WORKSPACE", items: [
     { label: "Home", icon: Home, path: "/" },
     { label: "My Tasks", icon: CheckSquare, path: "/my-tasks" },
-    { label: "Inbox", icon: Inbox, path: "/inbox" },
+    { label: "Projects", icon: FolderKanban, path: "/projects" },
     { label: "Quick Notes", icon: StickyNote, path: "/notes" },
   ]},
   { group: "OPERATIONS", items: [
@@ -151,7 +151,10 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
                 if (item.managerUp) return isManagerUp;
                 return true;
               }).map((item) => {
-                const active = location.pathname === item.path;
+                const active =
+                  item.path === "/"
+                    ? location.pathname === "/"
+                    : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
                 return (
                   <button
                     key={item.path}

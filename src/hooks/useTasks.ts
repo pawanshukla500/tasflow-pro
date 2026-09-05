@@ -19,8 +19,12 @@ export type { TaskRow };
 /** Shared React Query keys — Board, My Tasks, Dashboard, etc. share one cache. */
 export const tasksKeys = {
   all: ["tasks"] as const,
-  list: (opts: { autoLoadBounded: boolean; boundedMax: number; pageSize: number }) =>
-    [...tasksKeys.all, "list", opts] as const,
+  list: (opts: {
+    autoLoadBounded: boolean;
+    boundedMax: number;
+    pageSize: number;
+    projectId?: string | null;
+  }) => [...tasksKeys.all, "list", opts] as const,
 };
 
 export type TasksCache = {
@@ -39,6 +43,8 @@ export type UseTasksOptions = {
    */
   autoLoadBounded?: boolean;
   boundedMax?: number;
+  /** When set, only load tasks in this project (server-side filter). */
+  projectId?: string | null;
 };
 
 export function applyTaskStatus(
@@ -88,9 +94,11 @@ async function loadTasksCache(options: {
   autoLoadBounded: boolean;
   boundedMax: number;
   pageSize: number;
+  projectId?: string | null;
 }): Promise<TasksCache> {
+  const pageOpts = options.projectId ? { projectId: options.projectId } : {};
   if (options.autoLoadBounded) {
-    const { tasks, total, hasMore } = await fetchTasksBounded(options.boundedMax);
+    const { tasks, total, hasMore } = await fetchTasksBounded(options.boundedMax, pageOpts);
     return {
       tasks,
       total,
@@ -98,7 +106,7 @@ async function loadTasksCache(options: {
       page: Math.ceil(tasks.length / options.pageSize) || 1,
     };
   }
-  const result = await fetchTasksPage({ page: 1, limit: options.pageSize });
+  const result = await fetchTasksPage({ page: 1, limit: options.pageSize, ...pageOpts });
   return {
     tasks: result.tasks,
     total: result.total,
@@ -144,13 +152,14 @@ export function useTasks(options: UseTasksOptions = {}) {
   const pageSize = options.pageSize ?? TASK_PAGE_SIZE;
   const autoLoadBounded = options.autoLoadBounded ?? true;
   const boundedMax = options.boundedMax ?? 300;
+  const projectId = options.projectId ?? null;
   const queryClient = useQueryClient();
   const [loadingMore, setLoadingMore] = useState(false);
   const invalidateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const listOpts = useMemo(
-    () => ({ autoLoadBounded, boundedMax, pageSize }),
-    [autoLoadBounded, boundedMax, pageSize],
+    () => ({ autoLoadBounded, boundedMax, pageSize, projectId }),
+    [autoLoadBounded, boundedMax, pageSize, projectId],
   );
   const queryKey = tasksKeys.list(listOpts);
 
@@ -251,7 +260,7 @@ export function useTasks(options: UseTasksOptions = {}) {
     setLoadingMore(true);
     const nextPage = cached.page + 1;
     try {
-      const result = await fetchTasksPage({ page: nextPage, limit: pageSize });
+      const result = await fetchTasksPage({ page: nextPage, limit: pageSize, projectId });
       queryClient.setQueryData<TasksCache>(queryKey, (prev) => {
         const base = prev ?? cached;
         const seen = new Set(base.tasks.map((t) => t.id));
@@ -271,7 +280,7 @@ export function useTasks(options: UseTasksOptions = {}) {
     } finally {
       setLoadingMore(false);
     }
-  }, [queryClient, queryKey, pageSize, loadingMore]);
+  }, [queryClient, queryKey, pageSize, loadingMore, projectId]);
 
   const updateTaskStatus = useCallback(
     async (taskId: string, status: string) => {

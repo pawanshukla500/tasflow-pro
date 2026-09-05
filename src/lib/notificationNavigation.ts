@@ -1,3 +1,5 @@
+import { remapRetiredInboxPath } from "@/lib/projects";
+
 /**
  * Converts notification action_url values (absolute or relative) into a path
  * suitable for React Router navigate().
@@ -7,17 +9,19 @@ export function notificationActionToPath(url: string): string {
   if (!trimmed) return "/";
 
   if (trimmed.startsWith("/") && !trimmed.startsWith("//")) {
-    return trimmed;
+    return remapRetiredInboxPath(trimmed);
   }
 
   try {
     const parsed = new URL(trimmed);
     if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-      return `${parsed.pathname}${parsed.search}${parsed.hash}` || "/";
+      const path = `${parsed.pathname}${parsed.search}${parsed.hash}` || "/";
+      return remapRetiredInboxPath(path);
     }
   } catch {
     // Fall through for non-URL strings.
   }
 
-  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  const normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return remapRetiredInboxPath(normalized);
 }

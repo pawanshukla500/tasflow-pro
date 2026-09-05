@@ -115,11 +115,12 @@ export const taskTools: McpTool[] = [
   {
     name: "list_tasks",
     description:
-      "List tasks visible to the current user (scoped by their role). Optional filters by status, priority, or department. Paginated (default 50, max 100).",
+      "List tasks visible to the current user (scoped by their role). Optional filters by status, priority, department, or project. Paginated (default 50, max 100).",
     inputSchema: objectSchema({
       status: { type: "string", enum: STATUSES, description: "Filter by task status." },
       priority: { type: "string", enum: PRIORITIES, description: "Filter by priority." },
       department_id: { type: "string", description: "Filter by department UUID." },
+      project_id: { type: "string", description: "Filter by project UUID." },
       limit: { type: "number", description: "Max rows (default 50, max 100)." },
       offset: { type: "number", description: "Offset for pagination (default 0)." },
     }),
@@ -134,6 +135,7 @@ export const taskTools: McpTool[] = [
           if (args.status) qq = qq.eq("status", String(args.status));
           if (args.priority) qq = qq.eq("priority", String(args.priority));
           if (args.department_id) qq = qq.eq("department_id", String(args.department_id));
+          if (args.project_id) qq = qq.eq("project_id", String(args.project_id));
           return qq.range(offset, offset + limit - 1);
         },
         limit,
@@ -198,6 +200,7 @@ export const taskTools: McpTool[] = [
           type: "string",
           description: "Department UUID. Defaults to the caller's department.",
         },
+        project_id: { type: "string", description: "Project UUID to attach this task to." },
         assignee_ids: {
           type: "array",
           items: { type: "string" },
@@ -216,25 +219,42 @@ export const taskTools: McpTool[] = [
       },
       ["title"],
     ),
-    handler: async ({ client, userId }, args) => {
+    handler: async ({ client, userId, organizationId }, args) => {
       const { data: profile } = await client
         .from("profiles").select("department_id, organization_id").eq("id", userId).maybeSingle();
       const status = STATUSES.includes(String(args.status || "")) ? String(args.status) : "todo";
       const priority = PRIORITIES.includes(String(args.priority || "")) ? String(args.priority) : "medium";
-      const { data, error } = await client
-        .from("tasks")
-        .insert({
+      const orgId = profile?.organization_id ?? organizationId ?? null;
+      let projectId: string | null = null;
+      if (args.project_id) {
+        const { data: proj, error: pErr } = await client
+          .from("projects")
+          .select("id, organization_id")
+          .eq("id", String(args.project_id))
+          .maybeSingle();
+        if (pErr) throw new Error(pErr.message);
+        if (!proj) throw new Error("Project not found or not accessible");
+        if (orgId && proj.organization_id && proj.organization_id !== orgId) {
+          throw new Error("Project is not in your organization");
+        }
+        projectId = proj.id;
+      }
+      const insertRow: Record<string, unknown> = {
           title: String(args.title).trim(),
           description: args.description ? String(args.description) : null,
           status,
           priority,
           due_date: args.due_date ? String(args.due_date) : null,
           department_id: args.department_id ? String(args.department_id) : profile?.department_id ?? null,
-          organization_id: profile?.organization_id ?? null,
+          organization_id: orgId,
           created_by: userId,
           blocked_by: Array.isArray(args.blocked_by) ? args.blocked_by.map(String) : [],
           depends_on: Array.isArray(args.depends_on) ? args.depends_on.map(String) : [],
-        })
+      };
+      if (projectId) insertRow.project_id = projectId;
+      const { data, error } = await client
+        .from("tasks")
+        .insert(insertRow)
         .select("id, title, status, priority, due_date, department_id, created_at")
         .maybeSingle();
       if (error) throw new Error(error.message);
@@ -263,6 +283,7 @@ export const taskTools: McpTool[] = [
         status: { type: "string", enum: STATUSES },
         priority: { type: "string", enum: PRIORITIES },
         due_date: { type: "string" },
+        project_id: { type: "string", description: "Project UUID, or empty string to clear." },
         blocked_by: { type: "array", items: { type: "string" } },
         depends_on: { type: "array", items: { type: "string" } },
       },
@@ -275,6 +296,7 @@ export const taskTools: McpTool[] = [
       if (args.status != null && STATUSES.includes(String(args.status))) patch.status = String(args.status);
       if (args.priority != null && PRIORITIES.includes(String(args.priority))) patch.priority = String(args.priority);
       if (args.due_date != null) patch.due_date = String(args.due_date);
+      if (args.project_id != null) patch.project_id = String(args.project_id) || null;
       if (Array.isArray(args.blocked_by)) patch.blocked_by = args.blocked_by.map(String);
       if (Array.isArray(args.depends_on)) patch.depends_on = args.depends_on.map(String);
       if (Object.keys(patch).length === 0) throw new Error("No fields to update");

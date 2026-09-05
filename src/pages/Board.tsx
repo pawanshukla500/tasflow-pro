@@ -14,6 +14,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAccessScope } from "@/hooks/useAccessScope";
 import { ScopeBanner } from "@/components/ScopeBanner";
 import { PageHeader } from "@/components/PageHeader";
+import { ProjectBadge } from "@/components/ProjectBadge";
+import { useProjects } from "@/hooks/useProjects";
 import {
   allowedStatusesForUser,
   canDeleteTask,
@@ -112,6 +114,8 @@ const Board = () => {
   const [viewMode, setViewMode] = useState<BoardViewMode>("user");
   const [filterUserId, setFilterUserId] = useState("all");
   const [filterDeptId, setFilterDeptId] = useState("all");
+  const [filterProjectId, setFilterProjectId] = useState("all");
+  const { projects } = useProjects();
 
   const isLeadership = accessScope.hasFullAccess || accessScope.isManager || accessScope.isHR;
   const { metrics: myPerfMetrics } = usePerformance(user?.id ? [user.id] : undefined);
@@ -129,14 +133,18 @@ const Board = () => {
   }, [user, filterProfiles, filterDepartments]);
 
   const tasks = useMemo(
-    () =>
-      filterBoardTasks(
+    () => {
+      const scoped = filterBoardTasks(
         allTasks,
         profiles,
         viewMode === "user" && isLeadership ? filterUserId : null,
         viewMode === "department" && isLeadership ? filterDeptId : null,
-      ),
-    [allTasks, profiles, filterBoardTasks, viewMode, isLeadership, filterUserId, filterDeptId],
+      );
+      if (filterProjectId === "all") return scoped;
+      if (filterProjectId === "none") return scoped.filter((t) => !t.project_id);
+      return scoped.filter((t) => t.project_id === filterProjectId);
+    },
+    [allTasks, profiles, filterBoardTasks, viewMode, isLeadership, filterUserId, filterDeptId, filterProjectId],
   );
 
   const today = todayIST();
@@ -247,6 +255,18 @@ const Board = () => {
         }
         actions={
           <div className="flex items-center gap-2.5 flex-wrap">
+            <Select value={filterProjectId} onValueChange={setFilterProjectId}>
+              <SelectTrigger className="w-full sm:w-48 h-9 text-xs cursor-pointer bg-background">
+                <SelectValue placeholder="All projects" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All projects</SelectItem>
+                <SelectItem value="none">No project</SelectItem>
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.icon} {p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
               <LayoutGrid className="h-3.5 w-3.5" aria-hidden />
               <span className="font-mono-num font-semibold text-foreground tabular-nums">{tasks.length}</span>
@@ -448,6 +468,9 @@ const Board = () => {
                           <Badge variant="secondary" className="text-[9px] h-5 px-1.5 font-medium">
                             {task.department_name}
                           </Badge>
+                        )}
+                        {task.project_name && (
+                          <ProjectBadge name={task.project_name} color={task.project_color} icon={task.project_icon} />
                         )}
                       </div>
 
