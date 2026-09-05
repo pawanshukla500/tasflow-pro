@@ -54,6 +54,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
   const [priority, setPriority] = useState<Priority>((task.priority as Priority) || "medium");
   const [status, setStatus] = useState(task.status);
   const [deptId, setDeptId] = useState(task.department_id || "");
+  const [projectId, setProjectId] = useState(task.project_id || "");
   const [assignees, setAssignees] = useState<string[]>(task.assignees.map((a) => a.user_id));
   const [dueDate, setDueDate] = useState<Date | undefined>(task.due_date ? new Date(task.due_date) : undefined);
   const [frequency, setFrequency] = useState(task.frequency || "none");
@@ -62,6 +63,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
   const [saving, setSaving] = useState(false);
   const [reviewMode, setReviewMode] = useState<"submit" | "approve" | "reject" | null>(null);
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string; icon: string }[]>([]);
   const [users, setUsers] = useState<{ id: string; name: string; department_id: string | null }[]>([]);
   const [subtasks, setSubtasks] = useState<SubtaskDraft[]>([]);
   const [showExtendDue, setShowExtendDue] = useState(false);
@@ -74,11 +76,13 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
     Promise.all([
       supabase.from("departments").select("id, name").order("name"),
       supabase.from("profiles").select("id, name, department_id").eq("active", true).order("name"),
+      supabase.from("projects").select("id, name, icon").eq("status", "active").order("name"),
       supabase.from("task_subtasks").select("id, title, completed, position").eq("task_id", task.id).order("position"),
       supabase.from("task_due_date_events").select("old_due_date, new_due_date, reason, created_at").eq("task_id", task.id).order("created_at", { ascending: false }).limit(5),
-    ]).then(([d, u, st, ext]) => {
+    ]).then(([d, u, p, st, ext]) => {
       setDepartments(d.data || []);
       setUsers(u.data || []);
+      setProjects((p.data || []) as { id: string; name: string; icon: string }[]);
       setSubtasks((st.data || []).map((s) => ({ id: s.id, title: s.title, completed: s.completed })));
       setExtensionHistory(ext.data || []);
     });
@@ -121,6 +125,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
         priority,
         status,
         department_id: deptId || null,
+        project_id: projectId || null,
         due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
         frequency,
         requires_review: requiresReview,
@@ -289,6 +294,22 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
                   </Select>
                 ) : (
                   <Input value={task.department_name || "—"} disabled />
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>Project</Label>
+                {canEdit ? (
+                  <Select value={projectId || "none"} onValueChange={(v) => setProjectId(v === "none" ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No project</SelectItem>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.icon} {p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={task.project_name || "—"} disabled />
                 )}
               </div>
             </div>

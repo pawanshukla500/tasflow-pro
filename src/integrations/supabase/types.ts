@@ -865,6 +865,73 @@ export type Database = {
           },
         ]
       }
+      projects: {
+        Row: {
+          color: string
+          created_at: string
+          created_by: string | null
+          default_view: string
+          department_id: string | null
+          description: string | null
+          icon: string
+          id: string
+          name: string
+          organization_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          created_by?: string | null
+          default_view?: string
+          department_id?: string | null
+          description?: string | null
+          icon?: string
+          id?: string
+          name: string
+          organization_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          created_by?: string | null
+          default_view?: string
+          department_id?: string | null
+          description?: string | null
+          icon?: string
+          id?: string
+          name?: string
+          organization_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppressed_emails: {
         Row: {
           created_at: string
@@ -1011,6 +1078,7 @@ export type Database = {
           next_due_date: string | null
           organization_id: string | null
           priority: string
+          project_id: string | null
           recurrence_parent_id: string | null
           start_date: string | null
           status: string
@@ -1032,6 +1100,7 @@ export type Database = {
           next_due_date?: string | null
           organization_id?: string | null
           priority?: string
+          project_id?: string | null
           recurrence_parent_id?: string | null
           start_date?: string | null
           status?: string
@@ -1053,6 +1122,7 @@ export type Database = {
           next_due_date?: string | null
           organization_id?: string | null
           priority?: string
+          project_id?: string | null
           recurrence_parent_id?: string | null
           start_date?: string | null
           status?: string
@@ -1067,6 +1137,13 @@ export type Database = {
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
@@ -1448,6 +1525,7 @@ export type Database = {
           id: string
           outcome_label: string | null
           priority: string
+          project_id: string | null
           raised_by: string | null
           raised_by_department_id: string | null
           status: string
@@ -1463,6 +1541,7 @@ export type Database = {
           id?: string
           outcome_label?: string | null
           priority?: string
+          project_id?: string | null
           raised_by?: string | null
           raised_by_department_id?: string | null
           status?: string
@@ -1478,6 +1557,7 @@ export type Database = {
           id?: string
           outcome_label?: string | null
           priority?: string
+          project_id?: string | null
           raised_by?: string | null
           raised_by_department_id?: string | null
           status?: string
@@ -1486,6 +1566,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "workflows_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "workflows_raised_by_department_id_fkey"
             columns: ["raised_by_department_id"]

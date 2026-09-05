@@ -15,6 +15,8 @@ describe("task assignment email policy", () => {
     const modal = readFileSync(resolve(srcDir, "components/CreateTaskModal.tsx"), "utf8");
     expect(modal).toContain("sendEmail: SEND_EMAIL_ON_TASK_CREATE");
     expect(modal).not.toMatch(/sendEmail:\s*false/);
+    expect(modal).toContain("initialProjectId");
+    expect(modal).toContain("project_id: projectId || null");
   });
 
   it("keeps bulk CSV import in-app only so a large import cannot flood inboxes", () => {

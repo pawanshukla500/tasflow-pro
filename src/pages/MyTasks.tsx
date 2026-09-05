@@ -248,7 +248,7 @@ const MyTasks = () => {
     const csv = [
       ["Title", "Status", "Priority", "Due Date", "Department"].join(","),
       ...filtered.map((t) =>
-        [`"${t.title}"`, statusLabels[t.status] || t.status, t.priority, t.due_date || "", t.department_name || ""].join(","),
+        [`"${t.title}"`, statusLabels[t.status] || t.status, t.priority, t.due_date || "", t.department_name || "", t.project_name || ""].join(","),
       ),
     ].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -314,6 +314,12 @@ const MyTasks = () => {
               <>
                 <span className="opacity-30">·</span>
                 <span className="truncate max-w-[120px]">{task.department_name}</span>
+              </>
+            )}
+            {task.project_name && (
+              <>
+                <span className="opacity-30">·</span>
+                <span className="truncate max-w-[120px]">{task.project_icon ? `${task.project_icon} ` : ""}{task.project_name}</span>
               </>
             )}
             <span className="sm:hidden inline-flex items-center gap-1.5">

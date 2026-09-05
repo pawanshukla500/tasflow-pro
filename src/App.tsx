@@ -23,7 +23,8 @@ const TeamPage = lazy(() => import("./pages/TeamPage"));
 const DepartmentsPage = lazy(() => import("./pages/DepartmentsPage"));
 const WorkflowsPage = lazy(() => import("./pages/WorkflowsPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
-const InboxPage = lazy(() => import("./pages/InboxPage"));
+const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
+const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const NotesPage = lazy(() => import("./pages/NotesPage"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
@@ -110,7 +111,9 @@ const AppRoutes = () => (
           {/* Workflows is open to all users — RLS scopes employees to workflows they raised or are assigned a stage in */}
           <Route path="/workflows" element={<WorkflowsPage />} />
           <Route path="/reports" element={<RoleRoute roles={["manager"]}><ReportsPage /></RoleRoute>} />
-          <Route path="/inbox" element={<InboxPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/projects/:id" element={<ProjectDetailPage />} />
+          <Route path="/inbox" element={<Navigate to="/projects" replace />} />
           <Route path="/notes" element={<NotesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/list" element={<Navigate to="/my-tasks" replace />} />

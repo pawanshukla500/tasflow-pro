@@ -1,18 +1,14 @@
 import { useEffect, useRef, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 /**
- * Global chat notifier: subscribes to chat_messages whenever the user is signed in,
- * plays a sound and shows an in-app toast for any incoming message — works on
- * every page, not just the Inbox.
+ * Global chat notifier: toasts incoming messages. Inbox was removed as a
+ * product surface; NotificationCenter remains the in-app alert hub.
  */
 const ChatNotifications = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
   const myConvosRef = useRef<Set<string>>(new Set());
 
   // Ask once for browser notification permission
@@ -102,18 +98,10 @@ const ChatNotifications = () => {
 
           playDing();
 
-          // Skip toast if user is already on Inbox viewing chats — Inbox shows the message inline
-          const onInbox = location.pathname.startsWith("/inbox");
-          if (!onInbox) {
-            toast(senderName, {
-              description: m.body.slice(0, 120),
-              action: {
-                label: "Open",
-                onClick: () => navigate("/inbox"),
-              },
-              duration: 6000,
-            });
-          }
+          toast(senderName, {
+            description: m.body.slice(0, 120),
+            duration: 6000,
+          });
 
           // Browser notification when tab not focused
           if ("Notification" in window && Notification.permission === "granted" && document.visibilityState !== "visible") {
@@ -121,7 +109,6 @@ const ChatNotifications = () => {
               const n = new Notification(senderName, { body: m.body.slice(0, 140), tag: m.conversation_id });
               n.onclick = () => {
                 window.focus();
-                navigate("/inbox");
                 n.close();
               };
             } catch {}
@@ -133,7 +120,7 @@ const ChatNotifications = () => {
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [user?.id, location.pathname, navigate, playDing]);
+  }, [user?.id, playDing]);
 
   return null;
 };
