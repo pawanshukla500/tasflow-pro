@@ -1,12 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Plus, Calendar as CalendarIcon, LayoutGrid, List, GitBranch, ChevronLeft,
-  Circle, Loader, Eye, CheckCircle2, Ban, Archive, Pencil,
+  Archive, Pencil,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Breadcrumb,
@@ -20,34 +18,24 @@ import { EmptyState } from "@/components/EmptyState";
 import CreateTaskModal from "@/components/CreateTaskModal";
 import EditTaskModal from "@/components/EditTaskModal";
 import { CreateProjectDialog } from "@/components/CreateProjectDialog";
+import { ProjectPipelineBar } from "@/components/ProjectPipelineBar";
+import { ProjectBoardView } from "@/components/ProjectBoardView";
 import { useProject, useProjectMutations } from "@/hooks/useProjects";
 import { useTasks, type TaskRow } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
-import { isProjectView, projectProgress, type ProjectView } from "@/lib/projects";
-import { TASK_STATUS_LABELS } from "@/lib/taskPermissions";
-import { todayIST, formatDateIST } from "@/lib/time";
+import { isProjectView, type ProjectView } from "@/lib/projects";
+import {
+  PROJECT_BOARD_COLUMNS,
+  summarizeProjectPipeline,
+  taskMatchesStatus,
+  type ProjectPipelineStatus,
+} from "@/lib/projectPipeline";
+import { formatDateIST, todayIST } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 
-type TaskStatus = "todo" | "in_progress" | "pending_review" | "done" | "blocked";
-
-const columns: {
-  status: TaskStatus;
-  label: string;
-  icon: LucideIcon;
-  rail: string;
-  tint: string;
-  countBg: string;
-}[] = [
-  { status: "todo", label: "To Do", icon: Circle, rail: "bg-muted-foreground/50", tint: "from-muted/80 to-muted/20", countBg: "bg-muted text-muted-foreground" },
-  { status: "in_progress", label: "In Progress", icon: Loader, rail: "bg-primary", tint: "from-primary/[0.08] to-transparent", countBg: "bg-primary/12 text-primary" },
-  { status: "pending_review", label: "Pending Review", icon: Eye, rail: "bg-warning", tint: "from-warning/[0.08] to-transparent", countBg: "bg-warning/15 text-warning" },
-  { status: "done", label: "Done", icon: CheckCircle2, rail: "bg-success", tint: "from-success/[0.08] to-transparent", countBg: "bg-success/12 text-success" },
-  { status: "blocked", label: "Blocked", icon: Ban, rail: "bg-destructive", tint: "from-destructive/[0.08] to-transparent", countBg: "bg-destructive/12 text-destructive" },
-];
-
-const priorityColors: Record<string, string> = {
+const PRIORITY_COLORS: Record<string, string> = {
   critical: "hsl(var(--destructive))",
   high: "hsl(var(--warning))",
   medium: "hsl(var(--primary))",
@@ -66,7 +54,7 @@ export default function ProjectDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { project, loading: projectLoading } = useProject(id);
-  const { tasks: projectTasks, loading: tasksLoading } = useTasks({
+  const { tasks: projectTasks, loading: tasksLoading, updateTaskStatus } = useTasks({
     projectId: id,
     boundedMax: 800,
   });
@@ -76,6 +64,8 @@ export default function ProjectDetailPage() {
   const [editingTask, setEditingTask] = useState<TaskRow | null>(null);
   const [editProjectOpen, setEditProjectOpen] = useState(false);
   const [month, setMonth] = useState(() => new Date());
+  const [focusStatus, setFocusStatus] = useState<ProjectPipelineStatus | null>(null);
+  const columnRefs = useRef<Partial<Record<ProjectPipelineStatus, HTMLElement | null>>>({});
 
   const viewParam = searchParams.get("view");
   const view: ProjectView = isProjectView(viewParam)
@@ -113,9 +103,19 @@ export default function ProjectDetailPage() {
     enabled: !!id,
   });
 
+  const pipeline = useMemo(() => summarizeProjectPipeline(projectTasks), [projectTasks]);
   const today = todayIST();
-  const done = projectTasks.filter((t) => t.status === "done").length;
-  const pct = projectProgress(done, projectTasks.length);
+
+  const selectStep = (status: ProjectPipelineStatus) => {
+    setFocusStatus(status);
+    if (view !== "board" && view !== "list") {
+      setView("board");
+    }
+    requestAnimationFrame(() => {
+      const target = document.getElementById(`project-step-${status}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    });
+  };
 
   if (projectLoading) {
     return (
@@ -146,7 +146,7 @@ export default function ProjectDetailPage() {
   const days: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
 
   return (
-    <div className="p-4 md:p-6 space-y-4 h-full flex flex-col page-enter overflow-hidden">
+    <div className="p-4 md:p-6 space-y-3 flex-1 min-h-0 flex flex-col overflow-hidden page-enter">
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
@@ -165,7 +165,7 @@ export default function ProjectDetailPage() {
         </BreadcrumbList>
       </Breadcrumb>
 
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 shrink-0">
         <div className="min-w-0 space-y-1.5">
           <h1 className="text-page-title flex items-center gap-2.5 min-w-0">
             <span
@@ -181,9 +181,6 @@ export default function ProjectDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap shrink-0">
-          <span className="text-xs text-muted-foreground">
-            <span className="font-mono-num font-semibold text-foreground">{pct}%</span> complete
-          </span>
           <Button variant="outline" size="sm" onClick={() => setEditProjectOpen(true)}>
             <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
           </Button>
@@ -216,7 +213,15 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      <Tabs value={view} onValueChange={(v) => setView(v as ProjectView)}>
+      <div className="shrink-0">
+        <ProjectPipelineBar
+          summary={pipeline}
+          focusStatus={focusStatus}
+          onSelectStep={selectStep}
+        />
+      </div>
+
+      <Tabs value={view} onValueChange={(v) => setView(v as ProjectView)} className="shrink-0">
         <TabsList className="h-9 bg-muted/70">
           <TabsTrigger value="board" className="text-xs gap-1.5">
             <LayoutGrid className="h-3.5 w-3.5" />Board
@@ -236,107 +241,79 @@ export default function ProjectDetailPage() {
       {tasksLoading && view !== "workflows" ? (
         <p className="text-sm text-muted-foreground">Loading tasks…</p>
       ) : view === "board" ? (
-        <div className="flex gap-3 overflow-x-auto pb-4 flex-1 min-h-0">
-          {columns.map((col) => {
-            const colTasks = projectTasks.filter(
-              (t) => t.status === col.status || (col.status === "pending_review" && t.status === "in_review"),
-            );
-            const ColIcon = col.icon;
-            return (
-              <div key={col.status} className="w-[280px] md:w-[300px] shrink-0 flex flex-col rounded-2xl border bg-card/70 overflow-hidden">
-                <div className={cn("relative bg-gradient-to-b", col.tint)}>
-                  <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl", col.rail)} aria-hidden />
-                  <div className="flex items-center gap-2 pl-4 pr-2 py-3">
-                    <ColIcon className="h-3.5 w-3.5" />
-                    <p className="text-sm font-semibold flex-1">{col.label}</p>
-                    <span className={cn("text-[10px] font-mono-num px-2 py-0.5 rounded-md", col.countBg)}>{colTasks.length}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      aria-label={`Add task to ${col.label}`}
-                      onClick={() => { setCreateStatus(col.status); setShowCreate(true); }}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex-1 space-y-2 overflow-y-auto px-2.5 pb-2.5 min-h-[120px]">
-                  {colTasks.map((task) => {
-                    const isOverdue = task.due_date && task.due_date < today && task.status !== "done";
-                    return (
-                      <button
-                        key={task.id}
-                        type="button"
-                        onClick={() => setEditingTask(task)}
-                        className="card-premium p-3.5 w-full text-left hover-lift"
-                      >
-                        <p className="text-sm font-semibold leading-snug line-clamp-2">{task.title}</p>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                          <span className="inline-flex items-center gap-1 text-[10px] capitalize text-muted-foreground">
-                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: priorityColors[task.priority] }} />
-                            {task.priority}
-                          </span>
-                          {task.department_name && (
-                            <Badge variant="secondary" className="text-[9px] h-5 px-1.5">{task.department_name}</Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
-                          <span className="text-[10px] text-muted-foreground truncate">
-                            {task.assignees[0]?.name || "Unassigned"}
-                            {task.assignees.length > 1 ? ` +${task.assignees.length - 1}` : ""}
-                          </span>
-                          {task.due_date && (
-                            <span className={cn("text-[10px] font-mono-num", isOverdue && "text-destructive font-semibold")}>
-                              {formatDateIST(task.due_date)}
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {colTasks.length === 0 && (
-                    <p className="text-xs text-muted-foreground text-center py-8">No tasks</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <ProjectBoardView
+          tasks={projectTasks}
+          focusStatus={focusStatus}
+          columnRefs={columnRefs}
+          onCreateInStatus={(status) => {
+            setCreateStatus(status);
+            setShowCreate(true);
+          }}
+          onOpenTask={setEditingTask}
+          onMoveTask={updateTaskStatus}
+        />
       ) : view === "list" ? (
-        <div className="bg-card rounded-xl border divide-y flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto min-h-0 space-y-3 pb-2">
           {projectTasks.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">No tasks in this project yet.</p>
+            <div className="bg-card rounded-xl border">
+              <p className="text-sm text-muted-foreground text-center py-12">No tasks in this project yet.</p>
+            </div>
           ) : (
-            projectTasks.map((task) => (
-              <button
-                key={task.id}
-                type="button"
-                onClick={() => setEditingTask(task)}
-                className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-muted/40"
-              >
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: priorityColors[task.priority] }}
-                />
-                <span className={cn("flex-1 text-sm font-medium truncate", task.status === "done" && "line-through text-muted-foreground")}>
-                  {task.title}
-                </span>
-                <span className="text-[11px] text-muted-foreground hidden sm:inline">
-                  {TASK_STATUS_LABELS[task.status] || task.status}
-                </span>
-                <span className="text-[11px] text-muted-foreground w-24 truncate hidden md:inline">
-                  {task.assignees[0]?.name || "Unassigned"}
-                </span>
-                <span className="text-[11px] font-mono-num text-muted-foreground w-20 text-right">
-                  {task.due_date ? formatDateIST(task.due_date) : "—"}
-                </span>
-              </button>
-            ))
+            PROJECT_BOARD_COLUMNS.map((col) => {
+              const colTasks = projectTasks.filter((t) => taskMatchesStatus(t.status, col.status));
+              const isFocused = focusStatus === col.status;
+              return (
+                <section
+                  key={col.status}
+                  id={`project-step-${col.status}`}
+                  className={cn(
+                    "bg-card rounded-xl border overflow-hidden",
+                    isFocused && cn("ring-2", col.ring),
+                  )}
+                >
+                  <header className="flex items-center gap-2 px-4 py-2.5 border-b bg-muted/30">
+                    <span className={cn("h-2 w-2 rounded-full", col.accent)} aria-hidden />
+                    <h2 className="text-sm font-semibold flex-1">{col.label}</h2>
+                    <span className="text-[11px] font-mono-num text-muted-foreground">{colTasks.length}</span>
+                  </header>
+                  {colTasks.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-6">No tasks</p>
+                  ) : (
+                    <div className="divide-y">
+                      {colTasks.map((task) => {
+                        const isOverdue = task.due_date && task.due_date.slice(0, 10) < today && task.status !== "done";
+                        return (
+                          <button
+                            key={task.id}
+                            type="button"
+                            onClick={() => setEditingTask(task)}
+                            className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-muted/40"
+                          >
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.medium }}
+                            />
+                            <span className={cn("flex-1 text-sm font-medium truncate", task.status === "done" && "line-through text-muted-foreground")}>
+                              {task.title}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground w-24 truncate hidden md:inline">
+                              {task.assignees[0]?.name || "Unassigned"}
+                            </span>
+                            <span className={cn("text-[11px] font-mono-num w-20 text-right", isOverdue ? "text-destructive font-semibold" : "text-muted-foreground")}>
+                              {task.due_date ? formatDateIST(task.due_date) : "—"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              );
+            })
           )}
         </div>
       ) : view === "calendar" ? (
-        <div className="bg-card rounded-xl border overflow-hidden flex-1">
+        <div className="bg-card rounded-xl border overflow-auto flex-1 min-h-0">
           <div className="flex items-center justify-between px-3 py-2 border-b">
             <Button variant="ghost" size="icon" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))} aria-label="Previous month">
               <ChevronLeft className="h-4 w-4" />
@@ -355,7 +332,7 @@ export default function ProjectDetailPage() {
             {days.map((day, i) => {
               if (day === null) return <div key={i} className="min-h-[88px] border-b border-r bg-muted/20" />;
               const dateStr = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-              const dayTasks = projectTasks.filter((t) => t.due_date === dateStr);
+              const dayTasks = projectTasks.filter((t) => t.due_date?.slice(0, 10) === dateStr);
               const isToday = dateStr === today;
               return (
                 <div key={i} className="min-h-[88px] border-b border-r p-1">
@@ -369,7 +346,7 @@ export default function ProjectDetailPage() {
                         type="button"
                         onClick={() => setEditingTask(t)}
                         className="block w-full text-left text-[10px] truncate rounded px-1 py-0.5 hover:bg-muted"
-                        style={{ borderLeft: `2px solid ${priorityColors[t.priority]}` }}
+                        style={{ borderLeft: `2px solid ${PRIORITY_COLORS[t.priority] || PRIORITY_COLORS.medium}` }}
                       >
                         {t.title}
                       </button>
@@ -384,7 +361,7 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       ) : (
-        <div className="space-y-3 flex-1 overflow-auto">
+        <div className="space-y-3 flex-1 overflow-auto min-h-0">
           <div className="flex justify-end">
             <Button size="sm" variant="outline" onClick={() => navigate(`/workflows?project=${project.id}&raise=1`)}>
               <GitBranch className="h-3.5 w-3.5 mr-1.5" />Raise workflow

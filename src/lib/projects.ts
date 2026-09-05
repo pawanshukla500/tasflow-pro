@@ -46,10 +46,19 @@ export interface ProjectRow {
   updated_at: string;
 }
 
+export interface ProjectStatusBreakdown {
+  todo: number;
+  in_progress: number;
+  pending_review: number;
+  done: number;
+  blocked: number;
+}
+
 export interface ProjectWithStats extends ProjectRow {
   openTaskCount: number;
   doneTaskCount: number;
   workflowCount: number;
+  statusCounts: ProjectStatusBreakdown;
   departmentName?: string;
 }
 
