@@ -106,15 +106,17 @@ export default function ProjectDetailPage() {
   const pipeline = useMemo(() => summarizeProjectPipeline(projectTasks), [projectTasks]);
   const today = todayIST();
 
+  useEffect(() => {
+    if (!focusStatus) return;
+    const target = document.getElementById(`project-step-${focusStatus}`);
+    target?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [focusStatus, view]);
+
   const selectStep = (status: ProjectPipelineStatus) => {
     setFocusStatus(status);
     if (view !== "board" && view !== "list") {
       setView("board");
     }
-    requestAnimationFrame(() => {
-      const target = document.getElementById(`project-step-${status}`);
-      target?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-    });
   };
 
   if (projectLoading) {
