@@ -475,6 +475,7 @@ Deno.serve(async (req) => {
       html,
       text: plainText,
       listUnsubscribeUrl: buildUnsubscribeUrl(unsubscribeToken),
+      idempotencyKey,
     })
     await markLog('sent')
     console.log('Transactional email sent', { templateName, effectiveRecipient, resendId })

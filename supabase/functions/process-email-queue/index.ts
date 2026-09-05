@@ -187,6 +187,7 @@ Deno.serve(async (req) => {
           html: String(payload.html),
           text: typeof payload.text === 'string' ? payload.text : undefined,
           listUnsubscribeUrl: unsubscribeToken ? buildUnsubscribeUrl(unsubscribeToken) : undefined,
+          idempotencyKey: typeof payload.idempotency_key === 'string' ? payload.idempotency_key : undefined,
         })
 
         await recordSendOutcome(supabase, queue, payload, 'sent')
