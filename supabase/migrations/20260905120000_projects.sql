@@ -37,8 +37,7 @@ DROP POLICY IF EXISTS "View projects in org" ON public.projects;
 CREATE POLICY "View projects in org"
   ON public.projects FOR SELECT TO authenticated
   USING (
-    organization_id IS NULL
-    OR organization_id = public.user_organization_id(auth.uid())
+    organization_id = public.user_organization_id(auth.uid())
     OR public.is_admin_or_md(auth.uid())
   );
 
@@ -46,8 +45,11 @@ DROP POLICY IF EXISTS "Members create projects in org" ON public.projects;
 CREATE POLICY "Members create projects in org"
   ON public.projects FOR INSERT TO authenticated
   WITH CHECK (
-    public.is_admin_or_md(auth.uid())
-    OR organization_id = public.user_organization_id(auth.uid())
+    organization_id IS NOT NULL
+    AND (
+      public.is_admin_or_md(auth.uid())
+      OR organization_id = public.user_organization_id(auth.uid())
+    )
   );
 
 DROP POLICY IF EXISTS "Members update projects in org" ON public.projects;
@@ -58,8 +60,11 @@ CREATE POLICY "Members update projects in org"
     OR organization_id = public.user_organization_id(auth.uid())
   )
   WITH CHECK (
-    public.is_admin_or_md(auth.uid())
-    OR organization_id = public.user_organization_id(auth.uid())
+    organization_id IS NOT NULL
+    AND (
+      public.is_admin_or_md(auth.uid())
+      OR organization_id = public.user_organization_id(auth.uid())
+    )
   );
 
 DROP POLICY IF EXISTS "Creators and admins delete projects" ON public.projects;

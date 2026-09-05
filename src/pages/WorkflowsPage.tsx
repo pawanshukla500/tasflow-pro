@@ -220,7 +220,7 @@ const WorkflowsPage = () => {
     if (searchParams.get("raise") !== "1") return;
     if (loading) return;
     if (templates.length === 0) return;
-    if (templates.length === 1) openLaunch(templates[0]);
+    if (templates.length === 1) openLaunch(templates[0], searchParams.get("project") || undefined);
     else setShowRaisePicker(true);
     const next = new URLSearchParams(searchParams);
     next.delete("raise");
@@ -269,12 +269,18 @@ const WorkflowsPage = () => {
     fetchAll();
   };
 
-  const openLaunch = (t: Template) => {
+  const openLaunch = (t: Template, projectOverride?: string) => {
     setLaunchTemplate(t);
     setWfTitle(t.name);
     setWfDescription("");
     setWfPriority("medium");
-    setWfProjectId(filterProjectId !== "all" && filterProjectId !== "none" ? filterProjectId : wfProjectId);
+    const fromUrl = searchParams.get("project");
+    const next =
+      projectOverride
+      || (filterProjectId !== "all" && filterProjectId !== "none" ? filterProjectId : "")
+      || fromUrl
+      || wfProjectId;
+    setWfProjectId(next || "");
     setLaunchRefId("");
     setLaunchStages(t.stages.map((s) => ({ ...s, assignee_user_id: s.default_assignee_user_id })));
     const init: Record<string, string> = {};
@@ -290,17 +296,22 @@ const WorkflowsPage = () => {
     const missing = (launchTemplate.fields || []).find((f) => f.required && !(launchFieldValues[f.field_key] || "").trim());
     if (missing) return toast.error(`${missing.label} is required`);
 
-    const { data: wf, error } = await supabase.from("workflows").insert({
+    const payload: Record<string, unknown> = {
       template_id: launchTemplate.id,
       title: wfTitle,
       description: wfDescription,
       priority: wfPriority,
-      project_id: wfProjectId || null,
       raised_by: user?.id,
       raised_by_department_id: user?.profile?.department_id || null,
       current_stage_position: 1,
       status: "active",
-    }).select().single();
+    };
+    if (wfProjectId) payload.project_id = wfProjectId;
+    let { data: wf, error } = await supabase.from("workflows").insert(payload as never).select().single();
+    if (error && payload.project_id && /project_id|42703|PGRST204/i.test(error.message)) {
+      delete payload.project_id;
+      ({ data: wf, error } = await supabase.from("workflows").insert(payload as never).select().single());
+    }
     if (error || !wf) return toast.error(error?.message || "Failed");
 
     const stageRows = launchStages.map((s, i) => ({

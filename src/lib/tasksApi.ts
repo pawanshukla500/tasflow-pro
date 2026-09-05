@@ -248,6 +248,10 @@ export function mapEmbeddedTask(row: NestedTask): TaskRow {
   };
 }
 
+export function selectIncludesProjectId(select: string): boolean {
+  return /(?:^|,)\s*project_id\s*(?:,|$)/i.test(select);
+}
+
 function isRecoverableSelectError(message: string): boolean {
   return /could not find|does not exist|PGRST204|PGRST200|42703|relationship/i.test(message);
 }
@@ -307,7 +311,9 @@ export async function fetchTasksPage(
 
     if (options.status) q = q.eq("status", options.status);
     if (options.departmentId) q = q.eq("department_id", options.departmentId);
-    if (options.projectId) q = q.eq("project_id", options.projectId);
+    if (options.projectId && selectIncludesProjectId(select)) {
+      q = q.eq("project_id", options.projectId);
+    }
 
     if (options.cursorCreatedAt && options.cursorId) {
       q = q.or(
@@ -361,13 +367,14 @@ export async function fetchTasksPage(
  */
 export async function fetchTasksBounded(
   maxRows = 300,
+  options: Pick<FetchTasksPageOptions, "projectId" | "departmentId" | "status"> = {},
 ): Promise<{ tasks: TaskRow[]; total: number | null; hasMore: boolean }> {
   const out: TaskRow[] = [];
   let page = 1;
   let total: number | null = null;
   const limit = TASK_PAGE_SIZE_MAX;
   while (out.length < maxRows) {
-    const result = await fetchTasksPage({ page, limit });
+    const result = await fetchTasksPage({ page, limit, ...options });
     total = result.total;
     out.push(...result.tasks);
     if (!result.hasMore || result.tasks.length === 0) {

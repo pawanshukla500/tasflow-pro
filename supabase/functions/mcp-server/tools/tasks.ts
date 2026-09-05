@@ -219,26 +219,42 @@ export const taskTools: McpTool[] = [
       },
       ["title"],
     ),
-    handler: async ({ client, userId }, args) => {
+    handler: async ({ client, userId, organizationId }, args) => {
       const { data: profile } = await client
         .from("profiles").select("department_id, organization_id").eq("id", userId).maybeSingle();
       const status = STATUSES.includes(String(args.status || "")) ? String(args.status) : "todo";
       const priority = PRIORITIES.includes(String(args.priority || "")) ? String(args.priority) : "medium";
-      const { data, error } = await client
-        .from("tasks")
-        .insert({
+      const orgId = profile?.organization_id ?? organizationId ?? null;
+      let projectId: string | null = null;
+      if (args.project_id) {
+        const { data: proj, error: pErr } = await client
+          .from("projects")
+          .select("id, organization_id")
+          .eq("id", String(args.project_id))
+          .maybeSingle();
+        if (pErr) throw new Error(pErr.message);
+        if (!proj) throw new Error("Project not found or not accessible");
+        if (orgId && proj.organization_id && proj.organization_id !== orgId) {
+          throw new Error("Project is not in your organization");
+        }
+        projectId = proj.id;
+      }
+      const insertRow: Record<string, unknown> = {
           title: String(args.title).trim(),
           description: args.description ? String(args.description) : null,
           status,
           priority,
           due_date: args.due_date ? String(args.due_date) : null,
           department_id: args.department_id ? String(args.department_id) : profile?.department_id ?? null,
-          project_id: args.project_id ? String(args.project_id) : null,
-          organization_id: profile?.organization_id ?? null,
+          organization_id: orgId,
           created_by: userId,
           blocked_by: Array.isArray(args.blocked_by) ? args.blocked_by.map(String) : [],
           depends_on: Array.isArray(args.depends_on) ? args.depends_on.map(String) : [],
-        })
+      };
+      if (projectId) insertRow.project_id = projectId;
+      const { data, error } = await client
+        .from("tasks")
+        .insert(insertRow)
         .select("id, title, status, priority, due_date, department_id, created_at")
         .maybeSingle();
       if (error) throw new Error(error.message);

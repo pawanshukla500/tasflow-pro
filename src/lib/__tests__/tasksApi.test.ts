@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapEmbeddedTask, TASK_PAGE_SIZE, TASK_PAGE_SIZE_MAX } from "@/lib/tasksApi";
+import { mapEmbeddedTask, TASK_PAGE_SIZE, TASK_PAGE_SIZE_MAX, selectIncludesProjectId } from "@/lib/tasksApi";
 
 describe("tasksApi pagination constants", () => {
   it("keeps a bounded default page size", () => {
@@ -80,5 +80,13 @@ describe("mapEmbeddedTask", () => {
     expect(task.comment_count).toBe(0);
     expect(task.blocked_by).toEqual([]);
     expect(task.depends_on).toEqual([]);
+  });
+});
+
+describe("selectIncludesProjectId", () => {
+  it("detects project_id in the select list but not in fallbacks without it", () => {
+    expect(selectIncludesProjectId("id, title, project_id, created_at")).toBe(true);
+    expect(selectIncludesProjectId("id, title, department_id, created_at")).toBe(false);
+    expect(selectIncludesProjectId("projects ( id, name )")).toBe(false);
   });
 });

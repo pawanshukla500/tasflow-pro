@@ -28,11 +28,13 @@ export const projectTools: McpTool[] = [
       const { data: project, error } = await client.from("projects").select("*").eq("id", id).maybeSingle();
       if (error) throw new Error(error.message);
       if (!project) throw new Error("Project not found or not accessible");
-      const [{ count: taskCount }, { count: workflowCount }] = await Promise.all([
+      const [taskRes, wfRes] = await Promise.all([
         client.from("tasks").select("id", { count: "exact", head: true }).eq("project_id", id),
         client.from("workflows").select("id", { count: "exact", head: true }).eq("project_id", id),
       ]);
-      return { ...project, task_count: taskCount ?? 0, workflow_count: workflowCount ?? 0 };
+      if (taskRes.error) throw new Error(taskRes.error.message);
+      if (wfRes.error) throw new Error(wfRes.error.message);
+      return { ...project, task_count: taskRes.count ?? 0, workflow_count: wfRes.count ?? 0 };
     },
   },
   {

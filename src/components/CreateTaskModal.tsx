@@ -80,6 +80,10 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
     });
   }, []);
 
+  useEffect(() => {
+    setProjectId(initialProjectId || "");
+  }, [initialProjectId]);
+
   const assignableUsers = users;
 
   useEffect(() => {
@@ -135,13 +139,12 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
     setSaving(true);
     try {
       const orgId = (user?.profile as { organization_id?: string | null } | undefined)?.organization_id;
-      const { data: task, error } = await supabase.from("tasks").insert({
+      const insertRow: Record<string, unknown> = {
         title: title.trim(),
         description: description || null,
         priority,
         status,
         department_id: deptId || null,
-        project_id: projectId || null,
         organization_id: orgId || null,
         due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
         due_time: dueTime || null,
@@ -149,7 +152,9 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
         frequency,
         requires_review: requiresReview,
         reviewer_user_id: requiresReview && reviewerUserId ? reviewerUserId : null,
-      }).select("id").single();
+      };
+      if (projectId) insertRow.project_id = projectId;
+      const { data: task, error } = await supabase.from("tasks").insert(insertRow as never).select("id").single();
 
       if (error) throw error;
 

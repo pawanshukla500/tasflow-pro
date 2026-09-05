@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 import { useProjects, useProjectMutations } from "@/hooks/useProjects";
-import { useTasks } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import { projectProgress, type ProjectRow, type ProjectWithStats } from "@/lib/projects";
 import { cn } from "@/lib/utils";
@@ -19,9 +18,31 @@ export default function ProjectsPage() {
   const [showArchived, setShowArchived] = useState(false);
   const { projects, loading } = useProjects(showArchived);
   const { archive } = useProjectMutations();
-  const { tasks } = useTasks();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ProjectRow | null>(null);
+
+  const { data: taskCounts } = useQuery({
+    queryKey: ["project-task-counts"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("tasks").select("project_id, status");
+      if (error) {
+        if (/does not exist|42703|PGRST205|schema cache/i.test(error.message)) {
+          return new Map<string, { open: number; done: number }>();
+        }
+        throw error;
+      }
+      const map = new Map<string, { open: number; done: number }>();
+      for (const row of data || []) {
+        if (!row.project_id) continue;
+        const cur = map.get(row.project_id) || { open: 0, done: 0 };
+        if (row.status === "done") cur.done += 1;
+        else cur.open += 1;
+        map.set(row.project_id, cur);
+      }
+      return map;
+    },
+    staleTime: 60_000,
+  });
 
   const { data: workflowCounts } = useQuery({
     queryKey: ["project-workflow-counts"],
@@ -43,17 +64,15 @@ export default function ProjectsPage() {
 
   const cards: ProjectWithStats[] = useMemo(() => {
     return projects.map((p) => {
-      const projectTasks = tasks.filter((t) => t.project_id === p.id);
-      const doneTaskCount = projectTasks.filter((t) => t.status === "done").length;
-      const openTaskCount = projectTasks.length - doneTaskCount;
+      const counts = taskCounts?.get(p.id);
       return {
         ...p,
-        openTaskCount,
-        doneTaskCount,
+        openTaskCount: counts?.open || 0,
+        doneTaskCount: counts?.done || 0,
         workflowCount: workflowCounts?.get(p.id) || 0,
       };
     });
-  }, [projects, tasks, workflowCounts]);
+  }, [projects, taskCounts, workflowCounts]);
 
   const visible = showArchived ? cards : cards.filter((c) => c.status === "active");
 

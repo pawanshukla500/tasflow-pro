@@ -246,7 +246,7 @@ const MyTasks = () => {
 
   const handleExport = () => {
     const csv = [
-      ["Title", "Status", "Priority", "Due Date", "Department"].join(","),
+      ["Title", "Status", "Priority", "Due Date", "Department", "Project"].join(","),
       ...filtered.map((t) =>
         [`"${t.title}"`, statusLabels[t.status] || t.status, t.priority, t.due_date || "", t.department_name || "", t.project_name || ""].join(","),
       ),

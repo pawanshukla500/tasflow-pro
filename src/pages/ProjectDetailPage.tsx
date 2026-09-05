@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Plus, Calendar as CalendarIcon, LayoutGrid, List, GitBranch, ChevronLeft,
@@ -66,7 +66,10 @@ export default function ProjectDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { project, loading: projectLoading } = useProject(id);
-  const { tasks, loading: tasksLoading, updateTaskStatus } = useTasks();
+  const { tasks: projectTasks, loading: tasksLoading } = useTasks({
+    projectId: id,
+    boundedMax: 800,
+  });
   const { update, archive } = useProjectMutations();
   const [showCreate, setShowCreate] = useState(false);
   const [createStatus, setCreateStatus] = useState("todo");
@@ -95,11 +98,6 @@ export default function ProjectDetailPage() {
       setSearchParams(nextParams, { replace: true });
     }
   }, [project?.default_view, viewParam, searchParams, setSearchParams]);
-
-  const projectTasks = useMemo(
-    () => tasks.filter((t) => t.project_id === id),
-    [tasks, id],
-  );
 
   const { data: workflows } = useQuery({
     queryKey: ["project-workflows", id],
