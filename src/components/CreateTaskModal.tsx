@@ -17,6 +17,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/edgeFunctions";
+import { SEND_EMAIL_ON_TASK_CREATE } from "@/lib/taskAssignmentNotify";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import SubtaskEditor, { type SubtaskDraft } from "@/components/SubtaskEditor";
@@ -153,13 +154,12 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus }: CreateTaskModalP
           throw assigneeError;
         }
         try {
-          // In-app only — assignment emails are covered by the daily 10 AM digest
           await invokeEdgeFunction("notify-task-assigned", {
             body: {
               taskId: task.id,
               assigneeUserIds: assignees,
               assignedByName: user?.profile?.name || user?.email || "A teammate",
-              sendEmail: false,
+              sendEmail: SEND_EMAIL_ON_TASK_CREATE,
             },
           });
         } catch (notifyErr) {

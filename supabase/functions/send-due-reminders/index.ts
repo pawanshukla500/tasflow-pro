@@ -18,6 +18,7 @@
 // own. Users with nothing pending are skipped.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { istToday, istDayOfWeek } from '../_shared/ist.ts'
+import { isInternalServiceRequest } from '../_shared/internal-auth.ts'
 
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }
 
@@ -26,9 +27,7 @@ Deno.serve(async (req) => {
 
   // Internal cron function: invoked by pg_cron with service role credentials only.
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-  const internalKey = req.headers.get('x-internal-service-key') || ''
-  const bearer = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
-  if (internalKey !== serviceKey && bearer !== serviceKey) {
+  if (!isInternalServiceRequest(req, serviceKey)) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

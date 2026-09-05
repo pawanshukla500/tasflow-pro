@@ -3,6 +3,8 @@ import { renderAsync } from 'npm:@react-email/components@0.0.22'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { TEMPLATES } from '../_shared/transactional-email-templates/registry.ts'
 import { flushEmailQueue } from '../_shared/flush-email-queue.ts'
+import { sendTransactionalEmail, isEmailRateLimitError, buildUnsubscribeUrl } from '../_shared/send-email.ts'
+import { isInternalServiceRequest } from '../_shared/internal-auth.ts'
 
 // Configuration — sender uses Resend API (see _shared/send-email.ts)
 const FROM_NAME = Deno.env.get('EMAIL_FROM_NAME')?.trim() || Deno.env.get('GMAIL_FROM_NAME')?.trim() || 'TaskFlow Pro'
@@ -23,9 +25,11 @@ function generateToken(): string {
     .join('')
 }
 
-// Auth note: this function uses verify_jwt = true in config.toml, so Supabase's
-// gateway validates the caller's JWT (anon or service_role) before the request
-// reaches this code. No in-function auth check is needed.
+// Auth: gateway JWT is off (config.toml). This function accepts the injected
+// service key, a Vault-stored service_role JWT (pg_cron), or an admin/MD
+// user JWT for dashboard-triggered sends.
+
+const STALE_PENDING_MS = 5 * 60 * 1000
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -49,8 +53,7 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-  const internalServiceKey = req.headers.get('x-internal-service-key')
-  if (internalServiceKey !== supabaseServiceKey) {
+  if (!isInternalServiceRequest(req, supabaseServiceKey)) {
     const authHeader = req.headers.get('Authorization')
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : null
     if (!token) {
@@ -158,14 +161,20 @@ Deno.serve(async (req) => {
   // retry, or a manual re-trigger never re-sends the same logical email.
   // idempotencyKey defaults to messageId (always unique) when the caller
   // doesn't pass one, so this only ever matches on genuine repeats.
+  //
+  // A stuck `pending` row used to count as a successful send. If the queue
+  // worker never ran, the same task-assigned key was then blocked forever.
+  // Only `sent` is terminal; in-flight pending (< 5 min) is treated as a
+  // race; stale pending is retried in place.
   const { data: existingSend } = await supabase
     .from('email_send_log')
-    .select('id, status')
+    .select('id, status, created_at, message_id')
     .eq('idempotency_key', idempotencyKey)
     .in('status', ['pending', 'sent'])
     .maybeSingle()
 
-  if (existingSend) {
+  let reusePending = false
+  if (existingSend?.status === 'sent') {
     console.log('Duplicate send suppressed by idempotency key', {
       templateName,
       idempotencyKey,
@@ -178,6 +187,26 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     )
+  }
+  if (existingSend?.status === 'pending') {
+    const ageMs = Date.now() - new Date(existingSend.created_at as string).getTime()
+    if (ageMs < STALE_PENDING_MS) {
+      console.log('In-flight send skipped by idempotency key', {
+        templateName,
+        idempotencyKey,
+      })
+      return new Response(
+        JSON.stringify({ success: true, deduped: true, reason: 'duplicate_idempotency_key' }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
+    }
+    reusePending = true
+    if (typeof existingSend.message_id === 'string' && existingSend.message_id) {
+      messageId = existingSend.message_id
+    }
   }
 
   // 3. Check suppression list (fail-closed: if we can't verify, don't send)
@@ -357,87 +386,110 @@ Deno.serve(async (req) => {
       ? template.subject(templateData)
       : template.subject
 
-  // 6. Enqueue the pre-rendered email for async processing by the dispatcher.
-  // The dispatcher (process-email-queue) handles sending, retries, and rate-limit backoff.
+  // 6. Send via Resend in this isolate (same path as password-reset).
+  // Queue + process-email-queue remain the rate-limit / crash backstop only.
+  // Fire-and-forget flush was the reason Resend "worked" (reset mail) while
+  // assignment/digest mail sat in email_send_log as pending forever.
 
-  // Log pending BEFORE enqueue so we have a record even if enqueue crashes.
-  // idempotency_key has a unique DB index — if a near-simultaneous request
-  // raced us past the check above, this insert loses the race and we bail
-  // out cleanly instead of enqueueing a second copy of the same email.
-  const { error: pendingLogError } = await supabase.from('email_send_log').insert({
+  if (!reusePending) {
+    const { error: pendingLogError } = await supabase.from('email_send_log').insert({
+      message_id: messageId,
+      template_name: templateName,
+      recipient_email: effectiveRecipient,
+      status: 'pending',
+      idempotency_key: idempotencyKey,
+    })
+
+    if (pendingLogError) {
+      if (pendingLogError.code === '23505') {
+        console.log('Duplicate send suppressed by idempotency key (race)', {
+          templateName,
+          idempotencyKey,
+        })
+        return new Response(
+          JSON.stringify({ success: true, deduped: true, reason: 'duplicate_idempotency_key' }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        )
+      }
+      console.error('Failed to write pending email_send_log row', { error: pendingLogError })
+    }
+  }
+
+  const queuePayload = {
     message_id: messageId,
-    template_name: templateName,
-    recipient_email: effectiveRecipient,
-    status: 'pending',
+    to: effectiveRecipient,
+    from: `${FROM_NAME} <${FROM_EMAIL}>`,
+    subject: resolvedSubject,
+    html,
+    text: plainText,
+    purpose: 'transactional',
+    label: templateName,
     idempotency_key: idempotencyKey,
-  })
+    unsubscribe_token: unsubscribeToken,
+    queued_at: new Date().toISOString(),
+  }
 
-  if (pendingLogError) {
-    if (pendingLogError.code === '23505') {
-      console.log('Duplicate send suppressed by idempotency key (race)', {
-        templateName,
-        idempotencyKey,
+  const markLog = async (status: 'sent' | 'failed', errorMessage?: string) => {
+    await supabase
+      .from('email_send_log')
+      .update({
+        status,
+        error_message: errorMessage ?? null,
       })
+      .eq('message_id', messageId)
+      .eq('status', 'pending')
+  }
+
+  try {
+    const { messageId: resendId } = await sendTransactionalEmail({
+      to: effectiveRecipient,
+      subject: resolvedSubject,
+      html,
+      text: plainText,
+      listUnsubscribeUrl: buildUnsubscribeUrl(unsubscribeToken),
+    })
+    await markLog('sent')
+    console.log('Transactional email sent', { templateName, effectiveRecipient, resendId })
+    return new Response(
+      JSON.stringify({ success: true, sent: true, messageId: resendId }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    )
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    console.error('Immediate Resend send failed', { templateName, effectiveRecipient, error: errorMsg })
+
+    if (isEmailRateLimitError(error)) {
+      const { error: enqueueError } = await supabase.rpc('enqueue_email', {
+        queue_name: 'transactional_emails',
+        payload: queuePayload,
+      })
+      if (enqueueError) {
+        await markLog('failed', `Rate limited and enqueue failed: ${enqueueError.message}`)
+        return new Response(JSON.stringify({ error: 'Failed to enqueue email' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      await flushEmailQueue(supabaseUrl, supabaseServiceKey)
       return new Response(
-        JSON.stringify({ success: true, deduped: true, reason: 'duplicate_idempotency_key' }),
+        JSON.stringify({ success: true, queued: true, reason: 'rate_limited' }),
         {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       )
     }
-    console.error('Failed to write pending email_send_log row', { error: pendingLogError })
-  }
 
-  const { error: enqueueError } = await supabase.rpc('enqueue_email', {
-    queue_name: 'transactional_emails',
-    payload: {
-      message_id: messageId,
-      to: effectiveRecipient,
-      from: `${FROM_NAME} <${FROM_EMAIL}>`,
-      subject: resolvedSubject,
-      html,
-      text: plainText,
-      purpose: 'transactional',
-      label: templateName,
-      idempotency_key: idempotencyKey,
-      unsubscribe_token: unsubscribeToken,
-      queued_at: new Date().toISOString(),
-    },
-  })
-
-  if (enqueueError) {
-    console.error('Failed to enqueue email', {
-      error: enqueueError,
-      templateName,
-      effectiveRecipient,
-    })
-
-    // Flip the pending row to failed (rather than inserting a second row)
-    // so a stuck 'pending' status never permanently blocks a retry with the
-    // same idempotency key.
-    await supabase
-      .from('email_send_log')
-      .update({ status: 'failed', error_message: 'Failed to enqueue email' })
-      .eq('message_id', messageId)
-      .eq('status', 'pending')
-
-    return new Response(JSON.stringify({ error: 'Failed to enqueue email' }), {
+    await markLog('failed', errorMsg.slice(0, 1000))
+    return new Response(JSON.stringify({ error: errorMsg }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
-
-  console.log('Transactional email enqueued', { templateName, effectiveRecipient })
-
-  // Flush queue immediately so welcome/assignment emails arrive without waiting for cron.
-  flushEmailQueue(supabaseUrl, supabaseServiceKey)
-
-  return new Response(
-    JSON.stringify({ success: true, queued: true }),
-    {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    }
-  )
 })

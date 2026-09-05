@@ -2,6 +2,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createInAppNotification } from '../_shared/in-app-notifications.ts'
 import { dispatchTransactionalEmail } from '../_shared/dispatch-transactional-email.ts'
+import { isInternalServiceRequest } from '../_shared/internal-auth.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,7 +20,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceKey)
 
   // Authenticate the caller via JWT (allow internal service-key bypass for server-to-server calls)
-  const isInternal = req.headers.get('x-internal-service-key') === serviceKey
+  const isInternal = isInternalServiceRequest(req, serviceKey)
   let callerId: string | null = null
   let callerName: string | null = null
   if (!isInternal) {
@@ -97,9 +98,9 @@ Deno.serve(async (req) => {
     })
   }
 
-  // Default: in-app only. Emails on every create flood inboxes — daily digest covers pending work.
-  // Pass sendEmail: true for rare/urgent assignment mails.
-  const sendEmail = body.sendEmail === true
+  // Default: email assignees on create. Pass sendEmail: false for bulk import
+  // so a CSV load cannot flood inboxes (daily digest still covers those tasks).
+  const sendEmail = body.sendEmail !== false
 
   let profileQuery = supabase
     .from('profiles')

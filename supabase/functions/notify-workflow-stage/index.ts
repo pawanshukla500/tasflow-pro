@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createInAppNotification } from '../_shared/in-app-notifications.ts'
 import { dispatchTransactionalEmail } from '../_shared/dispatch-transactional-email.ts'
+import { isInternalServiceRequest } from '../_shared/internal-auth.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,8 +31,8 @@ function computeDueDate(startedAt: string | null, tatHours: number): string | nu
 }
 
 async function canTriggerNotification(supabase: any, req: Request, workflow: any, stage: any) {
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (req.headers.get('x-internal-service-key') === serviceKey) return true
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  if (isInternalServiceRequest(req, serviceKey)) return true
 
   const token = getToken(req)
   if (!token) return false

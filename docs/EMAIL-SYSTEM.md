@@ -1,5 +1,35 @@
 # Email notification system
 
+## Task create + daily digest actually send (fixed 2026-09-05)
+Resend itself was fine (password-reset uses `renderAndSendEmail` and calls the
+API in-process). Assignment and digest mail still never arrived for two
+independent reasons:
+
+1. **Create-task mail was hard-disabled.** `CreateTaskModal` called
+   `notify-task-assigned` with `sendEmail: false`, and the function defaulted
+   to in-app only unless that flag was explicitly `true`. Assignees got a
+   bell notification and nothing in their inbox.
+2. **Daily digest cron authenticated with the wrong shape of key.** CI's
+   `fix-email-crons.sql` scheduled `send-daily-digest` with only
+   `x-internal-service-key` set to the Vault JWT (`report_cron_service_role_key`).
+   The function compared that header to the Edge-injected
+   `SUPABASE_SERVICE_ROLE_KEY` (`sb_secret_…`) with `!==`, returned 401, and
+   never generated the briefing. Password reset kept working, so the system
+   looked healthy.
+
+Permanent fixes:
+
+- Create-task notifies by email (`sendEmail: true`; function default is now
+  send unless the caller passes `false`, which bulk import still does).
+- All cron / internal functions accept either the current Edge key **or** a
+  Vault `service_role` JWT (`_shared/internal-auth.ts`).
+- Every cron job now sends **both** `Authorization: Bearer …` and
+  `x-internal-service-key` (migration `20260905100000_deliver_task_and_digest_email.sql`
+  + `scripts/fix-email-crons.sql`).
+- `send-transactional-email` calls Resend **in the same isolate** (same path
+  as password reset). The queue is only a rate-limit backstop. Stuck `pending`
+  rows no longer count as a successful send, so a failed assignment can retry.
+
 ## Delivery pipeline actually sending (fixed 2026-08-16)
 Users reported the 09:30 IST digest wasn't arriving. The cron *was* firing on schedule and
 `send-daily-digest` *was* successfully enqueueing an email per recipient (confirmed live via CI
@@ -62,8 +92,8 @@ tool that answers the question directly instead of another round of hypothesis-a
 a dry run — sends nothing — and checks, in one click:
 
 1. **Whether Resend can actually deliver to anyone but the account owner.** This is the failure
-   mode nothing else here catches: `send-transactional-email` returns success as soon as a
-   message is *enqueued*; the real Resend API call happens later inside `process-email-queue`. If
+   mode nothing else here catches: `send-transactional-email` now calls Resend
+   in-process (assignment/digest) the same way password-reset does. If
    `EMAIL_FROM` is still the sandbox address (`onboarding@resend.dev`) or the real domain was
    never verified, Resend accepts mail to the account owner's own address and silently rejects
    everyone else — which matches "password reset arrived, a teammate's digest never did" exactly.
@@ -93,13 +123,13 @@ worth of insights — a heavier weekly retrospective, not a daily one) — the t
 not duplicates: daily pulse vs. weekly analysis.
 
 ## Policy
-- **No email on every task create/import** — in-app notification only (`notify-task-assigned` with `sendEmail: false`).
+- **Email on every task create** — in-app notification plus assignment email (`notify-task-assigned`, default `sendEmail: true`; opt-out: Settings → Task assignment emails). Bulk CSV import stays in-app only so a large import cannot flood inboxes; those tasks still appear on the next daily digest.
 - **Daily pending briefing** Mon–Sat at **09:30 IST** via `send-daily-digest` for every active user who has due/pending work (skipped if empty; opt-out: Settings → Daily digest). This is the **only** personal "pending tasks" email — see Deduping below.
 - **Department manager summary** daily at **08:30 IST** via `send-department-daily-summary` for users in `department_managers` (team-wide rollup, separate from their own personal digest).
 - **Admin daily team overview** Mon–Sat at **09:30 IST** via `send-admin-daily-overview` for System Admin / MD — company-wide open/overdue/due-soon totals + department breakdown, skipped when nothing's open. See "Admin daily team overview" below.
 - **Friday management overview** at **09:00 IST** via `send-weekly-pending-report` for System Admin / MD — department-wise completion, top performers, departments needing attention, employee productivity, insights, recommendations.
 - **Monthly rollup** on the 1st at **09:00 IST** via `send-monthly-report` for System Admin / MD — org-scoped totals (fixed 2026-08-13: previously mixed every organization's tasks into one number for every recipient).
-- Assignment email template remains for rare/urgent cases (`sendEmail: true`).
+- Assignment emails honor `notification_preferences.task_assigned` (default on).
 
 ## Deduping (fixed 2026-08-13)
 Every active user used to get **two** near-identical "your pending tasks" emails every weekday: `send-due-reminders` at 08:00 IST (`task-due-reminder` template) and `send-daily-digest` at 09:30 IST (`daily-digest` template). The older cron (`send-due-reminders-daily`) was scheduled in an early migration and never unscheduled when `send-daily-digest` was built to replace it. Migration `20260813120000_dedupe_daily_emails_and_idempotency.sql` unschedules it; `supabase/functions/send-due-reminders/` is kept in source (marked deprecated) but not cron-wired. Do not re-add its cron job without retiring `send-daily-digest` first.

@@ -1,5 +1,6 @@
-import { sendTransactionalEmail, buildUnsubscribeUrl } from '../_shared/send-email.ts'
+import { sendTransactionalEmail, buildUnsubscribeUrl, isEmailRateLimitError } from '../_shared/send-email.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { isInternalServiceRequest } from '../_shared/internal-auth.ts'
 
 const MAX_RETRIES = 5
 const DEFAULT_BATCH_SIZE = 10
@@ -8,25 +9,33 @@ const DEFAULT_AUTH_TTL_MINUTES = 15
 const DEFAULT_TRANSACTIONAL_TTL_MINUTES = 60
 
 function isRateLimited(error: unknown): boolean {
-  if (error && typeof error === 'object' && 'status' in error) {
-    return (error as { status: number }).status === 429
-  }
-  const msg = error instanceof Error ? error.message : String(error);
-  return msg.includes('429') || msg.toLowerCase().includes('rate limit');
+  return isEmailRateLimitError(error)
 }
 
-function parseJwtClaims(token: string): Record<string, unknown> | null {
-  const parts = token.split('.')
-  if (parts.length < 2) return null
-  try {
-    const payload = parts[1]
-      .replaceAll('-', '+')
-      .replaceAll('_', '/')
-      .padEnd(Math.ceil(parts[1].length / 4) * 4, '=')
-    return JSON.parse(atob(payload)) as Record<string, unknown>
-  } catch {
-    return null
+async function recordSendOutcome(
+  supabase: ReturnType<typeof createClient>,
+  queue: string,
+  payload: Record<string, unknown>,
+  status: 'sent' | 'failed',
+  errorMessage?: string,
+): Promise<void> {
+  const messageId = typeof payload.message_id === 'string' ? payload.message_id : undefined
+  if (messageId) {
+    const { data: updated } = await supabase
+      .from('email_send_log')
+      .update({ status, error_message: errorMessage ?? null })
+      .eq('message_id', messageId)
+      .eq('status', 'pending')
+      .select('id')
+    if (updated?.length) return
   }
+  await supabase.from('email_send_log').insert({
+    message_id: messageId,
+    template_name: (payload.label || queue) as string,
+    recipient_email: payload.to as string,
+    status,
+    error_message: errorMessage,
+  })
 }
 
 async function moveToDlq(
@@ -63,21 +72,10 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  // Accept the injected service key directly (new sb_secret_… keys are not
-  // JWTs, so claim-decoding alone would reject internal function-to-function
-  // calls) or any JWT carrying the service_role claim (legacy keys, pg_cron).
-  const token = authHeader.slice('Bearer '.length).trim()
-  const claims = parseJwtClaims(token)
-  if (token !== supabaseServiceKey && claims?.role !== 'service_role') {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403,
+  if (!isInternalServiceRequest(req, supabaseServiceKey)) {
+    const status = authHeader?.startsWith('Bearer ') ? 403 : 401
+    return new Response(JSON.stringify({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }), {
+      status,
       headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -191,12 +189,7 @@ Deno.serve(async (req) => {
           listUnsubscribeUrl: unsubscribeToken ? buildUnsubscribeUrl(unsubscribeToken) : undefined,
         })
 
-        await supabase.from('email_send_log').insert({
-          message_id: payload.message_id as string,
-          template_name: (payload.label || queue) as string,
-          recipient_email: payload.to as string,
-          status: 'sent',
-        })
+        await recordSendOutcome(supabase, queue, payload, 'sent')
 
         await supabase.rpc('delete_email', { queue_name: queue, message_id: msg.msg_id })
         totalProcessed++
@@ -216,13 +209,7 @@ Deno.serve(async (req) => {
           )
         }
 
-        await supabase.from('email_send_log').insert({
-          message_id: payload.message_id as string,
-          template_name: (payload.label || queue) as string,
-          recipient_email: payload.to as string,
-          status: 'failed',
-          error_message: errorMsg.slice(0, 1000),
-        })
+        await recordSendOutcome(supabase, queue, payload, 'failed', errorMsg.slice(0, 1000))
 
         if (typeof payload.message_id === 'string') {
           failedAttemptsByMessageId.set(payload.message_id, failedAttempts + 1)

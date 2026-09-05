@@ -99,7 +99,7 @@ if [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
   if $SUPABASE_CLI db query --db-url "$SUPABASE_DB_URL" -f "$REPO_DIR/scripts/fix-email-crons.sql"; then
     echo "==> Email crons ensured."
     $SUPABASE_CLI db query --db-url "$SUPABASE_DB_URL" \
-      "SELECT jobname, schedule, active FROM cron.job WHERE jobname IN ('send-daily-digest','send-admin-daily-overview','send-weekly-pending-report','process-email-queue') ORDER BY jobname;" \
+      "SELECT jobname, schedule, active FROM cron.job WHERE jobname IN ('send-daily-digest','send-admin-daily-overview','send-department-daily-summary','send-weekly-pending-report','send-monthly-report','process-email-queue') ORDER BY jobname;" \
       || true
     $SUPABASE_CLI migration repair --status applied \
       20260730090000 \

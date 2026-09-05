@@ -13,12 +13,16 @@
  * cron (every minute, see migration 20260816090000) is the durable backstop
  * either way; this just stops relying on it for every single send.
  */
-export function flushEmailQueue(supabaseUrl: string, serviceRoleKey: string): void {
+export function flushEmailQueue(supabaseUrl: string, serviceRoleKey: string): Promise<unknown> {
   const task = fetch(`${supabaseUrl}/functions/v1/process-email-queue`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${serviceRoleKey}` },
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      'x-internal-service-key': serviceRoleKey,
+    },
   }).catch((e) => console.warn('process-email-queue trigger failed', e))
 
   const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime
   edgeRuntime?.waitUntil?.(task)
+  return task
 }

@@ -18,7 +18,7 @@ const priorityColor: Record<string, string> = {
   critical: colors.danger, high: colors.warning, medium: colors.primary, low: colors.muted,
 }
 
-/** Used sparingly — create/import no longer auto-email; pass sendEmail:true only when necessary. */
+/** Sent whenever a teammate is assigned on create (honors notification preferences). */
 const TaskAssignedEmail = ({ recipientName, taskTitle, taskDescription, priority, dueDate, assignedBy, taskId }: Props) => {
   const deepLink = taskId ? `${APP_URL}/my-tasks?task=${taskId}` : `${APP_URL}/my-tasks`
   return (
@@ -30,8 +30,7 @@ const TaskAssignedEmail = ({ recipientName, taskTitle, taskDescription, priority
       <Heading style={h1}>You have a new assignment</Heading>
       <Text style={text}>Hi{recipientName ? ` ${recipientName}` : ''},</Text>
       <Text style={text}>
-        {assignedBy || 'A team member'} assigned you a task. Routine assignments appear in your morning briefing —
-        this message was sent because action may be needed sooner.
+        {assignedBy || 'A team member'} assigned you a task. Open it in TaskFlow to review details and get started.
       </Text>
       <EmailDetailCard title="Task details">
         <DetailRow label="Task" value={taskTitle || 'Untitled task'} />

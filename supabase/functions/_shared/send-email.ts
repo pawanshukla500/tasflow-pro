@@ -95,5 +95,13 @@ export async function sendTransactionalEmail(
   return { messageId: String((result as { id?: string }).id || "sent") };
 }
 
+export function isEmailRateLimitError(error: unknown): boolean {
+  if (error && typeof error === "object" && "status" in error) {
+    return (error as { status: number }).status === 429;
+  }
+  const msg = error instanceof Error ? error.message : String(error);
+  return msg.includes("429") || msg.toLowerCase().includes("rate limit");
+}
+
 /** @deprecated Use sendTransactionalEmail — kept for existing imports */
 export const sendGmailEmail = sendTransactionalEmail;
