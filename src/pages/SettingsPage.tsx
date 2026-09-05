@@ -62,7 +62,7 @@ const GmailLogo = ({ className = "h-6 w-6" }: { className?: string }) => (
 // but no longer controls any send path, so it's hidden from this list to
 // avoid a toggle that silently does nothing.
 const notificationEvents = [
-  { label: "Urgent task assignment emails", dbKey: "task_assigned" as const },
+  { label: "Task assignment emails", dbKey: "task_assigned" as const },
   { label: "Monthly report email", dbKey: "monthly_report" as const },
   { label: "Daily pending briefing (9:30 AM IST, Mon–Sat)", dbKey: "daily_digest" as const },
 ];

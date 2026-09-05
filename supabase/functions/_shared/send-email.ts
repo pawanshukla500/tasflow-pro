@@ -16,6 +16,8 @@ export interface SendEmailOptions {
   fromEmail?: string;
   replyTo?: string;
   listUnsubscribeUrl?: string;
+  /** Passed to Resend so a lost HTTP response cannot create a second message. */
+  idempotencyKey?: string;
 }
 
 export function getFromEmail(): string {
@@ -77,6 +79,9 @@ export async function sendTransactionalEmail(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
+      ...(opts.idempotencyKey
+        ? { "Idempotency-Key": opts.idempotencyKey.slice(0, 256) }
+        : {}),
     },
     body: JSON.stringify(body),
   });
@@ -93,6 +98,14 @@ export async function sendTransactionalEmail(
   }
 
   return { messageId: String((result as { id?: string }).id || "sent") };
+}
+
+export function isEmailRateLimitError(error: unknown): boolean {
+  if (error && typeof error === "object" && "status" in error) {
+    return (error as { status: number }).status === 429;
+  }
+  const msg = error instanceof Error ? error.message : String(error);
+  return msg.includes("429") || msg.toLowerCase().includes("rate limit");
 }
 
 /** @deprecated Use sendTransactionalEmail — kept for existing imports */
