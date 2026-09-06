@@ -17,28 +17,28 @@ BEGIN
   ) THEN
     ALTER TABLE public.projects
       ADD CONSTRAINT projects_budget_amount_nonneg
-      CHECK (budget_amount IS NULL OR (budget_amount >= 0 AND budget_amount = budget_amount));
+      CHECK (budget_amount IS NULL OR (budget_amount >= 0 AND budget_amount <> 'NaN'::numeric));
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'projects_allocated_hours_nonneg'
   ) THEN
     ALTER TABLE public.projects
       ADD CONSTRAINT projects_allocated_hours_nonneg
-      CHECK (allocated_hours IS NULL OR (allocated_hours >= 0 AND allocated_hours = allocated_hours));
+      CHECK (allocated_hours IS NULL OR (allocated_hours >= 0 AND allocated_hours <> 'NaN'::numeric));
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'tasks_estimated_hours_nonneg'
   ) THEN
     ALTER TABLE public.tasks
       ADD CONSTRAINT tasks_estimated_hours_nonneg
-      CHECK (estimated_hours IS NULL OR (estimated_hours >= 0 AND estimated_hours = estimated_hours));
+      CHECK (estimated_hours IS NULL OR (estimated_hours >= 0 AND estimated_hours <> 'NaN'::numeric));
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'tasks_logged_hours_nonneg'
   ) THEN
     ALTER TABLE public.tasks
       ADD CONSTRAINT tasks_logged_hours_nonneg
-      CHECK (logged_hours >= 0 AND logged_hours = logged_hours);
+      CHECK (logged_hours >= 0 AND logged_hours <> 'NaN'::numeric);
   END IF;
 END $$;
 

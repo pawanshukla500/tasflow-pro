@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   filterTasksForProject,
   formatBudget,
@@ -8,6 +11,8 @@ import {
   parseNonNegativeNumber,
   sumProjectTaskHours,
 } from "./projectBudget";
+
+const migrationsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../supabase/migrations");
 
 describe("project budget and hours", () => {
   it("formats hours and INR budget", () => {
@@ -36,5 +41,17 @@ describe("project budget and hours", () => {
     expect(isUnknownColumnError("Could not find the 'estimated_hours' column of 'tasks' in the schema cache")).toBe(true);
     expect(isUnknownColumnError("duplicate key")).toBe(false);
     expect(omitTaskHourColumns({ title: "A", estimated_hours: 4, logged_hours: 1 })).toEqual({ title: "A" });
+  });
+
+  it("rejects numeric NaN with <> because Postgres NaN = NaN is true", () => {
+    const sql = readFileSync(
+      resolve(migrationsDir, "20260906160000_numeric_nan_neq_budget_hours.sql"),
+      "utf8",
+    );
+    expect(sql).toContain("budget_amount <> 'NaN'::numeric");
+    expect(sql).toContain("allocated_hours <> 'NaN'::numeric");
+    expect(sql).toContain("estimated_hours <> 'NaN'::numeric");
+    expect(sql).toContain("logged_hours <> 'NaN'::numeric");
+    expect(sql).not.toMatch(/budget_amount = budget_amount/);
   });
 });

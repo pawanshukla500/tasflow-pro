@@ -1,5 +1,6 @@
--- numeric NaN satisfies "col >= 0". Do not use col = col: numeric NaN = NaN is TRUE.
--- Hosted already ran this file; 20260906160000 reapplies the <> NaN checks.
+-- PostgreSQL numeric treats NaN = NaN as TRUE, so "col = col" does not reject NaN.
+-- Explicit inequality is required. This is a forward migration: 20260906150000
+-- already ran on hosted with the incorrect equality check.
 
 UPDATE public.projects SET budget_amount = NULL WHERE budget_amount = 'NaN'::numeric;
 UPDATE public.projects SET allocated_hours = NULL WHERE allocated_hours = 'NaN'::numeric;
