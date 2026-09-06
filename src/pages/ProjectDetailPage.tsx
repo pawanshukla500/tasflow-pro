@@ -26,6 +26,7 @@ import { useTasks, type TaskRow } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectSections } from "@/hooks/useProjectSections";
 import { firstIncompleteSectionId } from "@/lib/projectLookup";
+import { isProjectView, type ProjectView } from "@/lib/projects";
 import {
   PROJECT_BOARD_COLUMNS,
   summarizeProjectPipeline,
