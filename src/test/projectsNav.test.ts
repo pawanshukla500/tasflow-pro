@@ -34,6 +34,8 @@ describe("projects replace inbox", () => {
 
   it("shows project status as pipeline steps on the detail board", () => {
     const page = readFileSync(resolve(root, "src/pages/ProjectDetailPage.tsx"), "utf8");
+    expect(page).toContain('from "@/lib/projects"');
+    expect(page).toContain("isProjectView");
     expect(page).toContain("ProjectSectionsEditor");
     expect(page).toContain("ProjectBoardView");
     expect(page).not.toMatch(/%\} complete/);

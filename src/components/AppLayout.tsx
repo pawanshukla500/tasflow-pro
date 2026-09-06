@@ -7,6 +7,7 @@ import SearchOverlay from "@/components/SearchOverlay";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { BrandLogo } from "@/components/BrandLogo";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { isProjectDetailPath } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
@@ -74,7 +75,9 @@ const AppLayout = () => {
             isProjectDetail ? "overflow-hidden flex flex-col" : "overflow-y-auto",
           )}
         >
-          <Outlet />
+          <RouteErrorBoundary resetKey={`${location.pathname}${location.search}`}>
+            <Outlet />
+          </RouteErrorBoundary>
         </main>
       </div>
 
