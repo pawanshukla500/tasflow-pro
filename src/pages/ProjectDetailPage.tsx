@@ -20,10 +20,12 @@ import EditTaskModal from "@/components/EditTaskModal";
 import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 import { ProjectPipelineBar } from "@/components/ProjectPipelineBar";
 import { ProjectBoardView } from "@/components/ProjectBoardView";
+import { ProjectSectionsEditor } from "@/components/ProjectSectionsEditor";
 import { useProject, useProjectMutations } from "@/hooks/useProjects";
 import { useTasks, type TaskRow } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
-import { isProjectView, type ProjectView } from "@/lib/projects";
+import { useProjectSections } from "@/hooks/useProjectSections";
+import { firstIncompleteSectionId } from "@/lib/projectLookup";
 import {
   PROJECT_BOARD_COLUMNS,
   summarizeProjectPipeline,
@@ -66,6 +68,7 @@ export default function ProjectDetailPage() {
     boundedMax: 800,
   });
   const { update, archive } = useProjectMutations();
+  const { sections } = useProjectSections(id);
   const [showCreate, setShowCreate] = useState(false);
   const [createStatus, setCreateStatus] = useState("todo");
   const [editingTask, setEditingTask] = useState<TaskRow | null>(null);
@@ -112,6 +115,10 @@ export default function ProjectDetailPage() {
   });
 
   const pipeline = useMemo(() => summarizeProjectPipeline(projectTasks), [projectTasks]);
+  const currentSectionId = useMemo(
+    () => (project?.flow_mode === "sequential" ? firstIncompleteSectionId(sections, projectTasks) : null),
+    [project?.flow_mode, sections, projectTasks],
+  );
   const today = todayIST();
 
   useEffect(() => {
@@ -239,6 +246,10 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
+      <div className="shrink-0">
+        <ProjectSectionsEditor projectId={project.id} currentSectionId={currentSectionId} />
+      </div>
+
       <Tabs value={view} onValueChange={(v) => setView(v as ProjectView)} className="shrink-0">
         <TabsList className="h-9 bg-muted/70">
           <TabsTrigger value="board" className="text-xs gap-1.5">
@@ -263,6 +274,7 @@ export default function ProjectDetailPage() {
           tasks={projectTasks}
           focusStatus={focusStatus}
           columnRefs={columnRefs}
+          sectionTitles={Object.fromEntries(sections.map((s) => [s.id, s.title]))}
           onCreateInStatus={(status) => {
             setCreateStatus(status);
             setShowCreate(true);
@@ -314,6 +326,11 @@ export default function ProjectDetailPage() {
                             <span className={cn("flex-1 text-sm font-medium truncate", task.status === "done" && "line-through text-muted-foreground")}>
                               {task.title}
                             </span>
+                            {(task.section_name || (task.section_id && sections.find((s) => s.id === task.section_id))) && (
+                              <span className="text-[11px] text-muted-foreground w-24 truncate hidden lg:inline">
+                                {task.section_name || sections.find((s) => s.id === task.section_id)?.title}
+                              </span>
+                            )}
                             <span className="text-[11px] text-muted-foreground w-24 truncate hidden md:inline">
                               {task.assignees[0]?.name || "Unassigned"}
                             </span>

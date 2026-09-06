@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapEmbeddedTask, TASK_PAGE_SIZE, TASK_PAGE_SIZE_MAX, selectIncludesProjectId } from "@/lib/tasksApi";
+import { mapEmbeddedTask, TASK_PAGE_SIZE, TASK_PAGE_SIZE_MAX, TASK_SELECT_CANDIDATES, selectIncludesProjectId } from "@/lib/tasksApi";
 
 describe("tasksApi pagination constants", () => {
   it("keeps a bounded default page size", () => {
@@ -46,12 +46,35 @@ describe("mapEmbeddedTask", () => {
     expect(task.project_id).toBe("p1");
     expect(task.project_name).toBe("Website");
     expect(task.project_icon).toBe("🚀");
+    expect(task.section_name).toBeUndefined();
     expect(task.comment_count).toBe(2);
     expect(task.attachment_count).toBe(1);
     expect(task.subtasks).toHaveLength(1);
     expect(task.creator_name).toBe("Sam Creator");
     expect(task.blocked_by).toEqual(["t2"]);
     expect(task.depends_on).toEqual(["t3"]);
+  });
+
+  it("maps section title from the project_sections embed", () => {
+    const task = mapEmbeddedTask({
+      id: "t1",
+      title: "Design homepage",
+      description: null,
+      status: "todo",
+      priority: "medium",
+      due_date: null,
+      start_date: null,
+      department_id: null,
+      project_id: "p1",
+      section_id: "s1",
+      created_by: null,
+      completed_at: null,
+      created_at: "2026-07-20T00:00:00Z",
+      updated_at: "2026-07-20T00:00:00Z",
+      project_sections: { id: "s1", title: "Design" },
+    });
+    expect(task.section_id).toBe("s1");
+    expect(task.section_name).toBe("Design");
   });
 
   it("falls back when embeds are missing", () => {
@@ -88,5 +111,11 @@ describe("selectIncludesProjectId", () => {
     expect(selectIncludesProjectId("id, title, project_id, created_at")).toBe(true);
     expect(selectIncludesProjectId("id, title, department_id, created_at")).toBe(false);
     expect(selectIncludesProjectId("projects ( id, name )")).toBe(false);
+  });
+});
+
+describe("task select candidates", () => {
+  it("embeds project_sections in the richest select so section_name can populate", () => {
+    expect(TASK_SELECT_CANDIDATES[0]).toMatch(/project_sections\s*\(/);
   });
 });

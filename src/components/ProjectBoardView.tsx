@@ -61,6 +61,7 @@ interface ProjectBoardViewProps {
   onCreateInStatus: (status: ProjectPipelineStatus) => void;
   onOpenTask: (task: TaskRow) => void;
   onMoveTask: (taskId: string, status: ProjectPipelineStatus) => Promise<unknown>;
+  sectionTitles?: Record<string, string>;
 }
 
 export function ProjectBoardView({
@@ -70,6 +71,7 @@ export function ProjectBoardView({
   onCreateInStatus,
   onOpenTask,
   onMoveTask,
+  sectionTitles = {},
 }: ProjectBoardViewProps) {
   const { user, isAdminOrMD, managedDepartments } = useAuth();
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -197,6 +199,11 @@ export function ProjectBoardView({
                       </span>
                       {task.department_name && (
                         <Badge variant="secondary" className="text-[9px] h-5 px-1.5">{task.department_name}</Badge>
+                      )}
+                      {(task.section_name || (task.section_id && sectionTitles[task.section_id])) && (
+                        <Badge variant="outline" className="text-[9px] h-5 px-1.5">
+                          {task.section_name || sectionTitles[task.section_id as string]}
+                        </Badge>
                       )}
                     </div>
                     <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">

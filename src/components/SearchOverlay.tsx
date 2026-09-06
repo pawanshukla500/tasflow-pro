@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Search, X, FileText, User } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Search, X, FileText, User, FolderKanban } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDateIST } from "@/lib/time";
 
@@ -10,11 +11,14 @@ interface SearchOverlayProps {
 
 interface TaskHit { id: string; title: string; due_date: string | null; department_name: string | null; }
 interface UserHit { id: string; name: string; email: string; position: string | null; }
+interface ProjectHit { id: string; name: string; icon: string; }
 
 const SearchOverlay = ({ onClose, onSelectTask }: SearchOverlayProps) => {
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [tasks, setTasks] = useState<TaskHit[]>([]);
   const [users, setUsers] = useState<UserHit[]>([]);
+  const [projects, setProjects] = useState<ProjectHit[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -24,23 +28,30 @@ const SearchOverlay = ({ onClose, onSelectTask }: SearchOverlayProps) => {
   }, [onClose]);
 
   useEffect(() => {
-    if (query.length < 2) { setTasks([]); setUsers([]); return; }
+    if (query.length < 2) { setTasks([]); setUsers([]); setProjects([]); setLoading(false); return; }
+    let cancelled = false;
     const t = setTimeout(async () => {
       setLoading(true);
-      const [tRes, uRes, dRes] = await Promise.all([
+      const [tRes, uRes, dRes, pRes] = await Promise.all([
         supabase.from("tasks").select("id, title, due_date, department_id").ilike("title", `%${query}%`).limit(8),
         supabase.from("profiles").select("id, name, email, position").or(`name.ilike.%${query}%,email.ilike.%${query}%`).eq("active", true).limit(8),
         supabase.from("departments").select("id, name"),
+        supabase.from("projects").select("id, name, icon").eq("status", "active").ilike("name", `%${query}%`).limit(6),
       ]);
+      if (cancelled) return;
       const depts = dRes.data || [];
       setTasks((tRes.data || []).map(t => ({
         id: t.id, title: t.title, due_date: t.due_date,
         department_name: depts.find(d => d.id === t.department_id)?.name || null,
       })));
       setUsers((uRes.data || []) as UserHit[]);
+      setProjects((pRes.data || []) as ProjectHit[]);
       setLoading(false);
     }, 200);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [query]);
 
   return (
@@ -50,7 +61,7 @@ const SearchOverlay = ({ onClose, onSelectTask }: SearchOverlayProps) => {
         <div className="bg-card rounded-xl border shadow-2xl w-full max-w-xl animate-fade-in">
           <div className="flex items-center gap-2 px-4 py-3 border-b">
             <Search className="h-4 w-4 text-muted-foreground" />
-            <input autoFocus className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground" placeholder="Search tasks and people…" value={query} onChange={e => setQuery(e.target.value)} />
+            <input autoFocus className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground" placeholder="Search tasks, projects, and people…" value={query} onChange={e => setQuery(e.target.value)} />
             <button onClick={onClose}><X className="h-4 w-4 text-muted-foreground" /></button>
           </div>
           <div className="max-h-80 overflow-y-auto p-2">
@@ -59,6 +70,21 @@ const SearchOverlay = ({ onClose, onSelectTask }: SearchOverlayProps) => {
             )}
             {query.length >= 2 && loading && (
               <p className="text-xs text-muted-foreground px-3 py-6 text-center">Searching…</p>
+            )}
+            {projects.length > 0 && (
+              <div className="mb-2">
+                <p className="text-[10px] uppercase text-muted-foreground px-3 py-1 font-medium">Projects</p>
+                {projects.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => { navigate(`/projects/${p.id}`); onClose(); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted text-left"
+                  >
+                    <FolderKanban className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <p className="text-sm text-foreground truncate">{p.icon} {p.name}</p>
+                  </button>
+                ))}
+              </div>
             )}
             {tasks.length > 0 && (
               <div className="mb-2">

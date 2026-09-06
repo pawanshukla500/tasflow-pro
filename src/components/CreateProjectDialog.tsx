@@ -10,6 +10,7 @@ import {
   PROJECT_COLOR_PRESETS,
   PROJECT_ICON_PRESETS,
   PROJECT_VIEWS,
+  type ProjectFlowMode,
   type ProjectRow,
   type ProjectView,
 } from "@/lib/projects";
@@ -34,6 +35,9 @@ export function CreateProjectDialog({ open, onOpenChange, project, onSaved }: Cr
   const [color, setColor] = useState("#0D9488");
   const [departmentId, setDepartmentId] = useState("");
   const [defaultView, setDefaultView] = useState<ProjectView>("board");
+  const [flowMode, setFlowMode] = useState<ProjectFlowMode>("parallel");
+  const [startDate, setStartDate] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -45,6 +49,9 @@ export function CreateProjectDialog({ open, onOpenChange, project, onSaved }: Cr
     setColor(project?.color || "#0D9488");
     setDepartmentId(project?.department_id || "");
     setDefaultView(project?.default_view || "board");
+    setFlowMode(project?.flow_mode || "parallel");
+    setStartDate(project?.start_date || "");
+    setDueDate(project?.due_date || "");
     supabase.from("departments").select("id, name").order("name").then(({ data }) => {
       setDepartments(data || []);
     });
@@ -64,6 +71,9 @@ export function CreateProjectDialog({ open, onOpenChange, project, onSaved }: Cr
         color,
         department_id: departmentId || null,
         default_view: defaultView,
+        flow_mode: flowMode,
+        start_date: startDate || null,
+        due_date: dueDate || null,
       };
       const saved = project
         ? await update(project.id, payload)
@@ -171,6 +181,26 @@ export function CreateProjectDialog({ open, onOpenChange, project, onSaved }: Cr
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Start date</Label>
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Due date</Label>
+              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Work flow</Label>
+            <Select value={flowMode} onValueChange={(v) => setFlowMode(v as ProjectFlowMode)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="parallel">Parallel — any task can be next</SelectItem>
+                <SelectItem value="sequential">Sequential — first incomplete section is current</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter>

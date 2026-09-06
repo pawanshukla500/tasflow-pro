@@ -118,4 +118,78 @@ export const projectTools: McpTool[] = [
       return data;
     },
   },
+  {
+    name: "list_project_sections",
+    description: "List ordered sections (workstreams) inside a project.",
+    inputSchema: objectSchema({ project_id: { type: "string" } }, ["project_id"]),
+    handler: async ({ client }, args) => {
+      const { data, error } = await client
+        .from("project_sections")
+        .select("id, project_id, title, description, sort_order, created_at")
+        .eq("project_id", String(args.project_id))
+        .order("sort_order", { ascending: true });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+  },
+  {
+    name: "create_project_section",
+    description: "Add a named section to a project. Tasks can look up this section by ID.",
+    inputSchema: objectSchema(
+      {
+        project_id: { type: "string" },
+        title: { type: "string" },
+        description: { type: "string" },
+      },
+      ["project_id", "title"],
+    ),
+    handler: async ({ client, userId }, args) => {
+      const title = String(args.title).trim();
+      if (!title) throw new Error("Title is required");
+      const projectId = String(args.project_id);
+      const { data, error } = await client
+        .from("project_sections")
+        .insert({
+          project_id: projectId,
+          title,
+          description: args.description ? String(args.description) : null,
+          created_by: userId,
+        })
+        .select("*")
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error("Section creation failed");
+      return data;
+    },
+  },
+  {
+    name: "lookup_entities",
+    description:
+      "Search tasks and projects by title for wiki-style lookups ([[task:id|Label]] / [[project:id|Label]]).",
+    inputSchema: objectSchema({
+      query: { type: "string", description: "Search text. Prefix with task: or project: to limit kind." },
+    }, ["query"]),
+    handler: async ({ client }, args) => {
+      const raw = String(args.query || "").trim();
+      const kind = raw.toLowerCase().startsWith("task:")
+        ? "task"
+        : raw.toLowerCase().startsWith("project:")
+          ? "project"
+          : null;
+      const q = raw.replace(/^(task|project):/i, "").trim();
+      const like = q ? `%${q}%` : "%";
+      const out: { kind: string; id: string; title: string; status?: string }[] = [];
+      if (kind !== "task") {
+        const { data, error } = await client.from("projects").select("id, name, status").eq("status", "active").ilike("name", like).limit(8);
+        if (error) throw new Error(error.message);
+        for (const row of data || []) out.push({ kind: "project", id: row.id, title: row.name, status: row.status });
+      }
+      if (kind !== "project") {
+        const { data, error } = await client.from("tasks").select("id, title, status").ilike("title", like).limit(8);
+        if (error) throw new Error(error.message);
+        for (const row of data || []) out.push({ kind: "task", id: row.id, title: row.title, status: row.status });
+      }
+      return out;
+    },
+  },
 ];
