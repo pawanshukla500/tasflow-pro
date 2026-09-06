@@ -166,7 +166,7 @@ export function useTasks(options: UseTasksOptions = {}) {
   const query = useQuery({
     queryKey,
     queryFn: () => loadTasksCache(listOpts),
-    // Keep list warm across Board ↔ My Tasks ↔ Dashboard navigations.
+    // Project lists use a distinct key (projectId) so Board/My Tasks cannot bleed in.
     staleTime: 60_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,

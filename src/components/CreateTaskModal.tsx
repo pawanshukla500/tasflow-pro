@@ -23,6 +23,7 @@ import SubtaskEditor, { type SubtaskDraft } from "@/components/SubtaskEditor";
 import { EntityLookupField } from "@/components/EntityLookupField";
 import { useProjectSections } from "@/hooks/useProjectSections";
 import { resolveTaskContainerAssignment, sectionIdForProject } from "@/lib/projectLookup";
+import { parseNonNegativeNumber } from "@/lib/projectBudget";
 
 interface CreateTaskModalProps {
   onClose: () => void;
@@ -54,6 +55,8 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
   const [deptId, setDeptId] = useState("");
   const [projectId, setProjectId] = useState(initialProjectId || "");
   const [sectionId, setSectionId] = useState("");
+  const [estimatedHours, setEstimatedHours] = useState("");
+  const [loggedHours, setLoggedHours] = useState("");
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [dueTime, setDueTime] = useState<string>("");
   const [status, setStatus] = useState(initialStatus || "todo");
@@ -71,6 +74,12 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const { sections } = useProjectSections(projectId || undefined);
+  const projectLocked = !!initialProjectId;
+
+  useEffect(() => {
+    if (!projectLocked || sectionId || sections.length === 0) return;
+    setSectionId(sections[0].id);
+  }, [projectLocked, sections, sectionId]);
 
   useEffect(() => {
     Promise.all([
@@ -157,9 +166,14 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
         requires_review: requiresReview,
         reviewer_user_id: requiresReview && reviewerUserId ? reviewerUserId : null,
       };
-      if (projectId) insertRow.project_id = projectId;
+      if (initialProjectId) insertRow.project_id = initialProjectId;
+      else if (projectId) insertRow.project_id = projectId;
+      const estimated = parseNonNegativeNumber(estimatedHours);
+      const logged = parseNonNegativeNumber(loggedHours);
+      if (estimated != null) insertRow.estimated_hours = estimated;
+      if (logged != null) insertRow.logged_hours = logged;
       const container = resolveTaskContainerAssignment({
-        projectId: projectId || null,
+        projectId: initialProjectId || projectId || null,
         sectionId: sectionId || null,
         projects,
         sections,
@@ -369,13 +383,13 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
                   setProjectId(next);
                   setSectionId((prev) => sectionIdForProject(prev, next || null, sections) || "");
                 }}
-                disabled={!!initialProjectId}
+                disabled={projectLocked}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Optional space for this work" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No project</SelectItem>
+                  {!projectLocked && <SelectItem value="none">No project</SelectItem>}
                   {projects.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.icon} {p.name}
@@ -522,6 +536,30 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
                   <div className="space-y-1.5">
                     <Label>Time</Label>
                     <Input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="create-estimated-hours">Estimated hours</Label>
+                    <Input
+                      id="create-estimated-hours"
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={estimatedHours}
+                      onChange={(e) => setEstimatedHours(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="create-logged-hours">Logged hours</Label>
+                    <Input
+                      id="create-logged-hours"
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={loggedHours}
+                      onChange={(e) => setLoggedHours(e.target.value)}
+                      placeholder="0"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label>Frequency</Label>

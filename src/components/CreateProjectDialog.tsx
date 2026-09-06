@@ -17,6 +17,7 @@ import {
 import { useProjectMutations } from "@/hooks/useProjects";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { parseNonNegativeNumber } from "@/lib/projectBudget";
 import { toast } from "sonner";
 
 interface CreateProjectDialogProps {
@@ -38,6 +39,9 @@ export function CreateProjectDialog({ open, onOpenChange, project, onSaved }: Cr
   const [flowMode, setFlowMode] = useState<ProjectFlowMode>("parallel");
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [budgetAmount, setBudgetAmount] = useState("");
+  const [budgetCurrency, setBudgetCurrency] = useState("INR");
+  const [allocatedHours, setAllocatedHours] = useState("");
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -52,6 +56,9 @@ export function CreateProjectDialog({ open, onOpenChange, project, onSaved }: Cr
     setFlowMode(project?.flow_mode || "parallel");
     setStartDate(project?.start_date || "");
     setDueDate(project?.due_date || "");
+    setBudgetAmount(project?.budget_amount != null ? String(project.budget_amount) : "");
+    setBudgetCurrency(project?.budget_currency || "INR");
+    setAllocatedHours(project?.allocated_hours != null ? String(project.allocated_hours) : "");
     supabase.from("departments").select("id, name").order("name").then(({ data }) => {
       setDepartments(data || []);
     });
@@ -74,6 +81,9 @@ export function CreateProjectDialog({ open, onOpenChange, project, onSaved }: Cr
         flow_mode: flowMode,
         start_date: startDate || null,
         due_date: dueDate || null,
+        budget_amount: parseNonNegativeNumber(budgetAmount),
+        budget_currency: budgetCurrency.trim() || "INR",
+        allocated_hours: parseNonNegativeNumber(allocatedHours),
       };
       const saved = project
         ? await update(project.id, payload)
@@ -190,6 +200,41 @@ export function CreateProjectDialog({ open, onOpenChange, project, onSaved }: Cr
             <div className="space-y-1.5">
               <Label>Due date</Label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="project-budget">Budget</Label>
+              <div className="flex gap-1.5">
+                <Input
+                  id="project-budget-currency"
+                  value={budgetCurrency}
+                  onChange={(e) => setBudgetCurrency(e.target.value.toUpperCase())}
+                  className="w-16"
+                  aria-label="Budget currency"
+                />
+                <Input
+                  id="project-budget"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={budgetAmount}
+                  onChange={(e) => setBudgetAmount(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="project-allocated-hours">Allocated hours</Label>
+              <Input
+                id="project-allocated-hours"
+                type="number"
+                min="0"
+                step="0.5"
+                value={allocatedHours}
+                onChange={(e) => setAllocatedHours(e.target.value)}
+                placeholder="0"
+              />
             </div>
           </div>
           <div className="space-y-1.5">

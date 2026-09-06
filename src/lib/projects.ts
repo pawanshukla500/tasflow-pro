@@ -48,6 +48,9 @@ export interface ProjectRow {
   flow_mode: ProjectFlowMode;
   start_date: string | null;
   due_date: string | null;
+  budget_amount: number | null;
+  budget_currency: string;
+  allocated_hours: number | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

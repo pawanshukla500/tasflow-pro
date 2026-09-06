@@ -21,6 +21,7 @@ import { ExtendTaskDueDateDialog } from "@/components/ExtendTaskDueDateDialog";
 import { EntityLookupField, EntityLinkPreview } from "@/components/EntityLookupField";
 import { useProjectSections } from "@/hooks/useProjectSections";
 import { resolveTaskContainerAssignment, sectionIdForProject } from "@/lib/projectLookup";
+import { parseNonNegativeNumber } from "@/lib/projectBudget";
 import {
   allowedStatusesForUser,
   canApproveOrRejectReview,
@@ -58,6 +59,12 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
   const [deptId, setDeptId] = useState(task.department_id || "");
   const [projectId, setProjectId] = useState(task.project_id || "");
   const [sectionId, setSectionId] = useState(task.section_id || "");
+  const [estimatedHours, setEstimatedHours] = useState(
+    task.estimated_hours != null ? String(task.estimated_hours) : "",
+  );
+  const [loggedHours, setLoggedHours] = useState(
+    task.logged_hours != null ? String(task.logged_hours) : "",
+  );
   const [assignees, setAssignees] = useState<string[]>(task.assignees.map((a) => a.user_id));
   const [dueDate, setDueDate] = useState<Date | undefined>(task.due_date ? new Date(task.due_date) : undefined);
   const [frequency, setFrequency] = useState(task.frequency || "none");
@@ -84,6 +91,8 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
     setDeptId(task.department_id || "");
     setProjectId(task.project_id || "");
     setSectionId(task.section_id || "");
+    setEstimatedHours(task.estimated_hours != null ? String(task.estimated_hours) : "");
+    setLoggedHours(task.logged_hours != null ? String(task.logged_hours) : "");
     setAssignees(task.assignees.map((a) => a.user_id));
     setDueDate(task.due_date ? new Date(task.due_date) : undefined);
     setFrequency(task.frequency || "none");
@@ -158,6 +167,8 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
         frequency,
         requires_review: requiresReview,
         reviewer_user_id: requiresReview && reviewerUserId ? reviewerUserId : null,
+        estimated_hours: parseNonNegativeNumber(estimatedHours),
+        logged_hours: parseNonNegativeNumber(loggedHours) ?? 0,
       };
       if (projects.length > 0 || projectId || task.project_id) {
         updates.project_id = projectId || null;
@@ -398,6 +409,39 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
                   )}
                 </div>
               )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-estimated-hours">Estimated hours</Label>
+                {canEdit ? (
+                  <Input
+                    id="edit-estimated-hours"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={estimatedHours}
+                    onChange={(e) => setEstimatedHours(e.target.value)}
+                  />
+                ) : (
+                  <Input value={task.estimated_hours != null ? String(task.estimated_hours) : "—"} disabled />
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-logged-hours">Logged hours</Label>
+                {canEdit ? (
+                  <Input
+                    id="edit-logged-hours"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={loggedHours}
+                    onChange={(e) => setLoggedHours(e.target.value)}
+                  />
+                ) : (
+                  <Input value={task.logged_hours != null ? String(task.logged_hours) : "—"} disabled />
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">
