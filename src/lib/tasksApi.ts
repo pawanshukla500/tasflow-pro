@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { filterTasksForProject } from "@/lib/projectBudget";
+import { filterTasksForProject, isUnknownColumnError } from "@/lib/projectBudget";
 
 /** Default page size — keeps initial payloads small. */
 export const TASK_PAGE_SIZE = 50;
@@ -168,6 +168,12 @@ const CORE_COLS_NO_PROJECT = `
   completed_on_time, days_late, organization_id
 `.replace(/\s+/g, " ").trim();
 
+/** Last-resort project-scoped columns — still includes project_id so the board cannot leak. */
+const CORE_COLS_MINIMAL = `
+  id, title, description, status, priority, due_date, start_date,
+  department_id, project_id, created_by, completed_at, created_at, updated_at
+`.replace(/\s+/g, " ").trim();
+
 const DEPS_COLS = `blocked_by, depends_on`;
 
 const EMBEDS_WITH_PROFILE = `
@@ -215,6 +221,16 @@ const EMBEDS_NO_PROFILE_NO_PROJECT = `
   task_comments ( count )
 `.replace(/\s+/g, " ").trim();
 
+const EMBEDS_ASSIGNEES_PROFILE = `
+  departments ( id, name, color ),
+  task_assignees ( user_id, profiles ( id, name ) )
+`.replace(/\s+/g, " ").trim();
+
+const EMBEDS_ASSIGNEES_ONLY = `
+  departments ( id, name, color ),
+  task_assignees ( user_id )
+`.replace(/\s+/g, " ").trim();
+
 const CREATOR_EMBED = `creator:profiles!tasks_created_by_profiles_fkey ( id, name )`;
 
 /**
@@ -231,6 +247,24 @@ export const TASK_SELECT_CANDIDATES = [
   `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_SECTION}`,
   `${CORE_COLS_NO_SECTION}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_SECTION}, ${CREATOR_EMBED}`,
   `${CORE_COLS_NO_SECTION}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_SECTION}`,
+  // Hosted may lack blocked_by/depends_on; keep project_id so the board can still scope.
+  `${CORE_COLS}, ${EMBEDS_WITH_PROFILE}, ${CREATOR_EMBED}`,
+  `${CORE_COLS}, ${EMBEDS_WITH_PROFILE}`,
+  `${CORE_COLS}, ${EMBEDS_NO_PROFILE}`,
+  // project_id column, without projects()/project_sections() relationship embeds
+  `${CORE_COLS}, ${EMBEDS_WITH_PROFILE_NO_PROJECT}, ${CREATOR_EMBED}`,
+  `${CORE_COLS}, ${EMBEDS_WITH_PROFILE_NO_PROJECT}`,
+  `${CORE_COLS}, ${EMBEDS_NO_PROFILE_NO_PROJECT}`,
+  // project_id, without hours and without section_id
+  `${CORE_COLS_NO_SECTION}, ${EMBEDS_WITH_PROFILE_NO_PROJECT}, ${CREATOR_EMBED}`,
+  `${CORE_COLS_NO_SECTION}, ${EMBEDS_WITH_PROFILE_NO_PROJECT}`,
+  `${CORE_COLS_NO_SECTION}, ${EMBEDS_NO_PROFILE_NO_PROJECT}`,
+  // project_id, without task_subtasks / count embeds
+  `${CORE_COLS}, ${EMBEDS_ASSIGNEES_PROFILE}, ${CREATOR_EMBED}`,
+  `${CORE_COLS}, ${EMBEDS_ASSIGNEES_ONLY}`,
+  `${CORE_COLS_NO_SECTION}, ${EMBEDS_ASSIGNEES_ONLY}`,
+  `${CORE_COLS_MINIMAL}, task_assignees ( user_id )`,
+  CORE_COLS_MINIMAL,
   `${CORE_COLS_NO_PROJECT}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_PROJECT}, ${CREATOR_EMBED}`,
   `${CORE_COLS_NO_PROJECT}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_PROJECT}`,
   `${CORE_COLS_NO_PROJECT}, ${DEPS_COLS}, ${EMBEDS_NO_PROFILE_NO_PROJECT}`,
@@ -306,8 +340,29 @@ export function taskSelectCandidates(projectId?: string | null): string[] {
   return TASK_SELECT_CANDIDATES.filter(selectIncludesProjectId);
 }
 
-function isRecoverableSelectError(message: string): boolean {
-  return /could not find|does not exist|PGRST204|PGRST200|42703|relationship/i.test(message);
+export function isRecoverableSelectError(message: string | undefined): boolean {
+  return (
+    isUnknownColumnError(message) ||
+    /PGRST200|PGRST205|relationship/i.test(message || "")
+  );
+}
+
+/** Short user-facing PostgREST/query error. Never include tokens. */
+export function formatTasksLoadError(error: unknown): string {
+  const raw =
+    typeof error === "object" && error && "message" in error
+      ? String((error as { message?: unknown }).message || "")
+      : typeof error === "string"
+        ? error
+        : "";
+  const redacted = raw
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g, "[redacted]")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!redacted) return "Failed to load tasks — check your connection or database schema";
+  const short = redacted.length > 160 ? `${redacted.slice(0, 157)}…` : redacted;
+  return `Failed to load tasks — ${short}`;
 }
 
 async function hydrateAssigneeAndCreatorNames(tasks: TaskRow[]): Promise<TaskRow[]> {
@@ -356,7 +411,7 @@ export async function fetchTasksPage(
   const page = Math.max(1, options.page ?? 1);
   const offset = (page - 1) * limit;
 
-  const buildQuery = (select: string) => {
+  const buildQuery = (select: string, filterByProject: boolean) => {
     let q = supabase
       .from("tasks")
       .select(select, { count: "exact" })
@@ -365,7 +420,7 @@ export async function fetchTasksPage(
 
     if (options.status) q = q.eq("status", options.status);
     if (options.departmentId) q = q.eq("department_id", options.departmentId);
-    if (options.projectId) {
+    if (filterByProject && options.projectId) {
       q = q.eq("project_id", options.projectId);
     }
 
@@ -380,36 +435,55 @@ export async function fetchTasksPage(
     return q;
   };
 
-  let data: unknown = null;
-  let error: { message: string } | null = null;
-  let count: number | null = null;
-
   const candidates = taskSelectCandidates(options.projectId);
   if (options.projectId && candidates.length === 0) {
     return { tasks: [], total: 0, page, limit, hasMore: false, nextCursor: null };
   }
 
-  for (const select of candidates) {
-    const result = await buildQuery(select);
-    data = result.data;
-    error = result.error;
-    count = typeof result.count === "number" ? result.count : null;
-    if (!error) break;
-    if (!isRecoverableSelectError(error.message)) break;
+  const tryCandidates = async (filterByProject: boolean) => {
+    let data: unknown = null;
+    let error: { message: string } | null = null;
+    let count: number | null = null;
+    for (const select of candidates) {
+      const result = await buildQuery(select, filterByProject);
+      data = result.data;
+      error = result.error;
+      count = typeof result.count === "number" ? result.count : null;
+      if (!error) return { data, error: null, count };
+      if (!isRecoverableSelectError(error.message)) return { data, error, count };
+    }
+    return { data, error, count };
+  };
+
+  let fetched = await tryCandidates(Boolean(options.projectId));
+  let usedServerProjectFilter = Boolean(options.projectId);
+  if (
+    fetched.error &&
+    options.projectId &&
+    isRecoverableSelectError(fetched.error.message) &&
+    /project_id|schema cache/i.test(fetched.error.message)
+  ) {
+    const unfiltered = await tryCandidates(false);
+    if (!unfiltered.error) {
+      fetched = unfiltered;
+      usedServerProjectFilter = false;
+    }
   }
 
-  if (error) throw error;
+  if (fetched.error) throw fetched.error;
 
-  let tasks = ((data || []) as unknown as NestedTask[]).map(mapEmbeddedTask);
+  let tasks = ((fetched.data || []) as unknown as NestedTask[]).map(mapEmbeddedTask);
   tasks = await hydrateAssigneeAndCreatorNames(tasks);
   if (options.projectId) {
     tasks = filterTasksForProject(tasks, options.projectId);
   }
 
-  const total = typeof count === "number" ? count : null;
+  const rawCount = typeof fetched.count === "number" ? fetched.count : null;
+  const rawLen = ((fetched.data || []) as unknown[]).length;
+  const total = options.projectId && !usedServerProjectFilter ? null : rawCount;
   const last = tasks[tasks.length - 1];
   const hasMore =
-    total != null ? offset + tasks.length < total : tasks.length === limit;
+    total != null ? offset + rawLen < total : rawLen === limit;
 
   return {
     tasks,

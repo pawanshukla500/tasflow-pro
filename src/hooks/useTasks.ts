@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   fetchTasksPage,
   fetchTasksBounded,
+  formatTasksLoadError,
   TASK_PAGE_SIZE,
   type TaskRow,
 } from "@/lib/tasksApi";
@@ -177,7 +178,7 @@ export function useTasks(options: UseTasksOptions = {}) {
   useEffect(() => {
     if (query.isError) {
       console.error("Failed to load tasks:", query.error);
-      toast.error("Failed to load tasks — check your connection or database schema");
+      toast.error(formatTasksLoadError(query.error));
     }
   }, [query.isError, query.error]);
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapEmbeddedTask, TASK_PAGE_SIZE, TASK_PAGE_SIZE_MAX, TASK_SELECT_CANDIDATES, selectIncludesProjectId, taskSelectCandidates } from "@/lib/tasksApi";
+import { mapEmbeddedTask, TASK_PAGE_SIZE, TASK_PAGE_SIZE_MAX, TASK_SELECT_CANDIDATES, formatTasksLoadError, isRecoverableSelectError, selectIncludesProjectId, taskSelectCandidates } from "@/lib/tasksApi";
 
 describe("tasksApi pagination constants", () => {
   it("keeps a bounded default page size", () => {
@@ -147,5 +147,32 @@ describe("task select candidates", () => {
     expect(scoped.every(selectIncludesProjectId)).toBe(true);
     const unscoped = taskSelectCandidates(null);
     expect(unscoped.some((select) => !selectIncludesProjectId(select))).toBe(true);
+  });
+
+  it("can degrade project-scoped fetches without blocked_by/depends_on", () => {
+    const scoped = taskSelectCandidates("95ed9f92-ae1c-419a-84c5-bb04b458beaf");
+    expect(scoped.some((select) => !/blocked_by/.test(select) && !/depends_on/.test(select))).toBe(true);
+  });
+
+  it("can degrade project-scoped fetches without a projects embed", () => {
+    const scoped = taskSelectCandidates("95ed9f92-ae1c-419a-84c5-bb04b458beaf");
+    expect(scoped.some((select) => !/projects\s*\(/.test(select))).toBe(true);
+  });
+});
+
+describe("isRecoverableSelectError", () => {
+  it("treats PGRST205 and schema cache misses as recoverable", () => {
+    expect(isRecoverableSelectError("PGRST205")).toBe(true);
+    expect(isRecoverableSelectError("Could not find the table 'public.tasks' in the schema cache")).toBe(true);
+    expect(isRecoverableSelectError("PGRST204")).toBe(true);
+    expect(isRecoverableSelectError("permission denied")).toBe(false);
+  });
+});
+
+describe("formatTasksLoadError", () => {
+  it("includes a short PostgREST message", () => {
+    expect(formatTasksLoadError({ message: "column tasks.blocked_by does not exist" })).toBe(
+      "Failed to load tasks — column tasks.blocked_by does not exist",
+    );
   });
 });
