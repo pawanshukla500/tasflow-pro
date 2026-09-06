@@ -29,6 +29,7 @@ const project: ProjectRow = {
 
 let currentProject: ProjectRow = { ...project };
 let currentTasks: TaskRow[] = [];
+let currentHasMore = false;
 
 vi.mock("@/hooks/useProjects", () => ({
   useProject: () => ({
@@ -43,7 +44,7 @@ vi.mock("@/hooks/useTasks", () => ({
     tasks: currentTasks,
     loading: false,
     loadingMore: false,
-    hasMore: false,
+    hasMore: currentHasMore,
     loadMore: vi.fn(),
     updateTaskStatus: vi.fn(),
   }),
@@ -111,6 +112,7 @@ describe("ProjectDetailPage", () => {
   it("opens a created project instead of crashing on a missing view helper", () => {
     currentProject = { ...project };
     currentTasks = [];
+    currentHasMore = false;
     renderPage();
     expect(screen.getAllByText("Website rebuild").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: /Website rebuild/ })).toBeInTheDocument();
@@ -124,6 +126,7 @@ describe("ProjectDetailPage", () => {
   it("hides sections and the full pipeline on workflows, and shows Raise workflow", async () => {
     currentProject = { ...project };
     currentTasks = [];
+    currentHasMore = false;
     renderPage("/projects/7ec222a8-99b2-4e62-b428-b6d585c8a7ef?view=workflows");
     expect(screen.getByTestId("project-workflows-view")).toBeInTheDocument();
     expect(screen.queryByTestId("project-sections-editor")).not.toBeInTheDocument();
@@ -136,6 +139,7 @@ describe("ProjectDetailPage", () => {
 
   it("lists only project-scoped tasks on the board", () => {
     currentProject = { ...project };
+    currentHasMore = false;
     currentTasks = [
       task({ id: "mine", title: "Consignments invoice", status: "todo", project_id: project.id, estimated_hours: 4 }),
       task({ id: "other", title: "Foreign Flipkart bill", status: "todo", project_id: "other-project" }),
@@ -150,10 +154,24 @@ describe("ProjectDetailPage", () => {
   it("renders unset budget as an em dash in the metric row", () => {
     currentProject = { ...project, budget_amount: null, allocated_hours: null };
     currentTasks = [];
+    currentHasMore = false;
     renderPage();
     const row = screen.getByTestId("project-metric-row");
     expect(row).toHaveTextContent("Budget—");
     expect(row).toHaveTextContent("Allocated—");
     expect(row).not.toHaveTextContent("Budget Allocated Estimated 0h Logged 0h");
+  });
+
+  it("does not show a partial hour total while more tasks are still loading", () => {
+    currentProject = { ...project };
+    currentHasMore = true;
+    currentTasks = [
+      task({ id: "mine", title: "Consignments invoice", status: "todo", project_id: project.id, estimated_hours: 4 }),
+    ];
+    renderPage();
+    const row = screen.getByTestId("project-metric-row");
+    expect(row).toHaveTextContent("Estimated…");
+    expect(row).toHaveTextContent("Logged…");
+    expect(row).not.toHaveTextContent("4h");
   });
 });

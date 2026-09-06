@@ -41,12 +41,16 @@ export function projectMetricChips(input: {
   allocatedHours?: number | null;
   estimatedHours?: number | null;
   loggedHours?: number | null;
+  /** True while task pages are still loading, so hour chips are not a partial sum. */
+  hoursPending?: boolean;
 }): ProjectMetricChip[] {
+  const hourValue = (n: number | null | undefined) =>
+    input.hoursPending ? "…" : formatHours(n) || "—";
   return [
     { label: "Budget", value: formatBudget(input.budgetAmount, input.budgetCurrency) || "—" },
     { label: "Allocated", value: formatHours(input.allocatedHours) || "—" },
-    { label: "Estimated", value: formatHours(input.estimatedHours) || "—" },
-    { label: "Logged", value: formatHours(input.loggedHours) || "—" },
+    { label: "Estimated", value: hourValue(input.estimatedHours) },
+    { label: "Logged", value: hourValue(input.loggedHours) },
   ];
 }
 

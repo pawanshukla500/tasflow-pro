@@ -39,6 +39,7 @@ describe("project budget and hours", () => {
       { label: "Estimated", value: "4h" },
       { label: "Logged", value: "1h" },
     ]);
+    expect(projectMetricChips({ estimatedHours: 4, loggedHours: 1, hoursPending: true }).find((c) => c.label === "Estimated")?.value).toBe("…");
   });
 
   it("rolls up estimated and logged hours only for the given project", () => {

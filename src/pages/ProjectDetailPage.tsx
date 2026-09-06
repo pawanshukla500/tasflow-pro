@@ -144,8 +144,9 @@ export default function ProjectDetailPage() {
       allocatedHours: project?.allocated_hours,
       estimatedHours: hourTotals.estimated,
       loggedHours: hourTotals.logged,
+      hoursPending: tasksLoading || loadingMore || hasMore,
     }),
-    [project?.budget_amount, project?.budget_currency, project?.allocated_hours, hourTotals],
+    [project?.budget_amount, project?.budget_currency, project?.allocated_hours, hourTotals, tasksLoading, loadingMore, hasMore],
   );
 
   useEffect(() => {
