@@ -865,6 +865,50 @@ export type Database = {
           },
         ]
       }
+      project_sections: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          organization_id: string | null
+          project_id: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          organization_id?: string | null
+          project_id: string
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          organization_id?: string | null
+          project_id?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_sections_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           color: string
@@ -873,10 +917,13 @@ export type Database = {
           default_view: string
           department_id: string | null
           description: string | null
+          due_date: string | null
+          flow_mode: string
           icon: string
           id: string
           name: string
           organization_id: string | null
+          start_date: string | null
           status: string
           updated_at: string
         }
@@ -887,10 +934,13 @@ export type Database = {
           default_view?: string
           department_id?: string | null
           description?: string | null
+          due_date?: string | null
+          flow_mode?: string
           icon?: string
           id?: string
           name: string
           organization_id?: string | null
+          start_date?: string | null
           status?: string
           updated_at?: string
         }
@@ -901,10 +951,13 @@ export type Database = {
           default_view?: string
           department_id?: string | null
           description?: string | null
+          due_date?: string | null
+          flow_mode?: string
           icon?: string
           id?: string
           name?: string
           organization_id?: string | null
+          start_date?: string | null
           status?: string
           updated_at?: string
         }
@@ -1080,6 +1133,7 @@ export type Database = {
           priority: string
           project_id: string | null
           recurrence_parent_id: string | null
+          section_id: string | null
           start_date: string | null
           status: string
           title: string
@@ -1102,6 +1156,7 @@ export type Database = {
           priority?: string
           project_id?: string | null
           recurrence_parent_id?: string | null
+          section_id?: string | null
           start_date?: string | null
           status?: string
           title: string
@@ -1124,6 +1179,7 @@ export type Database = {
           priority?: string
           project_id?: string | null
           recurrence_parent_id?: string | null
+          section_id?: string | null
           start_date?: string | null
           status?: string
           title?: string
@@ -1144,6 +1200,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "project_sections"
             referencedColumns: ["id"]
           },
           {

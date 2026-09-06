@@ -4,7 +4,6 @@ import { X, CalendarIcon, ShieldCheck, Send, CheckCircle, XCircle, Clock } from 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +18,9 @@ import TaskAttachments from "@/components/TaskAttachments";
 import SubtaskEditor, { type SubtaskDraft } from "@/components/SubtaskEditor";
 import TaskReviewDialog from "@/components/TaskReviewDialog";
 import { ExtendTaskDueDateDialog } from "@/components/ExtendTaskDueDateDialog";
+import { EntityLookupField, EntityLinkPreview } from "@/components/EntityLookupField";
+import { useProjectSections } from "@/hooks/useProjectSections";
+import { resolveTaskContainerAssignment, sectionIdForProject } from "@/lib/projectLookup";
 import {
   allowedStatusesForUser,
   canApproveOrRejectReview,
@@ -55,6 +57,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
   const [status, setStatus] = useState(task.status);
   const [deptId, setDeptId] = useState(task.department_id || "");
   const [projectId, setProjectId] = useState(task.project_id || "");
+  const [sectionId, setSectionId] = useState(task.section_id || "");
   const [assignees, setAssignees] = useState<string[]>(task.assignees.map((a) => a.user_id));
   const [dueDate, setDueDate] = useState<Date | undefined>(task.due_date ? new Date(task.due_date) : undefined);
   const [frequency, setFrequency] = useState(task.frequency || "none");
@@ -65,6 +68,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [projects, setProjects] = useState<{ id: string; name: string; icon: string }[]>([]);
   const [users, setUsers] = useState<{ id: string; name: string; department_id: string | null }[]>([]);
+  const { sections } = useProjectSections(projectId || undefined);
   const [subtasks, setSubtasks] = useState<SubtaskDraft[]>([]);
   const [showExtendDue, setShowExtendDue] = useState(false);
   const [displayDueDate, setDisplayDueDate] = useState(task.due_date);
@@ -79,6 +83,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
     setStatus(task.status);
     setDeptId(task.department_id || "");
     setProjectId(task.project_id || "");
+    setSectionId(task.section_id || "");
     setAssignees(task.assignees.map((a) => a.user_id));
     setDueDate(task.due_date ? new Date(task.due_date) : undefined);
     setFrequency(task.frequency || "none");
@@ -156,6 +161,20 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
       };
       if (projects.length > 0 || projectId || task.project_id) {
         updates.project_id = projectId || null;
+      }
+      const container = resolveTaskContainerAssignment({
+        projectId: projectId || null,
+        sectionId: sectionId || null,
+        projects,
+        sections,
+      });
+      if (!container.ok) {
+        toast.error(container.error);
+        setSaving(false);
+        return;
+      }
+      if (projects.length > 0 || projectId || task.project_id || task.section_id) {
+        updates.section_id = container.sectionId;
       }
       if (status === "done" && !task.completed_at) updates.completed_at = new Date().toISOString();
       if (status !== "done") updates.completed_at = null;
@@ -256,7 +275,21 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
 
             <div className="space-y-2">
               <Label>Description</Label>
-              <Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} disabled={!canEdit} />
+              {canEdit ? (
+                <EntityLookupField
+                  value={description}
+                  onChange={setDescription}
+                  rows={3}
+                  excludeTaskId={task.id}
+                />
+              ) : (
+                <>
+                  <p className="text-sm whitespace-pre-wrap rounded-md border bg-muted/30 px-3 py-2 min-h-[4.5rem]">
+                    {description || "—"}
+                  </p>
+                  <EntityLinkPreview text={description} className="mt-1" />
+                </>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -325,7 +358,14 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
               <div className="space-y-2">
                 <Label>Project</Label>
                 {canEdit ? (
-                  <Select value={projectId || "none"} onValueChange={(v) => setProjectId(v === "none" ? "" : v)}>
+                  <Select
+                    value={projectId || "none"}
+                    onValueChange={(v) => {
+                      const next = v === "none" ? "" : v;
+                      setProjectId(next);
+                      setSectionId((prev) => sectionIdForProject(prev, next || null, sections) || "");
+                    }}
+                  >
                     <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">No project</SelectItem>
@@ -338,6 +378,24 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
                   <Input value={task.project_name || "—"} disabled />
                 )}
               </div>
+              {projectId && (
+                <div className="space-y-2">
+                  <Label>Section</Label>
+                  {canEdit ? (
+                    <Select value={sectionId || "none"} onValueChange={(v) => setSectionId(v === "none" ? "" : v)}>
+                      <SelectTrigger><SelectValue placeholder="No section" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No section</SelectItem>
+                        {sections.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input value={task.section_name || "—"} disabled />
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

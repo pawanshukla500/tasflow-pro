@@ -15,6 +15,7 @@ export interface TaskRow {
   start_date: string | null;
   department_id: string | null;
   project_id?: string | null;
+  section_id?: string | null;
   created_by: string | null;
   completed_at: string | null;
   created_at: string;
@@ -24,6 +25,7 @@ export interface TaskRow {
   project_name?: string;
   project_color?: string;
   project_icon?: string;
+  section_name?: string;
   assignees: { user_id: string; name: string }[];
   creator_name?: string;
   comment_count?: number;
@@ -89,6 +91,7 @@ type NestedTask = {
   start_date: string | null;
   department_id: string | null;
   project_id?: string | null;
+  section_id?: string | null;
   created_by: string | null;
   completed_at: string | null;
   created_at: string;
@@ -108,6 +111,7 @@ type NestedTask = {
   organization_id?: string | null;
   departments?: { id: string; name: string; color: string } | null;
   projects?: { id: string; name: string; color: string; icon: string } | null;
+  project_sections?: { id: string; title: string } | null;
   task_assignees?: NestedAssignee[] | null;
   task_subtasks?: { id: string; title: string; completed: boolean; position?: number }[] | null;
   task_attachments?: { count: number }[] | { id: string }[] | null;
@@ -123,6 +127,15 @@ function embedCount(rows: { count?: number; id?: string }[] | null | undefined):
 }
 
 const CORE_COLS = `
+  id, title, description, status, priority, due_date, start_date,
+  department_id, project_id, section_id, created_by, completed_at, created_at, updated_at,
+  frequency, recurrence_parent_id,
+  requires_review, reviewer_user_id, review_note,
+  submitted_for_review_at, reviewed_at, reviewed_by,
+  completed_on_time, days_late, organization_id
+`.replace(/\s+/g, " ").trim();
+
+const CORE_COLS_NO_SECTION = `
   id, title, description, status, priority, due_date, start_date,
   department_id, project_id, created_by, completed_at, created_at, updated_at,
   frequency, recurrence_parent_id,
@@ -186,6 +199,8 @@ const TASK_SELECT_CANDIDATES = [
   `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}, ${CREATOR_EMBED}`,
   `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}`,
   `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_NO_PROFILE}`,
+  `${CORE_COLS_NO_SECTION}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}, ${CREATOR_EMBED}`,
+  `${CORE_COLS_NO_SECTION}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}`,
   `${CORE_COLS_NO_PROJECT}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_PROJECT}, ${CREATOR_EMBED}`,
   `${CORE_COLS_NO_PROJECT}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_PROJECT}`,
   `${CORE_COLS_NO_PROJECT}, ${DEPS_COLS}, ${EMBEDS_NO_PROFILE_NO_PROJECT}`,
@@ -217,6 +232,7 @@ export function mapEmbeddedTask(row: NestedTask): TaskRow {
     start_date: row.start_date,
     department_id: row.department_id,
     project_id: row.project_id ?? null,
+    section_id: row.section_id ?? null,
     created_by: row.created_by,
     completed_at: row.completed_at,
     created_at: row.created_at,
@@ -238,6 +254,7 @@ export function mapEmbeddedTask(row: NestedTask): TaskRow {
     project_name: row.projects?.name,
     project_color: row.projects?.color,
     project_icon: row.projects?.icon,
+    section_name: row.project_sections?.title,
     assignees,
     creator_name: row.creator?.name,
     comment_count: embedCount(row.task_comments as { count?: number; id?: string }[] | null),

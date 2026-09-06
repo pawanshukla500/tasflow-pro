@@ -7,7 +7,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +20,9 @@ import { SEND_EMAIL_ON_TASK_CREATE } from "@/lib/taskAssignmentNotify";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import SubtaskEditor, { type SubtaskDraft } from "@/components/SubtaskEditor";
+import { EntityLookupField } from "@/components/EntityLookupField";
+import { useProjectSections } from "@/hooks/useProjectSections";
+import { resolveTaskContainerAssignment, sectionIdForProject } from "@/lib/projectLookup";
 
 interface CreateTaskModalProps {
   onClose: () => void;
@@ -51,6 +53,7 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
   const [assignees, setAssignees] = useState<string[]>([]);
   const [deptId, setDeptId] = useState("");
   const [projectId, setProjectId] = useState(initialProjectId || "");
+  const [sectionId, setSectionId] = useState("");
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [dueTime, setDueTime] = useState<string>("");
   const [status, setStatus] = useState(initialStatus || "todo");
@@ -67,6 +70,7 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
   const [departments, setDepartments] = useState<DeptOption[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
+  const { sections } = useProjectSections(projectId || undefined);
 
   useEffect(() => {
     Promise.all([
@@ -154,6 +158,18 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
         reviewer_user_id: requiresReview && reviewerUserId ? reviewerUserId : null,
       };
       if (projectId) insertRow.project_id = projectId;
+      const container = resolveTaskContainerAssignment({
+        projectId: projectId || null,
+        sectionId: sectionId || null,
+        projects,
+        sections,
+      });
+      if (!container.ok) {
+        toast.error(container.error);
+        setSaving(false);
+        return;
+      }
+      if (container.sectionId) insertRow.section_id = container.sectionId;
       const { data: task, error } = await supabase.from("tasks").insert(insertRow as never).select("id").single();
 
       if (error) throw error;
@@ -278,12 +294,12 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
 
             <div className="space-y-1.5">
               <Label htmlFor="description">Description</Label>
-              <Textarea
+              <EntityLookupField
                 id="description"
-                placeholder="Optional context or acceptance criteria…"
-                rows={2}
                 value={description}
-                onChange={e => setDescription(e.target.value)}
+                onChange={setDescription}
+                rows={2}
+                placeholder="Optional context. Type [[ to look up a task or project."
                 className="resize-none min-h-[64px]"
               />
             </div>
@@ -348,7 +364,11 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
               <Label>Project</Label>
               <Select
                 value={projectId || "none"}
-                onValueChange={(v) => setProjectId(v === "none" ? "" : v)}
+                onValueChange={(v) => {
+                  const next = v === "none" ? "" : v;
+                  setProjectId(next);
+                  setSectionId((prev) => sectionIdForProject(prev, next || null, sections) || "");
+                }}
                 disabled={!!initialProjectId}
               >
                 <SelectTrigger>
@@ -364,6 +384,23 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
                 </SelectContent>
               </Select>
             </div>
+
+            {projectId && sections.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>Section</Label>
+                <Select value={sectionId || "none"} onValueChange={(v) => setSectionId(v === "none" ? "" : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Optional section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No section</SelectItem>
+                    {sections.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">

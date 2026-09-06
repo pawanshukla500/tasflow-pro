@@ -28,11 +28,13 @@ describe("projects replace inbox", () => {
     const tools = readFileSync(resolve(root, "supabase/functions/mcp-server/tools/projects.ts"), "utf8");
     expect(tools).toContain('name: "list_projects"');
     expect(tools).toContain('name: "create_project"');
+    expect(tools).toContain('name: "list_project_sections"');
+    expect(tools).toContain('name: "lookup_entities"');
   });
 
   it("shows project status as pipeline steps on the detail board", () => {
     const page = readFileSync(resolve(root, "src/pages/ProjectDetailPage.tsx"), "utf8");
-    expect(page).toContain("ProjectPipelineBar");
+    expect(page).toContain("ProjectSectionsEditor");
     expect(page).toContain("ProjectBoardView");
     expect(page).not.toMatch(/%\} complete/);
     const board = readFileSync(resolve(root, "src/components/ProjectBoardView.tsx"), "utf8");

@@ -31,6 +31,10 @@ export const PROJECT_ICON_PRESETS = [
   "🧭",
 ] as const;
 
+export type ProjectFlowMode = "parallel" | "sequential";
+
+export const PROJECT_FLOW_MODES = ["parallel", "sequential"] as const;
+
 export interface ProjectRow {
   id: string;
   organization_id: string | null;
@@ -41,6 +45,9 @@ export interface ProjectRow {
   color: string;
   status: ProjectStatus;
   default_view: ProjectView;
+  flow_mode: ProjectFlowMode;
+  start_date: string | null;
+  due_date: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
