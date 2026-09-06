@@ -14,14 +14,18 @@ import CreateTaskModal from "@/components/CreateTaskModal";
 import EditTaskModal from "@/components/EditTaskModal";
 import CompleteTaskDialog from "@/components/CompleteTaskDialog";
 import TaskReviewDialog from "@/components/TaskReviewDialog";
-import { PageHeader } from "@/components/PageHeader";
-import { EmptyState } from "@/components/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAccessScope } from "@/hooks/useAccessScope";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { todayIST, formatDateIST } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { formatHours } from "@/lib/projectBudget";
+import {
+  TASK_IMPORT_HEADERS,
+  taskToExportRow,
+  toCsv,
+} from "@/lib/taskImport";
 import {
   allowedStatusesForUser,
   canApproveOrRejectReview,
@@ -38,6 +42,9 @@ import {
 } from "@/lib/myTasksView";
 
 const ImportTasksModal = lazy(() => import("@/components/ImportTasksModal"));
+
+const TAB_CLASS =
+  "rounded-none border-b-2 bg-transparent px-3 pb-2 pt-1.5 text-[13px] font-medium shadow-none inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer";
 
 const priorityColors: Record<string, string> = {
   critical: "hsl(var(--destructive))",
@@ -57,6 +64,13 @@ const statusColors: Record<string, string> = {
   blocked: "hsl(var(--destructive))",
 };
 
+function hoursMeta(task: TaskRow): string | null {
+  const estimated = formatHours(task.estimated_hours);
+  const logged = formatHours(task.logged_hours);
+  if (estimated && logged) return `${estimated} / ${logged}`;
+  return estimated || logged;
+}
+
 const MyTasks = () => {
   const [searchParams] = useSearchParams();
   const { tasks, loading, loadingMore, fetchTasks, updateTaskStatus, deleteTask, hasMore, loadMore, total } = useTasks();
@@ -74,6 +88,7 @@ const MyTasks = () => {
   const [userFilter, setUserFilter] = useState<string>("all");
   const [filterableUsers, setFilterableUsers] = useState<{ id: string; name: string; department_id?: string | null }[]>([]);
   const canFilterByUser = isAdminOrMD || isDeptManager;
+  const canCreate = accessScope.canCreateTasks;
 
   const subjectUserId = resolveSubjectUserId(user?.id, canFilterByUser, userFilter);
   const selectedMemberName = filterableUsers.find((member) => member.id === userFilter)?.name;
@@ -114,7 +129,7 @@ const MyTasks = () => {
         department_id: p.department_id,
       })));
     })();
-  }, [canFilterByUser, isAdminOrMD, isDeptManager, user?.id]);
+  }, [canFilterByUser, isAdminOrMD, isDeptManager, user]);
 
   useEffect(() => {
     if (canFilterByUser && userFilter !== "all") {
@@ -159,54 +174,26 @@ const MyTasks = () => {
       icon: ArrowRight,
     },
     { id: "unassigned" as const, label: "Unassigned", count: tabCounts.unassigned, icon: Inbox },
-    { id: "all" as const, label: "All tasks", count: tabCounts.all, icon: ListTodo },
+    { id: "all" as const, label: "All", count: tabCounts.all, icon: ListTodo },
   ];
 
   const sections = [
-    {
-      title: "Overdue",
-      tasks: overdue,
-      color: "text-destructive",
-      accent: "border-l-destructive",
-      headerBg: "bg-destructive/[0.04]",
-      icon: AlertTriangle,
-      id: "overdue",
-    },
-    {
-      title: "Due Today",
-      tasks: dueToday,
-      color: "text-warning",
-      accent: "border-l-warning",
-      headerBg: "bg-warning/[0.05]",
-      icon: CalendarClock,
-      id: "today",
-    },
-    {
-      title: "Upcoming",
-      tasks: upcoming,
-      color: "text-primary",
-      accent: "border-l-primary",
-      headerBg: "bg-primary/[0.04]",
-      icon: Clock,
-      id: "upcoming",
-    },
-    {
-      title: "Completed",
-      tasks: completed,
-      color: "text-success",
-      accent: "border-l-success",
-      headerBg: "bg-success/[0.04]",
-      icon: CheckCircle2,
-      id: "completed",
-    },
+    { title: "Overdue", tasks: overdue, color: "text-destructive", accent: "border-l-destructive", icon: AlertTriangle, id: "overdue" },
+    { title: "Due today", tasks: dueToday, color: "text-warning", accent: "border-l-warning", icon: CalendarClock, id: "today" },
+    { title: "Upcoming", tasks: upcoming, color: "text-muted-foreground", accent: "border-l-border", icon: Clock, id: "upcoming" },
+    { title: "Completed", tasks: completed, color: "text-muted-foreground", accent: "border-l-border", icon: CheckCircle2, id: "completed" },
   ];
 
   const kpis = [
-    { label: "Overdue", value: overdue.length, tone: "text-destructive", icon: AlertTriangle },
-    { label: "Due today", value: dueToday.length, tone: "text-warning", icon: CalendarClock },
-    { label: "Active", value: activeCount, tone: "text-primary", icon: Clock },
-    { label: "Done", value: completed.length, tone: "text-success", icon: CheckCircle2 },
+    { label: "Overdue", value: overdue.length, tone: overdue.length ? "text-destructive" : "text-foreground" },
+    { label: "Due today", value: dueToday.length, tone: dueToday.length ? "text-warning" : "text-foreground" },
+    { label: "Active", value: activeCount, tone: "text-foreground" },
+    { label: "Done", value: completed.length, tone: "text-foreground" },
   ];
+
+  const showingLabel = typeof total === "number"
+    ? `Showing ${tasks.length} of ${total}`
+    : `Showing ${tasks.length}`;
 
   const toggle = (id: string) =>
     setCollapsedSections((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
@@ -216,7 +203,6 @@ const MyTasks = () => {
       setReviewTask({ task, mode: "submit" });
       return;
     }
-    // Optimistic: list updates immediately; hook reverts + toasts on API failure.
     const err = await updateTaskStatus(task.id, newStatus);
     if (err) return;
     toast.success(`Status updated to ${statusLabels[newStatus] || newStatus}`);
@@ -244,21 +230,34 @@ const MyTasks = () => {
     toast.success("Task deleted");
   };
 
-  const handleExport = () => {
-    const csv = [
-      ["Title", "Status", "Priority", "Due Date", "Department", "Project"].join(","),
-      ...filtered.map((t) =>
-        [`"${t.title}"`, statusLabels[t.status] || t.status, t.priority, t.due_date || "", t.department_name || "", t.project_name || ""].join(","),
-      ),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+  const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "tasks.csv";
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("CSV exported");
+  };
+
+  const handleExport = async (format: "xlsx" | "csv") => {
+    const rows = filtered.map(taskToExportRow);
+    if (format === "csv") {
+      downloadBlob(new Blob([toCsv(TASK_IMPORT_HEADERS, rows)], { type: "text/csv;charset=utf-8" }), "tasks.csv");
+      toast.success("CSV exported");
+      return;
+    }
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Tasks");
+    ws.addRow([...TASK_IMPORT_HEADERS]);
+    rows.forEach((row) => ws.addRow(row));
+    ws.getRow(1).font = { bold: true };
+    const buf = await wb.xlsx.writeBuffer();
+    downloadBlob(
+      new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+      "tasks.xlsx",
+    );
+    toast.success("Excel exported");
   };
 
   const TaskCard = ({ task }: { task: TaskRow }) => {
@@ -270,14 +269,15 @@ const MyTasks = () => {
     const allowedStatuses = allowedStatusesForUser(task, user?.id, isAdminOrMD, managedDepartments || [], { isHR });
     const showSubmitReview = canSubmitForReview(task, user?.id);
     const showReviewActions = canApproveOrRejectReview(task, user?.id, isAdminOrMD, managedDepartments || []);
+    const hours = hoursMeta(task);
 
     return (
       <div
         id={`task-${task.id}`}
         className={cn(
-          "flex items-center gap-2.5 px-3 sm:px-3.5 py-2.5 transition-colors group",
-          "hover:bg-primary/[0.03]",
-          highlightTaskId === task.id && "bg-primary/5 ring-1 ring-inset ring-primary/30",
+          "flex items-center gap-2.5 px-3 sm:px-3.5 py-2 transition-colors group",
+          "hover:bg-muted/40",
+          highlightTaskId === task.id && "bg-muted ring-1 ring-inset ring-border",
         )}
       >
         <button
@@ -297,8 +297,8 @@ const MyTasks = () => {
           <button
             type="button"
             className={cn(
-              "block w-full text-sm text-left truncate transition-colors hover:text-primary cursor-pointer",
-              task.status === "done" ? "text-muted-foreground line-through decoration-muted-foreground/40" : "font-semibold text-foreground",
+              "block w-full text-[13px] text-left truncate transition-colors hover:text-foreground cursor-pointer leading-snug",
+              task.status === "done" ? "text-muted-foreground line-through decoration-muted-foreground/40" : "font-medium text-foreground",
             )}
             onClick={() => setEditingTask(task)}
           >
@@ -310,16 +310,22 @@ const MyTasks = () => {
             ) : (
               <span>Unassigned</span>
             )}
+            {task.project_name && (
+              <>
+                <span className="opacity-30">·</span>
+                <span className="truncate max-w-[140px]">{task.project_icon ? `${task.project_icon} ` : ""}{task.project_name}</span>
+              </>
+            )}
+            {hours && (
+              <>
+                <span className="opacity-30">·</span>
+                <span className="font-mono-num tabular-nums">{hours}</span>
+              </>
+            )}
             {task.department_name && (
               <>
                 <span className="opacity-30">·</span>
                 <span className="truncate max-w-[120px]">{task.department_name}</span>
-              </>
-            )}
-            {task.project_name && (
-              <>
-                <span className="opacity-30">·</span>
-                <span className="truncate max-w-[120px]">{task.project_icon ? `${task.project_icon} ` : ""}{task.project_name}</span>
               </>
             )}
             <span className="sm:hidden inline-flex items-center gap-1.5">
@@ -330,7 +336,7 @@ const MyTasks = () => {
               </span>
               {task.due_date && (
                 <span className={cn(
-                  "font-mono-num",
+                  "font-mono-num tabular-nums",
                   isOverdue ? "text-destructive font-semibold" : isDueToday ? "text-warning font-medium" : "",
                 )}>
                   {formatDateIST(task.due_date, { day: "numeric", month: "short" })}
@@ -346,7 +352,7 @@ const MyTasks = () => {
             {task.priority}
           </span>
           <span className={cn(
-            "font-mono-num w-14 text-right",
+            "font-mono-num w-14 text-right tabular-nums",
             isOverdue ? "text-destructive font-semibold" : isDueToday ? "text-warning font-medium" : "text-muted-foreground",
           )}>
             {task.due_date ? formatDateIST(task.due_date, { day: "numeric", month: "short" }) : "—"}
@@ -419,92 +425,98 @@ const MyTasks = () => {
   if (loading) {
     return (
       <div className="p-6 max-w-5xl mx-auto flex flex-col items-center justify-center min-h-[50vh] gap-3 text-muted-foreground">
-        <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        <p className="text-sm">Loading your tasks…</p>
+        <div className="w-8 h-8 rounded-full border-2 border-foreground/20 border-t-foreground animate-spin" />
+        <p className="text-[13px]">Loading your tasks…</p>
       </div>
     );
   }
 
   return (
-    <div className="relative p-4 md:p-6 max-w-5xl mx-auto page-enter space-y-5">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10"
-        style={{
-          background:
-            "radial-gradient(ellipse 70% 55% at 0% 0%, hsl(var(--primary) / 0.09), transparent 55%), radial-gradient(ellipse 40% 50% at 100% 0%, hsl(var(--warning) / 0.05), transparent 50%)",
-        }}
-      />
+    <div className="bg-background page-enter" data-testid="my-tasks-page">
+      <header className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b">
+        <div className="px-4 md:px-6 pt-3 pb-0 max-w-5xl mx-auto">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 py-2.5">
+            <div className="min-w-0 space-y-2">
+              <h1 className="text-[22px] md:text-2xl font-semibold tracking-tight leading-[1.3] text-foreground">
+                My Tasks
+              </h1>
+              <p className="text-[13px] text-muted-foreground font-mono-num tabular-nums">{showingLabel}</p>
+              <div className="flex flex-wrap items-center gap-1.5" data-testid="my-tasks-metric-row">
+                {kpis.map((chip) => (
+                  <div
+                    key={chip.label}
+                    className="inline-flex flex-col justify-center rounded-md border bg-background px-2 py-1 min-w-[4.75rem]"
+                  >
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground leading-none">
+                      {chip.label}
+                    </span>
+                    <span className={cn("text-[13px] font-semibold font-mono-num tabular-nums leading-tight mt-1", chip.tone)}>
+                      {chip.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              {canCreate && (
+                <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => setShowImport(true)}>
+                  <Upload className="h-3.5 w-3.5 mr-1" />Import
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="cursor-pointer">
+                    <Download className="h-3.5 w-3.5 mr-1" />Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => void handleExport("xlsx")}>Excel (.xlsx)</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void handleExport("csv")}>CSV</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {canCreate && (
+                <Button size="sm" className="cursor-pointer" onClick={() => setShowCreate(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />New task
+                </Button>
+              )}
+            </div>
+          </div>
 
-      <PageHeader
-        className="relative mb-0"
-        title="My Tasks"
-        description={`${activeCount} active · ${completed.length} completed`}
-        actions={
-          <>
-            <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => setShowImport(true)}>
-              <Upload className="h-3.5 w-3.5 mr-1" />Import
-            </Button>
-            <Button variant="outline" size="sm" className="cursor-pointer" onClick={handleExport}>
-              <Download className="h-3.5 w-3.5 mr-1" />Export
-            </Button>
-            {accessScope.canCreateTasks && (
-              <Button size="sm" className="cursor-pointer" onClick={() => setShowCreate(true)}>
-                <Plus className="h-3.5 w-3.5 mr-1" />New Task
-              </Button>
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center pb-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="h-4 w-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-8 h-9 bg-background"
+                placeholder="Search title, project, assignee…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            {canFilterByUser && (
+              <Select value={userFilter} onValueChange={setUserFilter}>
+                <SelectTrigger className="h-9 w-full sm:w-[180px] text-xs cursor-pointer bg-background">
+                  <SelectValue placeholder="Team member…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{isAdminOrMD ? "All team members" : "My team"}</SelectItem>
+                  {user?.id && (
+                    <SelectItem value={user.id}>Me</SelectItem>
+                  )}
+                  {filterableUsers
+                    .filter((member) => member.id !== user?.id)
+                    .map((member) => (
+                      <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
             )}
-          </>
-        }
-      />
-
-      {/* Soft KPI band */}
-      <div className="relative flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/70 pb-3 animate-rise">
-        {kpis.map((k, i) => (
-          <div key={k.label} className="inline-flex items-center gap-2">
-            {i > 0 && <span className="hidden sm:block w-px h-4 bg-border/80 -ml-2 mr-0" aria-hidden />}
-            <k.icon className={cn("h-3.5 w-3.5 shrink-0", k.tone)} aria-hidden />
-            <span className={cn("font-mono-num text-lg font-semibold tabular-nums leading-none", k.tone)}>{k.value}</span>
-            <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{k.label}</span>
           </div>
-        ))}
-      </div>
-
-      {/* Search + member filter + view tabs */}
-      <div className="relative space-y-3 animate-rise [animation-delay:80ms]">
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center rounded-xl border bg-card/80 backdrop-blur-sm px-3 py-2.5 shadow-[0_1px_0_hsl(var(--border)/0.6)]">
-          <div className="relative flex-1 min-w-0">
-            <Search className="h-4 w-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="pl-8 h-9 bg-background"
-              placeholder="Search tasks…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          {canFilterByUser && (
-            <Select value={userFilter} onValueChange={setUserFilter}>
-              <SelectTrigger className="h-9 w-full sm:w-[180px] text-xs cursor-pointer bg-background">
-                <SelectValue placeholder="Team member…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{isAdminOrMD ? "All team members" : "My team"}</SelectItem>
-                {user?.id && (
-                  <SelectItem value={user.id}>Me</SelectItem>
-                )}
-                {filterableUsers
-                  .filter((member) => member.id !== user?.id)
-                  .map((member) => (
-                    <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          )}
         </div>
 
         <div
           role="tablist"
           aria-label="Task views"
-          className="flex items-center gap-1 overflow-x-auto pb-0.5 p-1 rounded-xl bg-muted/50 border border-border/50"
+          className="flex items-center gap-0 overflow-x-auto px-4 md:px-6 max-w-5xl mx-auto"
         >
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -517,48 +529,34 @@ const MyTasks = () => {
                 aria-selected={isActive}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer",
-                  isActive
-                    ? "bg-card text-primary shadow-sm border border-border/60"
-                    : "text-muted-foreground hover:text-foreground hover:bg-card/60 border border-transparent",
+                  TAB_CLASS,
+                  isActive ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Icon className="h-3.5 w-3.5" aria-hidden />
                 {tab.label}
-                <span
-                  className={cn(
-                    "font-mono-num text-[10px] tabular-nums px-1.5 py-0.5 rounded-md",
-                    isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
-                  )}
-                >
+                <span className="font-mono-num text-[11px] tabular-nums text-muted-foreground">
                   {tab.count}
                 </span>
               </button>
             );
           })}
         </div>
-      </div>
+      </header>
 
-      {/* Task sections */}
-      <div className="relative space-y-3 stagger-children">
+      <div className="px-4 md:px-6 py-3 max-w-5xl mx-auto space-y-3">
         {sections.every((s) => s.tasks.length === 0) ? (
-          <div className="rounded-2xl border border-dashed border-border/80 bg-card/50 overflow-hidden">
-            <EmptyState
-              icon={ListTodo}
-              title="No tasks in this view"
-              description={
-                activeTab === "assigned_to_me"
-                  ? userFilter !== "all" && canFilterByUser
-                    ? `No tasks assigned to ${selectedMemberName || "this team member"} yet.`
-                    : "Tasks assigned to you will appear here. Create one or ask your team lead to assign work."
-                  : "Create a task to get started, or switch filters to see other tasks."
-              }
-              action={
-                accessScope.canCreateTasks
-                  ? { label: "+ Create your first task", onClick: () => setShowCreate(true) }
-                  : undefined
-              }
-            />
+          <div className="py-10 text-center space-y-3">
+            <p className="text-[13px] text-muted-foreground">
+              {activeTab === "assigned_to_me" && userFilter !== "all" && canFilterByUser
+                ? `No tasks assigned to ${selectedMemberName || "this team member"}.`
+                : "No tasks in this view."}
+            </p>
+            {canCreate && (
+              <Button size="sm" className="cursor-pointer" onClick={() => setShowCreate(true)}>
+                <Plus className="h-3.5 w-3.5 mr-1" />Create task
+              </Button>
+            )}
           </div>
         ) : (
           sections
@@ -569,18 +567,11 @@ const MyTasks = () => {
               return (
                 <section
                   key={section.id}
-                  className={cn(
-                    "rounded-xl border border-border/70 border-l-4 bg-card overflow-hidden shadow-[0_1px_2px_hsl(var(--foreground)/0.03)]",
-                    section.accent,
-                  )}
+                  className={cn("bg-background rounded-xl border overflow-hidden border-l-4", section.accent)}
                 >
                   <button
                     type="button"
-                    className={cn(
-                      "w-full flex items-center justify-between px-3.5 py-2.5 transition-colors cursor-pointer",
-                      section.headerBg,
-                      "hover:brightness-[0.98]",
-                    )}
+                    className="w-full flex items-center justify-between px-3.5 py-2 bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
                     onClick={() => toggle(section.id)}
                     aria-expanded={!isCollapsed}
                   >
@@ -588,19 +579,17 @@ const MyTasks = () => {
                       {isCollapsed
                         ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                         : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
-                      <span className={cn("w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-current/10", section.color)}>
-                        <Icon className="h-3 w-3" aria-hidden />
-                      </span>
-                      <span className={cn("text-xs font-semibold uppercase tracking-wide", section.color)}>
+                      <Icon className={cn("h-3.5 w-3.5", section.color)} aria-hidden />
+                      <span className="text-[13px] font-medium text-foreground">
                         {section.title}
                       </span>
-                      <span className="font-mono-num text-[11px] text-muted-foreground tabular-nums bg-muted/80 px-1.5 py-0.5 rounded-md">
+                      <span className="font-mono-num text-[11px] text-muted-foreground tabular-nums">
                         {section.tasks.length}
                       </span>
                     </div>
                   </button>
                   {!isCollapsed && (
-                    <div className="border-t border-border/50 divide-y divide-border/40">
+                    <div className="border-t divide-y">
                       {section.tasks.map((task) => (
                         <TaskCard key={task.id} task={task} />
                       ))}
@@ -610,19 +599,15 @@ const MyTasks = () => {
               );
             })
         )}
-      </div>
 
-      {hasMore && (
-        <div className="relative flex flex-col items-center gap-2 pt-1">
-          <p className="text-xs text-muted-foreground">
-            Showing {tasks.length}
-            {typeof total === "number" ? ` of ${total}` : ""} tasks
-          </p>
-          <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => void loadMore()} disabled={loading || loadingMore}>
-            {loadingMore ? "Loading…" : "Load more tasks"}
-          </Button>
-        </div>
-      )}
+        {hasMore && (
+          <div className="flex justify-center pt-1">
+            <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => void loadMore()} disabled={loading || loadingMore}>
+              {loadingMore ? "Loading…" : "Load more"}
+            </Button>
+          </div>
+        )}
+      </div>
 
       {showCreate && <CreateTaskModal onClose={() => setShowCreate(false)} onCreated={fetchTasks} />}
       {showImport && (

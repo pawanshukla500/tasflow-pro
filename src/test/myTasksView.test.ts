@@ -58,4 +58,40 @@ describe("myTasksView", () => {
     expect(myTasksTabCounts(tasks, "employee-1").assigned_to_me).toBe(1);
     expect(myTasksTabCounts(tasks, "manager-1").assigned_to_me).toBe(1);
   });
+
+  it("search matches title and project name", () => {
+    const tasks = [
+      task({ id: "t1", title: "Ship catalog", project_name: "Website Redesign" }),
+      task({ id: "t2", title: "Other work", project_name: "Internal Ops" }),
+    ];
+    const opts = {
+      activeTab: "all" as const,
+      subjectUserId: "employee-1",
+      canFilterByUser: false,
+      userFilter: "all",
+    };
+    expect(filterMyTasksView(tasks, { ...opts, search: "Ship" }).map((t) => t.id)).toEqual(["t1"]);
+    expect(filterMyTasksView(tasks, { ...opts, search: "Website" }).map((t) => t.id)).toEqual(["t1"]);
+  });
+
+  it("search matches description and assignee name", () => {
+    const tasks = [
+      task({
+        id: "t1",
+        title: "Alpha",
+        description: "Need packing list for Myntra",
+        assignees: [{ user_id: "employee-1", name: "Priya Shah" }],
+      }),
+      task({ id: "t2", title: "Beta", description: "Unrelated", assignees: [{ user_id: "u2", name: "Rahul" }] }),
+    ];
+    const opts = {
+      activeTab: "all" as const,
+      subjectUserId: "employee-1",
+      canFilterByUser: false,
+      userFilter: "all",
+    };
+    expect(filterMyTasksView(tasks, { ...opts, search: "packing list" })).toHaveLength(1);
+    expect(filterMyTasksView(tasks, { ...opts, search: "Priya" })).toHaveLength(1);
+  });
 });
+

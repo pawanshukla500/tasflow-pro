@@ -19,6 +19,20 @@ export function isTaskAssignedByUser(task: TaskRow, userId: string | null): bool
   return !!userId && task.created_by === userId;
 }
 
+export function matchesMyTasksSearch(task: TaskRow, search: string): boolean {
+  const query = search.trim().toLowerCase();
+  if (!query) return true;
+  const haystack = [
+    task.title,
+    task.description ?? "",
+    task.project_name ?? "",
+    ...task.assignees.map((assignee) => assignee.name),
+  ]
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(query);
+}
+
 export function filterMyTasksView(
   tasks: TaskRow[],
   options: {
@@ -32,7 +46,7 @@ export function filterMyTasksView(
   const { activeTab, search, subjectUserId, canFilterByUser, userFilter } = options;
 
   return tasks.filter((task) => {
-    if (search && !task.title.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !matchesMyTasksSearch(task, search)) return false;
     if (activeTab === "assigned_to_me" && !isTaskAssignedToUser(task, subjectUserId)) return false;
     if (activeTab === "assigned_by_me" && !isTaskAssignedByUser(task, subjectUserId)) return false;
     if (activeTab === "unassigned" && task.assignees.length > 0) return false;
