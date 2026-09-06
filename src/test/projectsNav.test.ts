@@ -36,7 +36,8 @@ describe("projects replace inbox", () => {
     const page = readFileSync(resolve(root, "src/pages/ProjectDetailPage.tsx"), "utf8");
     expect(page).toContain('from "@/lib/projects"');
     expect(page).toContain("isProjectView");
-    expect(page).toContain("ProjectSectionsEditor");
+    expect(page).toContain("filterTasksForProject");
+    expect(page).toContain("sumProjectTaskHours");
     expect(page).toContain("ProjectBoardView");
     expect(page).not.toMatch(/%\} complete/);
     const board = readFileSync(resolve(root, "src/components/ProjectBoardView.tsx"), "utf8");

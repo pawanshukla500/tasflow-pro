@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ProjectFlowMode, ProjectRow, ProjectStatus, ProjectView } from "@/lib/projects";
 import { isProjectView } from "@/lib/projects";
+import { parseNonNegativeNumber } from "@/lib/projectBudget";
 
 function mapProject(row: Record<string, unknown>): ProjectRow {
   const status = row.status === "archived" ? "archived" : "active";
@@ -19,6 +20,9 @@ function mapProject(row: Record<string, unknown>): ProjectRow {
     flow_mode,
     start_date: (row.start_date as string | null) ?? null,
     due_date: (row.due_date as string | null) ?? null,
+    budget_amount: parseNonNegativeNumber(row.budget_amount),
+    budget_currency: String(row.budget_currency || "INR"),
+    allocated_hours: parseNonNegativeNumber(row.allocated_hours),
     created_by: (row.created_by as string | null) ?? null,
     created_at: String(row.created_at || ""),
     updated_at: String(row.updated_at || ""),
@@ -56,6 +60,9 @@ export type ProjectWrite = {
   flow_mode?: ProjectFlowMode;
   start_date?: string | null;
   due_date?: string | null;
+  budget_amount?: number | null;
+  budget_currency?: string;
+  allocated_hours?: number | null;
   organization_id?: string | null;
   created_by?: string | null;
 };
@@ -74,6 +81,9 @@ export async function createProject(input: ProjectWrite): Promise<ProjectRow> {
       flow_mode: input.flow_mode || "parallel",
       start_date: input.start_date || null,
       due_date: input.due_date || null,
+      budget_amount: input.budget_amount ?? null,
+      budget_currency: input.budget_currency || "INR",
+      allocated_hours: input.allocated_hours ?? null,
       organization_id: input.organization_id || null,
       created_by: input.created_by || null,
     })
@@ -95,6 +105,9 @@ export async function updateProject(id: string, patch: Partial<ProjectWrite>): P
   if (patch.flow_mode != null) payload.flow_mode = patch.flow_mode;
   if (patch.start_date !== undefined) payload.start_date = patch.start_date || null;
   if (patch.due_date !== undefined) payload.due_date = patch.due_date || null;
+  if (patch.budget_amount !== undefined) payload.budget_amount = patch.budget_amount;
+  if (patch.budget_currency != null) payload.budget_currency = patch.budget_currency || "INR";
+  if (patch.allocated_hours !== undefined) payload.allocated_hours = patch.allocated_hours;
   const { data, error } = await supabase.from("projects").update(payload).eq("id", id).select("*").single();
   if (error) throw error;
   return mapProject(data as Record<string, unknown>);

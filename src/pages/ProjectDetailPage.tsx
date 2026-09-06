@@ -26,6 +26,7 @@ import { useTasks, type TaskRow } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectSections } from "@/hooks/useProjectSections";
 import { firstIncompleteSectionId } from "@/lib/projectLookup";
+import { filterTasksForProject, formatBudget, formatHours, sumProjectTaskHours } from "@/lib/projectBudget";
 import { isProjectView, type ProjectView } from "@/lib/projects";
 import {
   PROJECT_BOARD_COLUMNS,
@@ -115,10 +116,21 @@ export default function ProjectDetailPage() {
     enabled: !!id,
   });
 
-  const pipeline = useMemo(() => summarizeProjectPipeline(projectTasks), [projectTasks]);
+  const pipeline = useMemo(
+    () => summarizeProjectPipeline(id ? filterTasksForProject(projectTasks, id) : []),
+    [id, projectTasks],
+  );
+  const scopedTasks = useMemo(
+    () => (id ? filterTasksForProject(projectTasks, id) : []),
+    [id, projectTasks],
+  );
+  const hourTotals = useMemo(
+    () => (id ? sumProjectTaskHours(scopedTasks, id) : { estimated: 0, logged: 0 }),
+    [id, scopedTasks],
+  );
   const currentSectionId = useMemo(
-    () => (project?.flow_mode === "sequential" ? firstIncompleteSectionId(sections, projectTasks) : null),
-    [project?.flow_mode, sections, projectTasks],
+    () => (project?.flow_mode === "sequential" ? firstIncompleteSectionId(sections, scopedTasks) : null),
+    [project?.flow_mode, sections, scopedTasks],
   );
   const today = todayIST();
 
@@ -202,6 +214,28 @@ export default function ProjectDetailPage() {
           <p className="text-page-desc max-w-2xl">
             {project.description || "Board, list, calendar, and workflows are views of the same project data."}
           </p>
+          <p className="text-[12px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+            <span>
+              Budget{" "}
+              <span className="font-medium text-foreground">
+                {formatBudget(project.budget_amount, project.budget_currency) || "—"}
+              </span>
+            </span>
+            <span>
+              Allocated{" "}
+              <span className="font-medium text-foreground">
+                {formatHours(project.allocated_hours) || "—"}
+              </span>
+            </span>
+            <span>
+              Estimated{" "}
+              <span className="font-mono-num font-medium text-foreground">{formatHours(hourTotals.estimated) || "0h"}</span>
+            </span>
+            <span>
+              Logged{" "}
+              <span className="font-mono-num font-medium text-foreground">{formatHours(hourTotals.logged) || "0h"}</span>
+            </span>
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap shrink-0">
           <Button variant="outline" size="sm" onClick={() => setEditProjectOpen(true)}>
@@ -272,7 +306,7 @@ export default function ProjectDetailPage() {
         <p className="text-sm text-muted-foreground">Loading tasks…</p>
       ) : view === "board" ? (
         <ProjectBoardView
-          tasks={projectTasks}
+          tasks={scopedTasks}
           focusStatus={focusStatus}
           columnRefs={columnRefs}
           sectionTitles={Object.fromEntries(sections.map((s) => [s.id, s.title]))}
@@ -285,13 +319,13 @@ export default function ProjectDetailPage() {
         />
       ) : view === "list" ? (
         <div className="flex-1 overflow-auto min-h-0 space-y-3 pb-2">
-          {projectTasks.length === 0 ? (
+          {scopedTasks.length === 0 ? (
             <div className="bg-card rounded-xl border">
               <p className="text-sm text-muted-foreground text-center py-12">No tasks in this project yet.</p>
             </div>
           ) : (
             PROJECT_BOARD_COLUMNS.map((col) => {
-              const colTasks = projectTasks.filter((t) => taskMatchesStatus(t.status, col.status));
+              const colTasks = scopedTasks.filter((t) => taskMatchesStatus(t.status, col.status));
               const isFocused = focusStatus === col.status;
               return (
                 <section
@@ -332,6 +366,11 @@ export default function ProjectDetailPage() {
                                 {task.section_name || sections.find((s) => s.id === task.section_id)?.title}
                               </span>
                             )}
+                            {formatHours(task.estimated_hours) && (
+                              <span className="text-[11px] font-mono-num text-muted-foreground w-10 text-right">
+                                {formatHours(task.estimated_hours)}
+                              </span>
+                            )}
                             <span className="text-[11px] text-muted-foreground w-24 truncate hidden md:inline">
                               {task.assignees[0]?.name || "Unassigned"}
                             </span>
@@ -368,7 +407,7 @@ export default function ProjectDetailPage() {
             {days.map((day, i) => {
               if (day === null) return <div key={i} className="min-h-[88px] border-b border-r bg-muted/20" />;
               const dateStr = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-              const dayTasks = projectTasks.filter((t) => t.due_date?.slice(0, 10) === dateStr);
+              const dayTasks = scopedTasks.filter((t) => t.due_date?.slice(0, 10) === dateStr);
               const isToday = dateStr === today;
               return (
                 <div key={i} className="min-h-[88px] border-b border-r p-1">

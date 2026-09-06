@@ -33,7 +33,7 @@ describe("ProjectBoardView", () => {
     render(
       <ProjectBoardView
         tasks={[
-          task({ id: "1", title: "Invoice", status: "todo" }),
+          task({ id: "1", title: "Invoice", status: "todo", estimated_hours: 4 }),
           task({ id: "2", title: "Review pack", status: "in_review" }),
         ]}
         focusStatus={null}
@@ -50,6 +50,7 @@ describe("ProjectBoardView", () => {
     expect(screen.getByText("Done")).toBeInTheDocument();
     expect(screen.getByText("Blocked")).toBeInTheDocument();
     expect(screen.getByText("Invoice")).toBeInTheDocument();
+    expect(screen.getByText("4h")).toBeInTheDocument();
     expect(screen.getByText("Review pack")).toBeInTheDocument();
   });
 });

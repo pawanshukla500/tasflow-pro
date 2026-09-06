@@ -19,6 +19,9 @@ vi.mock("@/hooks/useProjects", () => ({
       flow_mode: "parallel",
       start_date: null,
       due_date: null,
+      budget_amount: 50000,
+      budget_currency: "INR",
+      allocated_hours: 80,
       created_by: "u1",
       created_at: "2026-09-06T00:00:00Z",
       updated_at: "2026-09-06T00:00:00Z",
@@ -88,5 +91,7 @@ describe("ProjectDetailPage", () => {
     expect(screen.getByRole("heading", { name: /Website rebuild/ })).toBeInTheDocument();
     expect(screen.getByText("Sections")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /board/i })).toBeInTheDocument();
+    expect(screen.getByText(/Budget/)).toBeInTheDocument();
+    expect(screen.getByText(/Allocated/)).toBeInTheDocument();
   });
 });

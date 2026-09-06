@@ -12,6 +12,7 @@ import {
   type ProjectPipelineStatus,
 } from "@/lib/projectPipeline";
 import { todayIST, formatDateIST } from "@/lib/time";
+import { formatHours } from "@/lib/projectBudget";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -199,6 +200,9 @@ export function ProjectBoardView({
                       </span>
                       {task.department_name && (
                         <Badge variant="secondary" className="text-[9px] h-5 px-1.5">{task.department_name}</Badge>
+                      )}
+                      {formatHours(task.estimated_hours) && (
+                        <span className="text-[10px] font-mono-num text-muted-foreground">{formatHours(task.estimated_hours)}</span>
                       )}
                       {(task.section_name || (task.section_id && sectionTitles[task.section_id])) && (
                         <Badge variant="outline" className="text-[9px] h-5 px-1.5">

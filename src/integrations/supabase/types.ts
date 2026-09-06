@@ -926,6 +926,9 @@ export type Database = {
           start_date: string | null
           status: string
           updated_at: string
+          budget_amount: number | null
+          budget_currency: string
+          allocated_hours: number | null
         }
         Insert: {
           color?: string
@@ -943,6 +946,9 @@ export type Database = {
           start_date?: string | null
           status?: string
           updated_at?: string
+          budget_amount?: number | null
+          budget_currency?: string
+          allocated_hours?: number | null
         }
         Update: {
           color?: string
@@ -960,6 +966,9 @@ export type Database = {
           start_date?: string | null
           status?: string
           updated_at?: string
+          budget_amount?: number | null
+          budget_currency?: string
+          allocated_hours?: number | null
         }
         Relationships: [
           {
@@ -1140,6 +1149,8 @@ export type Database = {
           updated_at: string
           blocked_by: string[]
           depends_on: string[]
+          estimated_hours: number | null
+          logged_hours: number
         }
         Insert: {
           completed_at?: string | null
@@ -1163,6 +1174,8 @@ export type Database = {
           updated_at?: string
           blocked_by?: string[]
           depends_on?: string[]
+          estimated_hours?: number | null
+          logged_hours?: number
         }
         Update: {
           completed_at?: string | null
@@ -1186,6 +1199,8 @@ export type Database = {
           updated_at?: string
           blocked_by?: string[]
           depends_on?: string[]
+          estimated_hours?: number | null
+          logged_hours?: number
         }
         Relationships: [
           {

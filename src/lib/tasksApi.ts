@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { filterTasksForProject } from "@/lib/projectBudget";
 
 /** Default page size — keeps initial payloads small. */
 export const TASK_PAGE_SIZE = 50;
@@ -46,6 +47,8 @@ export interface TaskRow {
   /** Soft dependency graph — scrubbed when referenced tasks are deleted. */
   blocked_by?: string[];
   depends_on?: string[];
+  estimated_hours?: number | null;
+  logged_hours?: number | null;
 }
 
 export type FetchTasksPageOptions = {
@@ -108,6 +111,8 @@ type NestedTask = {
   days_late?: number;
   blocked_by?: string[] | null;
   depends_on?: string[] | null;
+  estimated_hours?: number | string | null;
+  logged_hours?: number | string | null;
   organization_id?: string | null;
   departments?: { id: string; name: string; color: string } | null;
   projects?: { id: string; name: string; color: string; icon: string } | null;
@@ -127,6 +132,16 @@ function embedCount(rows: { count?: number; id?: string }[] | null | undefined):
 }
 
 const CORE_COLS = `
+  id, title, description, status, priority, due_date, start_date,
+  department_id, project_id, section_id, created_by, completed_at, created_at, updated_at,
+  frequency, recurrence_parent_id,
+  requires_review, reviewer_user_id, review_note,
+  submitted_for_review_at, reviewed_at, reviewed_by,
+  completed_on_time, days_late, organization_id,
+  estimated_hours, logged_hours
+`.replace(/\s+/g, " ").trim();
+
+const CORE_COLS_NO_HOURS = `
   id, title, description, status, priority, due_date, start_date,
   department_id, project_id, section_id, created_by, completed_at, created_at, updated_at,
   frequency, recurrence_parent_id,
@@ -210,6 +225,8 @@ export const TASK_SELECT_CANDIDATES = [
   `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}, ${CREATOR_EMBED}`,
   `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}`,
   `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_NO_PROFILE}`,
+  `${CORE_COLS_NO_HOURS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}, ${CREATOR_EMBED}`,
+  `${CORE_COLS_NO_HOURS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}`,
   `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_SECTION}, ${CREATOR_EMBED}`,
   `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_SECTION}`,
   `${CORE_COLS_NO_SECTION}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_SECTION}, ${CREATOR_EMBED}`,
@@ -262,6 +279,8 @@ export function mapEmbeddedTask(row: NestedTask): TaskRow {
     days_late: row.days_late,
     blocked_by: row.blocked_by || [],
     depends_on: row.depends_on || [],
+    estimated_hours: row.estimated_hours == null || Number.isNaN(Number(row.estimated_hours)) ? null : Number(row.estimated_hours),
+    logged_hours: row.logged_hours == null || Number.isNaN(Number(row.logged_hours)) ? 0 : Number(row.logged_hours),
     department_name: row.departments?.name,
     department_color: row.departments?.color,
     project_name: row.projects?.name,
@@ -280,6 +299,11 @@ export function mapEmbeddedTask(row: NestedTask): TaskRow {
 
 export function selectIncludesProjectId(select: string): boolean {
   return /(?:^|,)\s*project_id\s*(?:,|$)/i.test(select);
+}
+
+export function taskSelectCandidates(projectId?: string | null): string[] {
+  if (!projectId) return TASK_SELECT_CANDIDATES;
+  return TASK_SELECT_CANDIDATES.filter(selectIncludesProjectId);
 }
 
 function isRecoverableSelectError(message: string): boolean {
@@ -341,7 +365,7 @@ export async function fetchTasksPage(
 
     if (options.status) q = q.eq("status", options.status);
     if (options.departmentId) q = q.eq("department_id", options.departmentId);
-    if (options.projectId && selectIncludesProjectId(select)) {
+    if (options.projectId) {
       q = q.eq("project_id", options.projectId);
     }
 
@@ -360,7 +384,12 @@ export async function fetchTasksPage(
   let error: { message: string } | null = null;
   let count: number | null = null;
 
-  for (const select of TASK_SELECT_CANDIDATES) {
+  const candidates = taskSelectCandidates(options.projectId);
+  if (options.projectId && candidates.length === 0) {
+    return { tasks: [], total: 0, page, limit, hasMore: false, nextCursor: null };
+  }
+
+  for (const select of candidates) {
     const result = await buildQuery(select);
     data = result.data;
     error = result.error;
@@ -373,6 +402,9 @@ export async function fetchTasksPage(
 
   let tasks = ((data || []) as unknown as NestedTask[]).map(mapEmbeddedTask);
   tasks = await hydrateAssigneeAndCreatorNames(tasks);
+  if (options.projectId) {
+    tasks = filterTasksForProject(tasks, options.projectId);
+  }
 
   const total = typeof count === "number" ? count : null;
   const last = tasks[tasks.length - 1];

@@ -16,7 +16,8 @@ describe("task assignment email policy", () => {
     expect(modal).toContain("sendEmail: SEND_EMAIL_ON_TASK_CREATE");
     expect(modal).not.toMatch(/sendEmail:\s*false/);
     expect(modal).toContain("initialProjectId");
-    expect(modal).toMatch(/if \(projectId\) insertRow\.project_id = projectId/);
+    expect(modal).toContain("if (initialProjectId) insertRow.project_id = initialProjectId");
+    expect(modal).toContain("!projectLocked &&");
   });
 
   it("keeps bulk CSV import in-app only so a large import cannot flood inboxes", () => {
