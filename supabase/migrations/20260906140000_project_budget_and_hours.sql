@@ -16,25 +16,29 @@ BEGIN
     SELECT 1 FROM pg_constraint WHERE conname = 'projects_budget_amount_nonneg'
   ) THEN
     ALTER TABLE public.projects
-      ADD CONSTRAINT projects_budget_amount_nonneg CHECK (budget_amount IS NULL OR budget_amount >= 0);
+      ADD CONSTRAINT projects_budget_amount_nonneg
+      CHECK (budget_amount IS NULL OR (budget_amount >= 0 AND budget_amount = budget_amount));
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'projects_allocated_hours_nonneg'
   ) THEN
     ALTER TABLE public.projects
-      ADD CONSTRAINT projects_allocated_hours_nonneg CHECK (allocated_hours IS NULL OR allocated_hours >= 0);
+      ADD CONSTRAINT projects_allocated_hours_nonneg
+      CHECK (allocated_hours IS NULL OR (allocated_hours >= 0 AND allocated_hours = allocated_hours));
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'tasks_estimated_hours_nonneg'
   ) THEN
     ALTER TABLE public.tasks
-      ADD CONSTRAINT tasks_estimated_hours_nonneg CHECK (estimated_hours IS NULL OR estimated_hours >= 0);
+      ADD CONSTRAINT tasks_estimated_hours_nonneg
+      CHECK (estimated_hours IS NULL OR (estimated_hours >= 0 AND estimated_hours = estimated_hours));
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'tasks_logged_hours_nonneg'
   ) THEN
     ALTER TABLE public.tasks
-      ADD CONSTRAINT tasks_logged_hours_nonneg CHECK (logged_hours >= 0);
+      ADD CONSTRAINT tasks_logged_hours_nonneg
+      CHECK (logged_hours >= 0 AND logged_hours = logged_hours);
   END IF;
 END $$;
 

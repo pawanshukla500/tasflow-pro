@@ -3,6 +3,8 @@ import {
   filterTasksForProject,
   formatBudget,
   formatHours,
+  isUnknownColumnError,
+  omitTaskHourColumns,
   parseNonNegativeNumber,
   sumProjectTaskHours,
 } from "./projectBudget";
@@ -11,6 +13,7 @@ describe("project budget and hours", () => {
   it("formats hours and INR budget", () => {
     expect(formatHours(4)).toBe("4h");
     expect(formatHours(1.5)).toBe("1.5h");
+    expect(formatHours(1.25)).toBe("1.25h");
     expect(formatHours(null)).toBeNull();
     expect(formatBudget(50000, "INR")).toBe("INR 50,000");
     expect(parseNonNegativeNumber("-1")).toBeNull();
@@ -26,5 +29,11 @@ describe("project budget and hours", () => {
     expect(sumProjectTaskHours(tasks, "p1")).toEqual({ estimated: 6, logged: 3 });
     expect(filterTasksForProject(tasks, "p1")).toHaveLength(2);
     expect(filterTasksForProject(tasks, "p1").every((t) => t.project_id === "p1")).toBe(true);
+  });
+
+  it("omits hour columns so writes can retry against older schemas", () => {
+    expect(isUnknownColumnError("Could not find the 'estimated_hours' column of 'tasks' in the schema cache")).toBe(true);
+    expect(isUnknownColumnError("duplicate key")).toBe(false);
+    expect(omitTaskHourColumns({ title: "A", estimated_hours: 4, logged_hours: 1 })).toEqual({ title: "A" });
   });
 });

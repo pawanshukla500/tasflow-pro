@@ -17,6 +17,8 @@ describe("task assignment email policy", () => {
     expect(modal).not.toMatch(/sendEmail:\s*false/);
     expect(modal).toContain("initialProjectId");
     expect(modal).toContain("if (initialProjectId) insertRow.project_id = initialProjectId");
+    expect(modal).toContain("projectsLoaded: projects.length > 0 || !assignedProjectId");
+    expect(modal).toContain("omitTaskHourColumns(insertRow)");
     expect(modal).toContain("!projectLocked &&");
   });
 

@@ -10,8 +10,20 @@ export function parseNonNegativeNumber(value: unknown): number | null {
 export function formatHours(value: number | null | undefined): string | null {
   const n = parseNonNegativeNumber(value);
   if (n == null) return null;
-  const label = Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+  const label = Number.isInteger(n) ? String(n) : n.toFixed(8).replace(/\.?0+$/, "");
   return `${label}h`;
+}
+
+export function isUnknownColumnError(message: string | undefined): boolean {
+  return /could not find|does not exist|PGRST204|42703|schema cache/i.test(message || "");
+}
+
+/** Drop hours fields so an insert/update can retry against a schema that lacks them. */
+export function omitTaskHourColumns<T extends Record<string, unknown>>(row: T): T {
+  const next = { ...row };
+  delete next.estimated_hours;
+  delete next.logged_hours;
+  return next;
 }
 
 export function formatBudget(amount: number | null | undefined, currency = "INR"): string | null {

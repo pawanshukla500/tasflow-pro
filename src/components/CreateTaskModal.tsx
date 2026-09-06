@@ -23,7 +23,7 @@ import SubtaskEditor, { type SubtaskDraft } from "@/components/SubtaskEditor";
 import { EntityLookupField } from "@/components/EntityLookupField";
 import { useProjectSections } from "@/hooks/useProjectSections";
 import { resolveTaskContainerAssignment, sectionIdForProject } from "@/lib/projectLookup";
-import { parseNonNegativeNumber } from "@/lib/projectBudget";
+import { isUnknownColumnError, omitTaskHourColumns, parseNonNegativeNumber } from "@/lib/projectBudget";
 
 interface CreateTaskModalProps {
   onClose: () => void;
@@ -172,11 +172,13 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
       const logged = parseNonNegativeNumber(loggedHours);
       if (estimated != null) insertRow.estimated_hours = estimated;
       if (logged != null) insertRow.logged_hours = logged;
+      const assignedProjectId = initialProjectId || projectId || null;
       const container = resolveTaskContainerAssignment({
-        projectId: initialProjectId || projectId || null,
+        projectId: assignedProjectId,
         sectionId: sectionId || null,
         projects,
         sections,
+        projectsLoaded: projects.length > 0 || !assignedProjectId,
       });
       if (!container.ok) {
         toast.error(container.error);
@@ -184,7 +186,14 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
         return;
       }
       if (container.sectionId) insertRow.section_id = container.sectionId;
-      const { data: task, error } = await supabase.from("tasks").insert(insertRow as never).select("id").single();
+      let { data: task, error } = await supabase.from("tasks").insert(insertRow as never).select("id").single();
+      if (error && isUnknownColumnError(error.message) && ("estimated_hours" in insertRow || "logged_hours" in insertRow)) {
+        ({ data: task, error } = await supabase
+          .from("tasks")
+          .insert(omitTaskHourColumns(insertRow) as never)
+          .select("id")
+          .single());
+      }
 
       if (error) throw error;
 
