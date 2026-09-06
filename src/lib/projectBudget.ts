@@ -10,8 +10,7 @@ export function parseNonNegativeNumber(value: unknown): number | null {
 export function formatHours(value: number | null | undefined): string | null {
   const n = parseNonNegativeNumber(value);
   if (n == null) return null;
-  const label = Number.isInteger(n) ? String(n) : n.toFixed(8).replace(/\.?0+$/, "");
-  return `${label}h`;
+  return `${String(n)}h`;
 }
 
 export function isUnknownColumnError(message: string | undefined): boolean {

@@ -14,6 +14,7 @@ describe("project budget and hours", () => {
     expect(formatHours(4)).toBe("4h");
     expect(formatHours(1.5)).toBe("1.5h");
     expect(formatHours(1.25)).toBe("1.25h");
+    expect(formatHours(1e-9)).toBe("1e-9h");
     expect(formatHours(null)).toBeNull();
     expect(formatBudget(50000, "INR")).toBe("INR 50,000");
     expect(parseNonNegativeNumber("-1")).toBeNull();
