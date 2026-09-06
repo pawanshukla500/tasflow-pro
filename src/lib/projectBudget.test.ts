@@ -9,6 +9,7 @@ import {
   isUnknownColumnError,
   omitTaskHourColumns,
   parseNonNegativeNumber,
+  projectMetricChips,
   sumProjectTaskHours,
 } from "./projectBudget";
 
@@ -23,6 +24,22 @@ describe("project budget and hours", () => {
     expect(formatHours(null)).toBeNull();
     expect(formatBudget(50000, "INR")).toBe("INR 50,000");
     expect(parseNonNegativeNumber("-1")).toBeNull();
+  });
+
+  it("renders unset budget as an em dash in labeled chips", () => {
+    expect(projectMetricChips({ budgetAmount: null, allocatedHours: null, estimatedHours: 0, loggedHours: 0 })).toEqual([
+      { label: "Budget", value: "—" },
+      { label: "Allocated", value: "—" },
+      { label: "Estimated", value: "0h" },
+      { label: "Logged", value: "0h" },
+    ]);
+    expect(projectMetricChips({ budgetAmount: 50000, budgetCurrency: "INR", allocatedHours: 80, estimatedHours: 4, loggedHours: 1 })).toEqual([
+      { label: "Budget", value: "INR 50,000" },
+      { label: "Allocated", value: "80h" },
+      { label: "Estimated", value: "4h" },
+      { label: "Logged", value: "1h" },
+    ]);
+    expect(projectMetricChips({ estimatedHours: 4, loggedHours: 1, hoursPending: true }).find((c) => c.label === "Estimated")?.value).toBe("…");
   });
 
   it("rolls up estimated and logged hours only for the given project", () => {

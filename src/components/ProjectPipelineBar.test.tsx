@@ -35,6 +35,13 @@ describe("ProjectPipelineBar", () => {
     expect(screen.getByText(/2 overdue/)).toBeInTheDocument();
   });
 
+  it("compact variant is a one-line progress strip without step buttons", () => {
+    render(<ProjectPipelineBar summary={summary} focusStatus={null} onSelectStep={() => {}} variant="compact" />);
+    expect(screen.getByTestId("project-pipeline-compact")).toBeInTheDocument();
+    expect(screen.queryByLabelText("To Do, 16 tasks")).not.toBeInTheDocument();
+    expect(screen.getByText(/2 overdue/)).toBeInTheDocument();
+  });
+
   it("notifies when a step is clicked", () => {
     const onSelectStep = vi.fn();
     render(<ProjectPipelineBar summary={summary} focusStatus="todo" onSelectStep={onSelectStep} />);

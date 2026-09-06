@@ -32,6 +32,28 @@ export function formatBudget(amount: number | null | undefined, currency = "INR"
   return `${code} ${n.toLocaleString("en-IN")}`;
 }
 
+export type ProjectMetricChip = { label: string; value: string };
+
+/** Compact header chips. Unset money/hours use an em dash, never a jammed sentence. */
+export function projectMetricChips(input: {
+  budgetAmount?: number | null;
+  budgetCurrency?: string;
+  allocatedHours?: number | null;
+  estimatedHours?: number | null;
+  loggedHours?: number | null;
+  /** True while task pages are still loading, so hour chips are not a partial sum. */
+  hoursPending?: boolean;
+}): ProjectMetricChip[] {
+  const hourValue = (n: number | null | undefined) =>
+    input.hoursPending ? "…" : formatHours(n) || "—";
+  return [
+    { label: "Budget", value: formatBudget(input.budgetAmount, input.budgetCurrency) || "—" },
+    { label: "Allocated", value: formatHours(input.allocatedHours) || "—" },
+    { label: "Estimated", value: hourValue(input.estimatedHours) },
+    { label: "Logged", value: hourValue(input.loggedHours) },
+  ];
+}
+
 export type ProjectHourTask = {
   project_id?: string | null;
   estimated_hours?: number | null;
