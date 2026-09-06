@@ -68,7 +68,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [projects, setProjects] = useState<{ id: string; name: string; icon: string }[]>([]);
   const [users, setUsers] = useState<{ id: string; name: string; department_id: string | null }[]>([]);
-  const { sections } = useProjectSections(projectId || undefined);
+  const { sections, loading: sectionsLoading } = useProjectSections(projectId || undefined);
   const [subtasks, setSubtasks] = useState<SubtaskDraft[]>([]);
   const [showExtendDue, setShowExtendDue] = useState(false);
   const [displayDueDate, setDisplayDueDate] = useState(task.due_date);
@@ -167,6 +167,8 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
         sectionId: sectionId || null,
         projects,
         sections,
+        projectsLoaded: projects.length > 0 || !projectId,
+        sectionsLoaded: !sectionsLoading,
       });
       if (!container.ok) {
         toast.error(container.error);

@@ -28,7 +28,8 @@ const SearchOverlay = ({ onClose, onSelectTask }: SearchOverlayProps) => {
   }, [onClose]);
 
   useEffect(() => {
-    if (query.length < 2) { setTasks([]); setUsers([]); setProjects([]); return; }
+    if (query.length < 2) { setTasks([]); setUsers([]); setProjects([]); setLoading(false); return; }
+    let cancelled = false;
     const t = setTimeout(async () => {
       setLoading(true);
       const [tRes, uRes, dRes, pRes] = await Promise.all([
@@ -37,6 +38,7 @@ const SearchOverlay = ({ onClose, onSelectTask }: SearchOverlayProps) => {
         supabase.from("departments").select("id, name"),
         supabase.from("projects").select("id, name, icon").eq("status", "active").ilike("name", `%${query}%`).limit(6),
       ]);
+      if (cancelled) return;
       const depts = dRes.data || [];
       setTasks((tRes.data || []).map(t => ({
         id: t.id, title: t.title, due_date: t.due_date,
@@ -46,7 +48,10 @@ const SearchOverlay = ({ onClose, onSelectTask }: SearchOverlayProps) => {
       setProjects((pRes.data || []) as ProjectHit[]);
       setLoading(false);
     }, 200);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [query]);
 
   return (

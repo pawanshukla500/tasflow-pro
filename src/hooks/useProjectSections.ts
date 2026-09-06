@@ -38,9 +38,7 @@ export function useProjectSectionMutations(projectId: string | undefined) {
   return {
     create: async (title: string) => {
       if (!projectId) throw new Error("Project required");
-      const existing = queryClient.getQueryData<ProjectSectionRow[]>(projectSectionKeys.list(projectId)) || [];
-      const sort_order = existing.length === 0 ? 0 : Math.max(...existing.map((s) => s.sort_order)) + 1;
-      const row = await createProjectSection({ project_id: projectId, title, sort_order });
+      const row = await createProjectSection({ project_id: projectId, title });
       await invalidate();
       return row;
     },

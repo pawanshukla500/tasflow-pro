@@ -147,20 +147,12 @@ export const projectTools: McpTool[] = [
       const title = String(args.title).trim();
       if (!title) throw new Error("Title is required");
       const projectId = String(args.project_id);
-      const { data: last } = await client
-        .from("project_sections")
-        .select("sort_order")
-        .eq("project_id", projectId)
-        .order("sort_order", { ascending: false })
-        .limit(1)
-        .maybeSingle();
       const { data, error } = await client
         .from("project_sections")
         .insert({
           project_id: projectId,
           title,
           description: args.description ? String(args.description) : null,
-          sort_order: (last?.sort_order ?? -1) + 1,
           created_by: userId,
         })
         .select("*")

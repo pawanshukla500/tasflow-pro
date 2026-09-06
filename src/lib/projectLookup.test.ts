@@ -6,6 +6,7 @@ import {
   formatInternalLink,
   insertInternalLink,
   parseInternalLinks,
+  parseLookupQuery,
   resolveTaskContainerAssignment,
   sectionIdForProject,
 } from "./projectLookup";
@@ -51,7 +52,14 @@ describe("wiki lookup links", () => {
     ];
     expect(filterLookupEntities(entities, "web").map((e) => e.id)).toEqual(["p1", "t1"]);
     expect(filterLookupEntities(entities, "task:copy").map((e) => e.id)).toEqual(["t1"]);
+    expect(filterLookupEntities(entities, "project:web").map((e) => e.id)).toEqual(["p1"]);
     expect(filterLookupEntities(entities, "", { excludeTaskIds: ["t1"] }).map((e) => e.id)).toEqual(["p1", "t2"]);
+  });
+
+  it("keeps lookup kind when stripping task:/project: prefixes", () => {
+    expect(parseLookupQuery("task:copy")).toEqual({ kind: "task", needle: "copy" });
+    expect(parseLookupQuery("Project:Website")).toEqual({ kind: "project", needle: "Website" });
+    expect(parseLookupQuery("  web  ")).toEqual({ kind: null, needle: "web" });
   });
 });
 
@@ -79,6 +87,18 @@ describe("task container lookup", () => {
       projectId: "p1",
       sectionId: "s1",
     });
+  });
+
+  it("keeps an existing section while the section catalog is still loading", () => {
+    expect(
+      resolveTaskContainerAssignment({
+        projectId: "p1",
+        sectionId: "s1",
+        projects,
+        sections: [],
+        sectionsLoaded: false,
+      }),
+    ).toEqual({ ok: true, projectId: "p1", sectionId: "s1" });
   });
 
   it("clears the section when the project changes", () => {

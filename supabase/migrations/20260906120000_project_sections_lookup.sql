@@ -45,19 +45,40 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF NEW.organization_id IS NULL THEN
-    SELECT organization_id INTO NEW.organization_id
-    FROM public.projects
-    WHERE id = NEW.project_id;
+  IF TG_OP = 'UPDATE' AND NEW.project_id IS DISTINCT FROM OLD.project_id THEN
+    RAISE EXCEPTION 'A section cannot be moved to another project';
   END IF;
+  SELECT organization_id INTO NEW.organization_id
+  FROM public.projects
+  WHERE id = NEW.project_id;
   RETURN NEW;
 END;
 $$;
 
 DROP TRIGGER IF EXISTS project_sections_fill_org ON public.project_sections;
 CREATE TRIGGER project_sections_fill_org
-BEFORE INSERT OR UPDATE OF project_id ON public.project_sections
+BEFORE INSERT OR UPDATE ON public.project_sections
 FOR EACH ROW EXECUTE FUNCTION public.project_sections_fill_org();
+
+-- Serialize next sort_order so concurrent creates cannot share the same rank.
+CREATE OR REPLACE FUNCTION public.project_sections_assign_sort()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  PERFORM pg_advisory_xact_lock(98133421, hashtext(NEW.project_id::text));
+  SELECT COALESCE(MAX(sort_order), -1) + 1
+    INTO NEW.sort_order
+    FROM public.project_sections
+    WHERE project_id = NEW.project_id;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS project_sections_assign_sort ON public.project_sections;
+CREATE TRIGGER project_sections_assign_sort
+BEFORE INSERT ON public.project_sections
+FOR EACH ROW EXECUTE FUNCTION public.project_sections_assign_sort();
 
 ALTER TABLE public.project_sections ENABLE ROW LEVEL SECURITY;
 

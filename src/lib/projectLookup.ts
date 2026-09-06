@@ -105,14 +105,22 @@ export function insertInternalLink(
   return { value: next, caret: active.start + token.length };
 }
 
+/** Parse `task:` / `project:` prefixes used by [[ lookup and search APIs. */
+export function parseLookupQuery(query: string): { kind: EntityKind | null; needle: string } {
+  const raw = query.trim();
+  const lower = raw.toLowerCase();
+  if (lower.startsWith("task:")) return { kind: "task", needle: raw.slice(5).trim() };
+  if (lower.startsWith("project:")) return { kind: "project", needle: raw.slice(8).trim() };
+  return { kind: null, needle: raw };
+}
+
 export function filterLookupEntities(
   entities: LookupEntity[],
   query: string,
   options: { excludeTaskIds?: string[]; excludeProjectIds?: string[] } = {},
 ): LookupEntity[] {
-  const q = query.trim().toLowerCase();
-  const kindFilter = q.startsWith("task:") ? "task" : q.startsWith("project:") ? "project" : null;
-  const needle = kindFilter ? q.slice(kindFilter.length + 1).trim() : q;
+  const { kind: kindFilter, needle: rawNeedle } = parseLookupQuery(query);
+  const needle = rawNeedle.toLowerCase();
   return entities.filter((entity) => {
     if (entity.kind === "task" && options.excludeTaskIds?.includes(entity.id)) return false;
     if (entity.kind === "project" && options.excludeProjectIds?.includes(entity.id)) return false;
@@ -127,14 +135,19 @@ export function resolveTaskContainerAssignment({
   sectionId,
   projects,
   sections,
+  projectsLoaded = true,
+  sectionsLoaded = true,
 }: {
   projectId: unknown;
   sectionId: unknown;
   projects: { id: string }[];
   sections: Pick<ProjectSectionRow, "id" | "project_id">[];
+  /** When false, skip "not found" so a save cannot race an in-flight catalog query. */
+  projectsLoaded?: boolean;
+  sectionsLoaded?: boolean;
 }): ContainerResolution {
   const resolvedProjectId = normalizeOptionalId(projectId);
-  if (resolvedProjectId && !projects.some((project) => project.id === resolvedProjectId)) {
+  if (resolvedProjectId && projectsLoaded && !projects.some((project) => project.id === resolvedProjectId)) {
     return { ok: false, error: "Project not found" };
   }
 
@@ -145,6 +158,9 @@ export function resolveTaskContainerAssignment({
 
   const section = sections.find((candidate) => candidate.id === resolvedSectionId);
   if (!section) {
+    if (!sectionsLoaded) {
+      return { ok: true, projectId: resolvedProjectId, sectionId: resolvedSectionId };
+    }
     return { ok: false, error: "Section not found" };
   }
   if (resolvedProjectId && section.project_id !== resolvedProjectId) {

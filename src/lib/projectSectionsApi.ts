@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { sortSections, type ProjectSectionRow } from "@/lib/projectLookup";
+import { parseLookupQuery, sortSections, type ProjectSectionRow } from "@/lib/projectLookup";
 
 function mapSection(row: Record<string, unknown>): ProjectSectionRow {
   return {
@@ -75,11 +75,15 @@ export async function searchLookupEntities(query: string, limit = 8): Promise<{
   title: string;
   status?: string;
 }[]> {
-  const q = query.replace(/^(task|project):/i, "").trim();
-  const like = q ? `%${q}%` : "%";
+  const { kind, needle } = parseLookupQuery(query);
+  const like = needle ? `%${needle}%` : "%";
   const [tasks, projects] = await Promise.all([
-    supabase.from("tasks").select("id, title, status").ilike("title", like).limit(limit),
-    supabase.from("projects").select("id, name, status").eq("status", "active").ilike("name", like).limit(limit),
+    kind === "project"
+      ? Promise.resolve({ data: [] as { id: string; title: string; status: string }[] })
+      : supabase.from("tasks").select("id, title, status").ilike("title", like).limit(limit),
+    kind === "task"
+      ? Promise.resolve({ data: [] as { id: string; name: string; status: string }[] })
+      : supabase.from("projects").select("id, name, status").eq("status", "active").ilike("name", like).limit(limit),
   ]);
   const out: { kind: "task" | "project"; id: string; title: string; status?: string }[] = [];
   for (const row of projects.data || []) {

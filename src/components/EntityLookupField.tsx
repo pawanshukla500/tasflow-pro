@@ -47,13 +47,18 @@ export function EntityLookupField({
       setHits([]);
       return;
     }
+    let cancelled = false;
     const timer = setTimeout(async () => {
       const rows = await searchLookupEntities(active.query);
+      if (cancelled) return;
       setHits(
         rows.filter((row) => !(excludeTaskId && row.kind === "task" && row.id === excludeTaskId)),
       );
     }, 160);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [active, excludeTaskId]);
 
   const choose = (entity: LookupEntity) => {
