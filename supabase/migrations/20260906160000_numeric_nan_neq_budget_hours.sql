@@ -1,0 +1,28 @@
+-- PostgreSQL numeric treats NaN = NaN as TRUE, so "col = col" does not reject NaN.
+-- Explicit inequality is required. This is a forward migration: 20260906150000
+-- already ran on hosted with the incorrect equality check.
+
+UPDATE public.projects SET budget_amount = NULL WHERE budget_amount = 'NaN'::numeric;
+UPDATE public.projects SET allocated_hours = NULL WHERE allocated_hours = 'NaN'::numeric;
+UPDATE public.tasks SET estimated_hours = NULL WHERE estimated_hours = 'NaN'::numeric;
+UPDATE public.tasks SET logged_hours = 0 WHERE logged_hours = 'NaN'::numeric;
+
+ALTER TABLE public.projects DROP CONSTRAINT IF EXISTS projects_budget_amount_nonneg;
+ALTER TABLE public.projects
+  ADD CONSTRAINT projects_budget_amount_nonneg
+  CHECK (budget_amount IS NULL OR (budget_amount >= 0 AND budget_amount <> 'NaN'::numeric));
+
+ALTER TABLE public.projects DROP CONSTRAINT IF EXISTS projects_allocated_hours_nonneg;
+ALTER TABLE public.projects
+  ADD CONSTRAINT projects_allocated_hours_nonneg
+  CHECK (allocated_hours IS NULL OR (allocated_hours >= 0 AND allocated_hours <> 'NaN'::numeric));
+
+ALTER TABLE public.tasks DROP CONSTRAINT IF EXISTS tasks_estimated_hours_nonneg;
+ALTER TABLE public.tasks
+  ADD CONSTRAINT tasks_estimated_hours_nonneg
+  CHECK (estimated_hours IS NULL OR (estimated_hours >= 0 AND estimated_hours <> 'NaN'::numeric));
+
+ALTER TABLE public.tasks DROP CONSTRAINT IF EXISTS tasks_logged_hours_nonneg;
+ALTER TABLE public.tasks
+  ADD CONSTRAINT tasks_logged_hours_nonneg
+  CHECK (logged_hours >= 0 AND logged_hours <> 'NaN'::numeric);

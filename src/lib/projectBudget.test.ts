@@ -1,16 +1,25 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   filterTasksForProject,
   formatBudget,
   formatHours,
+  isUnknownColumnError,
+  omitTaskHourColumns,
   parseNonNegativeNumber,
   sumProjectTaskHours,
 } from "./projectBudget";
+
+const migrationsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../supabase/migrations");
 
 describe("project budget and hours", () => {
   it("formats hours and INR budget", () => {
     expect(formatHours(4)).toBe("4h");
     expect(formatHours(1.5)).toBe("1.5h");
+    expect(formatHours(1.25)).toBe("1.25h");
+    expect(formatHours(1e-9)).toBe("1e-9h");
     expect(formatHours(null)).toBeNull();
     expect(formatBudget(50000, "INR")).toBe("INR 50,000");
     expect(parseNonNegativeNumber("-1")).toBeNull();
@@ -26,5 +35,23 @@ describe("project budget and hours", () => {
     expect(sumProjectTaskHours(tasks, "p1")).toEqual({ estimated: 6, logged: 3 });
     expect(filterTasksForProject(tasks, "p1")).toHaveLength(2);
     expect(filterTasksForProject(tasks, "p1").every((t) => t.project_id === "p1")).toBe(true);
+  });
+
+  it("omits hour columns so writes can retry against older schemas", () => {
+    expect(isUnknownColumnError("Could not find the 'estimated_hours' column of 'tasks' in the schema cache")).toBe(true);
+    expect(isUnknownColumnError("duplicate key")).toBe(false);
+    expect(omitTaskHourColumns({ title: "A", estimated_hours: 4, logged_hours: 1 })).toEqual({ title: "A" });
+  });
+
+  it("rejects numeric NaN with <> because Postgres NaN = NaN is true", () => {
+    const sql = readFileSync(
+      resolve(migrationsDir, "20260906160000_numeric_nan_neq_budget_hours.sql"),
+      "utf8",
+    );
+    expect(sql).toContain("budget_amount <> 'NaN'::numeric");
+    expect(sql).toContain("allocated_hours <> 'NaN'::numeric");
+    expect(sql).toContain("estimated_hours <> 'NaN'::numeric");
+    expect(sql).toContain("logged_hours <> 'NaN'::numeric");
+    expect(sql).not.toMatch(/budget_amount = budget_amount/);
   });
 });

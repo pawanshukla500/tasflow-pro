@@ -21,7 +21,7 @@ import { ExtendTaskDueDateDialog } from "@/components/ExtendTaskDueDateDialog";
 import { EntityLookupField, EntityLinkPreview } from "@/components/EntityLookupField";
 import { useProjectSections } from "@/hooks/useProjectSections";
 import { resolveTaskContainerAssignment, sectionIdForProject } from "@/lib/projectLookup";
-import { parseNonNegativeNumber } from "@/lib/projectBudget";
+import { isUnknownColumnError, omitTaskHourColumns, parseNonNegativeNumber } from "@/lib/projectBudget";
 import {
   allowedStatusesForUser,
   canApproveOrRejectReview,
@@ -192,7 +192,10 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
       if (status === "done" && !task.completed_at) updates.completed_at = new Date().toISOString();
       if (status !== "done") updates.completed_at = null;
 
-      const { error } = await supabase.from("tasks").update(updates).eq("id", task.id);
+      let { error } = await supabase.from("tasks").update(updates).eq("id", task.id);
+      if (error && isUnknownColumnError(error.message)) {
+        ({ error } = await supabase.from("tasks").update(omitTaskHourColumns(updates)).eq("id", task.id));
+      }
       if (error) throw error;
 
       const current = new Set(task.assignees.map((a) => a.user_id));

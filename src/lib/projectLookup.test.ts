@@ -89,6 +89,18 @@ describe("task container lookup", () => {
     });
   });
 
+  it("skips project-not-found while the project catalog is still loading", () => {
+    expect(
+      resolveTaskContainerAssignment({
+        projectId: "p1",
+        sectionId: null,
+        projects: [],
+        sections: [],
+        projectsLoaded: false,
+      }),
+    ).toEqual({ ok: true, projectId: "p1", sectionId: null });
+  });
+
   it("keeps an existing section while the section catalog is still loading", () => {
     expect(
       resolveTaskContainerAssignment({
