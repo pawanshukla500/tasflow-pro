@@ -158,6 +158,7 @@ const DEPS_COLS = `blocked_by, depends_on`;
 const EMBEDS_WITH_PROFILE = `
   departments ( id, name, color ),
   projects ( id, name, color, icon ),
+  project_sections ( id, title ),
   task_assignees ( user_id, profiles ( id, name ) ),
   task_subtasks ( id, title, completed, position ),
   task_attachments ( count ),
@@ -167,7 +168,17 @@ const EMBEDS_WITH_PROFILE = `
 const EMBEDS_NO_PROFILE = `
   departments ( id, name, color ),
   projects ( id, name, color, icon ),
+  project_sections ( id, title ),
   task_assignees ( user_id ),
+  task_subtasks ( id, title, completed, position ),
+  task_attachments ( count ),
+  task_comments ( count )
+`.replace(/\s+/g, " ").trim();
+
+const EMBEDS_WITH_PROFILE_NO_SECTION = `
+  departments ( id, name, color ),
+  projects ( id, name, color, icon ),
+  task_assignees ( user_id, profiles ( id, name ) ),
   task_subtasks ( id, title, completed, position ),
   task_attachments ( count ),
   task_comments ( count )
@@ -195,12 +206,14 @@ const CREATOR_EMBED = `creator:profiles!tasks_created_by_profiles_fkey ( id, nam
  * Progressive selects — production may not have applied the deps migration
  * or assignee→profiles FKs yet. Try richest shape first, then degrade.
  */
-const TASK_SELECT_CANDIDATES = [
+export const TASK_SELECT_CANDIDATES = [
   `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}, ${CREATOR_EMBED}`,
   `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}`,
   `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_NO_PROFILE}`,
-  `${CORE_COLS_NO_SECTION}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}, ${CREATOR_EMBED}`,
-  `${CORE_COLS_NO_SECTION}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE}`,
+  `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_SECTION}, ${CREATOR_EMBED}`,
+  `${CORE_COLS}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_SECTION}`,
+  `${CORE_COLS_NO_SECTION}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_SECTION}, ${CREATOR_EMBED}`,
+  `${CORE_COLS_NO_SECTION}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_SECTION}`,
   `${CORE_COLS_NO_PROJECT}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_PROJECT}, ${CREATOR_EMBED}`,
   `${CORE_COLS_NO_PROJECT}, ${DEPS_COLS}, ${EMBEDS_WITH_PROFILE_NO_PROJECT}`,
   `${CORE_COLS_NO_PROJECT}, ${DEPS_COLS}, ${EMBEDS_NO_PROFILE_NO_PROJECT}`,

@@ -79,12 +79,14 @@ export async function searchLookupEntities(query: string, limit = 8): Promise<{
   const like = needle ? `%${needle}%` : "%";
   const [tasks, projects] = await Promise.all([
     kind === "project"
-      ? Promise.resolve({ data: [] as { id: string; title: string; status: string }[] })
+      ? Promise.resolve({ data: [] as { id: string; title: string; status: string }[], error: null })
       : supabase.from("tasks").select("id, title, status").ilike("title", like).limit(limit),
     kind === "task"
-      ? Promise.resolve({ data: [] as { id: string; name: string; status: string }[] })
+      ? Promise.resolve({ data: [] as { id: string; name: string; status: string }[], error: null })
       : supabase.from("projects").select("id, name, status").eq("status", "active").ilike("name", like).limit(limit),
   ]);
+  if (tasks.error) throw tasks.error;
+  if (projects.error) throw projects.error;
   const out: { kind: "task" | "project"; id: string; title: string; status?: string }[] = [];
   for (const row of projects.data || []) {
     out.push({ kind: "project", id: row.id, title: row.name, status: row.status });

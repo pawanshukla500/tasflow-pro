@@ -49,11 +49,15 @@ export function EntityLookupField({
     }
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const rows = await searchLookupEntities(active.query);
-      if (cancelled) return;
-      setHits(
-        rows.filter((row) => !(excludeTaskId && row.kind === "task" && row.id === excludeTaskId)),
-      );
+      try {
+        const rows = await searchLookupEntities(active.query);
+        if (cancelled) return;
+        setHits(
+          rows.filter((row) => !(excludeTaskId && row.kind === "task" && row.id === excludeTaskId)),
+        );
+      } catch {
+        if (!cancelled) setHits([]);
+      }
     }, 160);
     return () => {
       cancelled = true;
