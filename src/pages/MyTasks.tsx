@@ -240,7 +240,20 @@ const MyTasks = () => {
   };
 
   const handleExport = async (format: "xlsx" | "csv") => {
-    const rows = filtered.map(taskToExportRow);
+    const assigneeIds = [...new Set(filtered.flatMap((t) => t.assignees.map((a) => a.user_id)))];
+    const emailById = new Map<string, string>();
+    if (assigneeIds.length > 0) {
+      const { data } = await supabase.from("profiles").select("id, email").in("id", assigneeIds);
+      for (const row of data || []) {
+        if (row.id && row.email) emailById.set(row.id, row.email);
+      }
+    }
+    const rows = filtered.map((task) =>
+      taskToExportRow({
+        ...task,
+        assignees: task.assignees.map((a) => ({ name: a.name, email: emailById.get(a.user_id) })),
+      }),
+    );
     if (format === "csv") {
       downloadBlob(new Blob([toCsv(TASK_IMPORT_HEADERS, rows)], { type: "text/csv;charset=utf-8" }), "tasks.csv");
       toast.success("CSV exported");

@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/edgeFunctions";
 import { SEND_EMAIL_ON_TASK_IMPORT } from "@/lib/taskAssignmentNotify";
 import { isUnknownColumnError, omitTaskHourColumns } from "@/lib/projectBudget";
+import { filterProfilesInScope, resolveAccessScope } from "@/lib/accessControl";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { formatDateIST } from "@/lib/time";
@@ -44,6 +45,7 @@ export default function ImportTasksModal({ onClose, onImported }: Props) {
   const { user } = useAuth();
   const [profiles, setProfiles] = useState<ImportProfile[]>([]);
   const [projects, setProjects] = useState<ImportProject[]>([]);
+  const [lookupsReady, setLookupsReady] = useState(false);
   const [rows, setRows] = useState<ParsedImportRow[]>([]);
   const [fileName, setFileName] = useState("");
   const [parsing, setParsing] = useState(false);
@@ -51,20 +53,29 @@ export default function ImportTasksModal({ onClose, onImported }: Props) {
   const [importedCount, setImportedCount] = useState(0);
 
   useEffect(() => {
-    supabase.from("profiles").select("id, name, email, department_id").eq("active", true)
-      .then((r) => setProfiles((r.data || []) as ImportProfile[]));
-  }, []);
-
-  useEffect(() => {
+    let cancelled = false;
     const orgId = (user?.profile as { organization_id?: string | null } | undefined)?.organization_id;
-    let query = supabase.from("projects").select("id, name, status");
-    if (orgId) query = query.eq("organization_id", orgId);
-    query.then((r) => {
-      const list = ((r.data || []) as ImportProject[]).filter(
-        (p) => !p.status || p.status === "active",
+    let projectQuery = supabase.from("projects").select("id, name, status");
+    if (orgId) projectQuery = projectQuery.eq("organization_id", orgId);
+
+    Promise.all([
+      supabase.from("profiles").select("id, name, email, department_id").eq("active", true),
+      projectQuery,
+    ]).then(([profileRes, projectRes]) => {
+      if (cancelled) return;
+      const scoped = filterProfilesInScope(
+        (profileRes.data || []) as ImportProfile[],
+        resolveAccessScope(user),
+        user?.id,
       );
-      setProjects(list);
+      setProfiles(scoped);
+      setProjects(
+        ((projectRes.data || []) as ImportProject[]).filter((p) => !p.status || p.status === "active"),
+      );
+      setLookupsReady(true);
     });
+
+    return () => { cancelled = true; };
   }, [user]);
 
   const downloadTemplate = async () => {
@@ -136,6 +147,10 @@ export default function ImportTasksModal({ onClose, onImported }: Props) {
   };
 
   const handleFile = async (file: File) => {
+    if (!lookupsReady) {
+      toast.error("Still loading team and projects — try again in a moment");
+      return;
+    }
     setParsing(true);
     setFileName(file.name);
     try {
@@ -198,9 +213,8 @@ export default function ImportTasksModal({ onClose, onImported }: Props) {
             .from("task_assignees")
             .insert(r.matched.map((m) => ({ task_id: task.id, user_id: m.id })));
           if (assigneeError) {
-            console.warn("import assignees failed", r.rowIdx, assigneeError);
-            await supabase.from("tasks").delete().eq("id", task.id);
-            return false;
+            console.warn("import assignees failed; task kept unassigned", r.rowIdx, assigneeError);
+            return true;
           }
           try {
             await invokeEdgeFunction("notify-task-assigned", {
@@ -261,7 +275,7 @@ export default function ImportTasksModal({ onClose, onImported }: Props) {
                       Download the Excel template — headers, one example row, and a hidden Members list.
                     </span>
                   </div>
-                  <Button variant="outline" size="sm" onClick={downloadTemplate} className="shrink-0">
+                  <Button variant="outline" size="sm" onClick={downloadTemplate} className="shrink-0" disabled={!lookupsReady}>
                     <Download className="h-3.5 w-3.5 mr-1.5" />Download template
                   </Button>
                 </div>
@@ -273,8 +287,10 @@ export default function ImportTasksModal({ onClose, onImported }: Props) {
                     type="file"
                     accept=".xlsx,.xls,.csv"
                     className="hidden"
+                    disabled={!lookupsReady || parsing}
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
                   />
+                  {!lookupsReady && <p className="text-xs text-muted-foreground mt-2">Loading team and projects…</p>}
                   {parsing && <p className="text-xs text-primary mt-2">Reading file…</p>}
                 </label>
               </>

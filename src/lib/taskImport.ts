@@ -72,34 +72,40 @@ export function findColumn(headers: string[], aliases: string[]) {
   return -1;
 }
 
+function utcYmd(year: number, monthIndex: number, day: number): string | null {
+  if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || !Number.isInteger(day)) return null;
+  const dt = new Date(Date.UTC(year, monthIndex, day));
+  if (dt.getUTCFullYear() !== year || dt.getUTCMonth() !== monthIndex || dt.getUTCDate() !== day) return null;
+  return dt.toISOString().split("T")[0];
+}
+
+export function cellHasValue(val: unknown): boolean {
+  if (val === 0) return true;
+  if (val == null) return false;
+  return String(val).trim() !== "";
+}
+
 export function parseExcelDate(val: unknown, XLSX: ExcelDateHelper): string | null {
-  if (!val && val !== 0) return null;
+  if (!cellHasValue(val)) return null;
   if (typeof val === "number") {
     const d = XLSX.SSF.parse_date_code(val);
-    if (d) {
-      const iso = new Date(Date.UTC(d.y, d.m - 1, d.d));
-      return iso.toISOString().split("T")[0];
-    }
+    if (d) return utcYmd(d.y, d.m - 1, d.d);
+    return null;
   }
   const s = String(val).trim();
-  if (!s) return null;
   const m1 = s.match(/^(\d{1,2})[-\s/](\w{3,})[-\s/](\d{4})$/);
   if (m1) {
     const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
     const monIdx = months.indexOf(m1[2].toLowerCase().slice(0, 3));
-    if (monIdx >= 0) {
-      const d = new Date(Date.UTC(parseInt(m1[3], 10), monIdx, parseInt(m1[1], 10)));
-      return d.toISOString().split("T")[0];
-    }
+    if (monIdx >= 0) return utcYmd(parseInt(m1[3], 10), monIdx, parseInt(m1[1], 10));
   }
   const m2 = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
-  if (m2) {
-    const d = new Date(Date.UTC(parseInt(m2[3], 10), parseInt(m2[2], 10) - 1, parseInt(m2[1], 10)));
-    return d.toISOString().split("T")[0];
-  }
+  if (m2) return utcYmd(parseInt(m2[3], 10), parseInt(m2[2], 10) - 1, parseInt(m2[1], 10));
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return utcYmd(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10));
   const d = new Date(s);
-  if (!Number.isNaN(d.getTime())) return d.toISOString().split("T")[0];
-  return null;
+  if (Number.isNaN(d.getTime())) return null;
+  return utcYmd(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
 export function splitNames(s: string): string[] {
@@ -127,6 +133,18 @@ export function parseImportStatus(val: unknown): string {
   return STATUSES.has(normalized) ? normalized : "todo";
 }
 
+function matchName(name: string, profiles: ImportProfile[]): ImportProfile | null {
+  const needle = name.toLowerCase();
+  const exact = profiles.filter((row) => row.name.toLowerCase() === needle);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return null;
+  const partial = profiles.filter((row) => {
+    const n = row.name.toLowerCase();
+    return n.includes(needle) || needle.includes(n);
+  });
+  return partial.length === 1 ? partial[0] : null;
+}
+
 function matchAssignees(
   names: string[],
   emails: string[],
@@ -135,21 +153,15 @@ function matchAssignees(
   const matched: ImportProfile[] = [];
   const unmatched: string[] = [];
   for (const e of emails) {
-    const p = profiles.find((row) => row.email.toLowerCase() === e.toLowerCase());
-    if (p) {
-      if (!matched.find((m) => m.id === p.id)) matched.push(p);
+    const hits = profiles.filter((row) => row.email.toLowerCase() === e.toLowerCase());
+    if (hits.length === 1) {
+      if (!matched.find((m) => m.id === hits[0].id)) matched.push(hits[0]);
     } else if (e) {
       unmatched.push(e);
     }
   }
   for (const n of names) {
-    const nl = n.toLowerCase();
-    const p = profiles.find(
-      (row) =>
-        row.name.toLowerCase() === nl ||
-        row.name.toLowerCase().includes(nl) ||
-        nl.includes(row.name.toLowerCase().split(" ")[0]),
-    );
+    const p = matchName(n, profiles);
     if (p) {
       if (!matched.find((m) => m.id === p.id)) matched.push(p);
     } else if (n) {
@@ -203,18 +215,20 @@ export function parseImportGrid(
     const assigneeRaw = cAssignee >= 0 ? String(r[cAssignee] || "").trim() : "";
     const emailRaw = cEmail >= 0 ? String(r[cEmail] || "").trim() : "";
     const projectRaw = cProject >= 0 ? String(r[cProject] || "").trim() : "";
-    const dueDate = cDue >= 0 ? parseExcelDate(r[cDue], options.xlsx) : null;
+    const dueRaw = cDue >= 0 ? r[cDue] : "";
+    const dueDate = cDue >= 0 ? parseExcelDate(dueRaw, options.xlsx) : null;
     const priority = parsePriority(cPriority >= 0 ? r[cPriority] : "");
     const status = parseImportStatus(cStatus >= 0 ? r[cStatus] : "");
     const estimatedHours = cEstimated >= 0 ? parseNonNegativeNumber(r[cEstimated]) : null;
     const loggedHours = cLogged >= 0 ? parseNonNegativeNumber(r[cLogged]) : null;
 
-    if (!title && !description && !assigneeRaw && !emailRaw && !projectRaw && !dueDate) continue;
+    if (!title && !description && !assigneeRaw && !emailRaw && !projectRaw && !dueDate && !cellHasValue(dueRaw)) continue;
 
     const { matched, unmatched } = matchAssignees(splitNames(assigneeRaw), splitEmails(emailRaw), options.profiles);
     const project = matchProject(projectRaw, options.projects);
     const warnings: string[] = [];
-    if (!dueDate) warnings.push("No due date");
+    if (cellHasValue(dueRaw) && !dueDate) warnings.push("Invalid due date");
+    else if (!dueDate) warnings.push("No due date");
     if (unmatched.length > 0) warnings.push(`Unmatched: ${unmatched.join(", ")}`);
     if (projectRaw && !project) warnings.push(`Unknown project: ${projectRaw}`);
 
@@ -272,7 +286,7 @@ export function formatImportDateCell(iso: string | null | undefined): string {
 export type ExportableTask = {
   title: string;
   description?: string | null;
-  assignees?: { name: string }[];
+  assignees?: { name: string; email?: string | null }[];
   due_date?: string | null;
   priority?: string | null;
   status?: string | null;
@@ -286,7 +300,7 @@ export function taskToExportRow(task: ExportableTask): string[] {
     task.title ?? "",
     task.description ?? "",
     (task.assignees ?? []).map((a) => a.name).filter(Boolean).join(", "),
-    "",
+    (task.assignees ?? []).map((a) => a.email).filter(Boolean).join(", "),
     formatImportDateCell(task.due_date),
     task.priority ?? "",
     task.status ?? "",

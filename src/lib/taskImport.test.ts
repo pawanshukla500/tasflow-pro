@@ -5,6 +5,7 @@ import {
   formatImportToast,
   isImportableRow,
   parseImportGrid,
+  taskToExportRow,
   type ExcelDateHelper,
   type ImportProfile,
   type ImportProject,
@@ -121,6 +122,37 @@ describe("parseImportGrid", () => {
     expect(rows[0].projectId).toBeNull();
     expect(rows[0].warnings.some((w) => w.startsWith("Unknown project"))).toBe(true);
   });
+
+  it("does not overflow invalid dates such as 31-Feb-2026", () => {
+    const rows = parse([
+      ["Title", "Due Date"],
+      ["Bad date", "31-Feb-2026"],
+    ]);
+    expect(rows[0].dueDate).toBeNull();
+    expect(rows[0].warnings).toContain("Invalid due date");
+    expect(isImportableRow(rows[0])).toBe(true);
+  });
+
+  it("leaves colliding partial names unmatched instead of picking the first", () => {
+    const rows = parseImportGrid(
+      [
+        ["Title", "Assignee"],
+        ["Shared", "Priya"],
+      ],
+      {
+        profiles: [
+          ...members,
+          { id: "u3", name: "Priya Singh", email: "priya.s@youthnic.shop", department_id: "d1" },
+        ],
+        projects,
+        xlsx,
+      },
+    ).rows;
+    expect(rows[0].matched).toEqual([]);
+    expect(rows[0].unmatched).toContain("Priya");
+    expect(rows[0].rowStatus).toBe("no-match");
+    expect(isImportableRow(rows[0])).toBe(true);
+  });
 });
 
 describe("chunkRows / toast", () => {
@@ -133,5 +165,14 @@ describe("chunkRows / toast", () => {
   it("formats the import toast", () => {
     expect(formatImportToast(8, 10, 2)).toBe("Imported 8 of 10 (2 warnings)");
     expect(formatImportToast(10, 10, 0)).toBe("Imported 10 of 10");
+  });
+
+  it("writes assignee emails on export", () => {
+    expect(
+      taskToExportRow({
+        title: "Ship catalog",
+        assignees: [{ name: "Priya Shah", email: "priya@youthnic.shop" }],
+      })[3],
+    ).toBe("priya@youthnic.shop");
   });
 });
