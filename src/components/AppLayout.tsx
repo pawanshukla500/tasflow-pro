@@ -75,7 +75,7 @@ const AppLayout = () => {
             isProjectDetail ? "overflow-hidden flex flex-col" : "overflow-y-auto",
           )}
         >
-          <RouteErrorBoundary>
+          <RouteErrorBoundary resetKey={`${location.pathname}${location.search}`}>
             <Outlet />
           </RouteErrorBoundary>
         </main>

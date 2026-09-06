@@ -2,7 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { EmptyState } from "@/components/EmptyState";
 import { LayoutGrid } from "lucide-react";
 
-type Props = { children: ReactNode };
+type Props = { children: ReactNode; resetKey?: string };
 type State = { error: Error | null };
 
 /** Keeps the app shell visible when a lazy route throws during render. */
@@ -15,6 +15,12 @@ export class RouteErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("Route render failed", error, info.componentStack);
+  }
+
+  componentDidUpdate(prevProps: Props) {
+    if (this.state.error && this.props.resetKey !== prevProps.resetKey) {
+      this.setState({ error: null });
+    }
   }
 
   render() {
