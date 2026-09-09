@@ -161,22 +161,43 @@ for fn in "${GOOGLE_FUNCTIONS[@]}"; do
     echo "    WARNING: $fn deploy failed (continuing)"
 done
 
+DIGEST_FN_OK=1
 for fn in "${CORE_FUNCTIONS[@]}"; do
   echo "  - $fn"
-  $SUPABASE_CLI functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt || \
+  if $SUPABASE_CLI functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt; then
+    :
+  else
     echo "    WARNING: $fn deploy failed (continuing)"
+    if [[ "$fn" == "send-daily-digest" ]]; then
+      DIGEST_FN_OK=0
+    fi
+  fi
 done
 
-# After functions (and the Vault-key RPC) are live, queue today's IST digest
-# once. Idempotency is daily-digest-<IST date>-<user>, so a same-day redeploy
-# does not double-send. Recovers a missed 09:30 IST run on merge.
-if [[ -n "${SUPABASE_DB_URL:-}" && "${SKIP_DIGEST_ON_DEPLOY:-}" != "1" ]]; then
+# After the digest function (and Vault-key RPC) are live, queue today's IST
+# digest once. Idempotency is daily-digest-<IST date>-<user>, so a same-day
+# redeploy does not double-send. Recovers a missed 09:30 IST run on merge.
+# Skip if send-daily-digest itself failed to deploy — posting would hit the
+# old 401 handler and look like a successful recovery.
+if [[ "${SKIP_DIGEST_ON_DEPLOY:-}" == "1" ]]; then
+  echo "==> Skipping digest queue (SKIP_DIGEST_ON_DEPLOY=1)."
+elif [[ "$DIGEST_FN_OK" -ne 1 ]]; then
+  echo "WARNING: skipping digest queue because send-daily-digest deploy failed." >&2
+elif [[ -z "${SUPABASE_DB_URL:-}" ]]; then
+  echo "WARNING: skipping digest queue (no DB URL)." >&2
+elif [[ ! "$PROJECT_REF" =~ ^[a-z0-9]+$ ]]; then
+  echo "WARNING: skipping digest queue (invalid PROJECT_REF)." >&2
+else
   echo "==> Queueing today's IST daily digest (idempotent per user)..."
-  if $SUPABASE_CLI db query --db-url "$SUPABASE_DB_URL" -f "$REPO_DIR/scripts/send-daily-digest-now.sql"; then
+  DIGEST_SQL="$(mktemp)"
+  sed "s|__DIGEST_URL__|https://${PROJECT_REF}.supabase.co/functions/v1/send-daily-digest|g" \
+    "$REPO_DIR/scripts/send-daily-digest-now.sql" > "$DIGEST_SQL"
+  if $SUPABASE_CLI db query --db-url "$SUPABASE_DB_URL" -f "$DIGEST_SQL"; then
     echo "==> Daily digest queued via pg_net."
   else
-    echo "WARNING: could not queue send-daily-digest — run scripts/send-daily-digest-now.sql in the SQL Editor." >&2
+    echo "WARNING: could not queue send-daily-digest." >&2
   fi
+  rm -f "$DIGEST_SQL"
 fi
 
 echo ""

@@ -49,7 +49,11 @@ describe("email cron SQL", () => {
     );
     expect(deploy).toContain("send-daily-digest-now.sql");
     expect(deploy.indexOf("functions deploy")).toBeLessThan(deploy.indexOf("send-daily-digest-now.sql"));
-    expect(nowSql).toContain("functions/v1/send-daily-digest");
+    expect(deploy).toContain("DIGEST_FN_OK");
+    expect(deploy).toContain("skipping digest queue because send-daily-digest deploy failed");
+    expect(nowSql).toContain("__DIGEST_URL__");
+    expect(nowSql).not.toContain("nekdjoquirhecmejuoba");
+    expect(nowSql).toContain("RAISE EXCEPTION");
     expect(nowSql).toContain("report_cron_service_role_key");
     expect(migration).toContain("internal_cron_key_matches");
     expect(migration).toContain("GRANT EXECUTE");
