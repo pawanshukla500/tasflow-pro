@@ -141,6 +141,7 @@ CORE_FUNCTIONS=(
   firebase-auth create-team-member delete-team-member register-organization
   manage-email-suppression email-system-smoke-test
   firebase-upload daily-motivation notify-task-assigned notify-workflow-stage
+  kwikengage-webhook
   process-email-queue send-daily-digest send-department-daily-summary
   send-weekly-pending-report send-admin-daily-overview send-due-reminders
   send-transactional-email send-monthly-report send-password-reset

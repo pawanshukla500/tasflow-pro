@@ -510,6 +510,7 @@ export type Database = {
           task_due_reminder: boolean
           updated_at: string
           user_id: string
+          whatsapp_alerts: boolean
         }
         Insert: {
           daily_digest?: boolean
@@ -518,6 +519,7 @@ export type Database = {
           task_due_reminder?: boolean
           updated_at?: string
           user_id: string
+          whatsapp_alerts?: boolean
         }
         Update: {
           daily_digest?: boolean
@@ -526,6 +528,7 @@ export type Database = {
           task_due_reminder?: boolean
           updated_at?: string
           user_id?: string
+          whatsapp_alerts?: boolean
         }
         Relationships: []
       }
@@ -1667,6 +1670,48 @@ export type Database = {
           },
         ]
       }
+      whatsapp_outbound: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string | null
+          phone: string
+          task_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          phone: string
+          task_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          phone?: string
+          task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_outbound_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_outbound_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1718,6 +1763,7 @@ export type Database = {
         Args: { _task_id: string; _user_id: string }
         Returns: boolean
       }
+      kwikengage_config: { Args: never; Returns: Json }
       manages_department: {
         Args: { _dept_id: string; _user_id: string }
         Returns: boolean

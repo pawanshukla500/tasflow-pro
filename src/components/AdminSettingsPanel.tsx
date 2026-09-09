@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/edgeFunctions";
 import { toast } from "sonner";
-import { Shield, Building2, Mail, ScrollText, Users, Workflow, SearchCheck, MailWarning, MailCheck, FlaskConical, TriangleAlert } from "lucide-react";
+import { Shield, Building2, Mail, ScrollText, Users, Workflow, SearchCheck, MailWarning, MailCheck, FlaskConical, TriangleAlert, MessageCircle } from "lucide-react";
 import { formatDateTimeIST } from "@/lib/time";
 
 interface EmailDeliveryLookup {
@@ -328,6 +328,22 @@ export function AdminSettingsPanel() {
             </div>
           )}
         </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <MessageCircle className="h-5 w-5 text-primary" />
+          <h3 className="font-semibold text-lg">WhatsApp (KwikEngage)</h3>
+        </div>
+        <p className="text-xs text-muted-foreground max-w-2xl">
+          Assignment alerts use an approved Utility template. Complete / Done replies mark
+          the matching TaskFlow task done. Paste this webhook in KwikEngage Chats → Setup
+          and append <code className="text-[11px]">?token=</code> plus Vault secret
+          {" "}<code className="text-[11px]">kwikengage_webhook_secret</code> (never commit that token).
+        </p>
+        <p className="text-xs font-mono break-all rounded-md border bg-muted/40 px-3 py-2">
+          https://nekdjoquirhecmejuoba.supabase.co/functions/v1/kwikengage-webhook
+        </p>
       </section>
 
       <section className="space-y-4">
