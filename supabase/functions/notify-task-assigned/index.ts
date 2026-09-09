@@ -3,6 +3,11 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createInAppNotification } from '../_shared/in-app-notifications.ts'
 import { dispatchTransactionalEmail } from '../_shared/dispatch-transactional-email.ts'
 import { isInternalServiceRequest } from '../_shared/internal-auth.ts'
+import {
+  loadKwikEngageConfig,
+  sendKwikEngageTemplate,
+  toWhatsAppDigits,
+} from '../_shared/kwikengage.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -104,7 +109,7 @@ Deno.serve(async (req) => {
 
   let profileQuery = supabase
     .from('profiles')
-    .select('id, name, email, organization_id')
+    .select('id, name, email, mobile_no, organization_id')
     .in('id', [...assignedIds])
 
   if (task.organization_id) {
@@ -115,10 +120,10 @@ Deno.serve(async (req) => {
   const assignedByName = callerName || (typeof body.assignedByName === 'string'
     ? body.assignedByName.slice(0, 120)
     : 'Someone')
+  const waConfig = sendEmail ? await loadKwikEngageConfig(supabaseUrl, serviceKey) : null
 
   const results = []
   for (const p of profiles || []) {
-    // Always create in-app notification
     await createInAppNotification(supabase, {
       userId: p.id,
       type: 'task_assigned',
@@ -129,36 +134,68 @@ Deno.serve(async (req) => {
     })
 
     if (!sendEmail) {
-      results.push({ user_id: p.id, ok: true, email: false, inApp: true })
+      results.push({ user_id: p.id, ok: true, email: false, whatsapp: false, inApp: true })
       continue
     }
 
-    // Honor user notification preference for email only
     const { data: prefs } = await supabase
-      .from('notification_preferences').select('task_assigned').eq('user_id', p.id).maybeSingle()
-    if (prefs && prefs.task_assigned === false) {
-      results.push({ user_id: p.id, skipped: true, reason: 'user_preference', inApp: true })
-      continue
+      .from('notification_preferences')
+      .select('task_assigned, whatsapp_alerts')
+      .eq('user_id', p.id)
+      .maybeSingle()
+
+    let emailStatus: string | false = false
+    if (!prefs || prefs.task_assigned !== false) {
+      const dispatch = await dispatchTransactionalEmail({
+        supabaseUrl,
+        serviceRoleKey: serviceKey,
+        templateName: 'task-assigned',
+        recipientEmail: p.email,
+        idempotencyKey: `task-assigned-${taskId}-${p.id}`,
+        templateData: {
+          recipientName: p.name,
+          taskTitle: task.title,
+          taskDescription: task.description,
+          priority: task.priority,
+          dueDate: task.due_date,
+          assignedBy: assignedByName,
+          taskId,
+        },
+      })
+      emailStatus = dispatch.status === 'sent' || dispatch.status === 'deduped'
+        ? dispatch.status
+        : (dispatch.reason || dispatch.status)
     }
 
-    const dispatch = await dispatchTransactionalEmail({
-      supabaseUrl,
-      serviceRoleKey: serviceKey,
-      templateName: 'task-assigned',
-      recipientEmail: p.email,
-      idempotencyKey: `task-assigned-${taskId}-${p.id}`,
-      templateData: {
-        recipientName: p.name,
-        taskTitle: task.title,
-        taskDescription: task.description,
-        priority: task.priority,
-        dueDate: task.due_date,
-        assignedBy: assignedByName,
-        taskId,
-      },
+    let whatsapp: string | false = false
+    const phone = toWhatsAppDigits(p.mobile_no)
+    if (waConfig && phone && (!prefs || prefs.whatsapp_alerts !== false)) {
+      const wa = await sendKwikEngageTemplate({
+        apiKey: waConfig.apiKey,
+        to: phone,
+        templateId: waConfig.templateTaskAssigned,
+        language: waConfig.templateLanguage,
+      })
+      whatsapp = wa.ok ? 'sent' : (wa.error || 'failed')
+      if (wa.ok) {
+        await supabase.from('whatsapp_outbound').insert({
+          task_id: taskId,
+          user_id: p.id,
+          phone,
+          message_id: wa.messageId || null,
+        })
+      } else {
+        console.warn('whatsapp task-assigned failed', wa.error)
+      }
+    }
+
+    results.push({
+      user_id: p.id,
+      ok: emailStatus === 'sent' || emailStatus === 'deduped' || whatsapp === 'sent' || emailStatus === false,
+      email: emailStatus,
+      whatsapp,
+      inApp: true,
     })
-    const ok = dispatch.status === 'sent' || dispatch.status === 'deduped'
-    results.push({ user_id: p.id, ok, error: ok ? undefined : (dispatch.reason || dispatch.status), email: true, inApp: true })
   }
 
   return new Response(JSON.stringify({ results, sendEmail }), {

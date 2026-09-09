@@ -60,3 +60,6 @@ project_id = "nekdjoquirhecmejuoba"
   # so the gateway JWT check must be off.
   [functions.mcp-server]
     verify_jwt = false
+  # KwikEngage inbound WhatsApp. Auth is the Vault webhook secret or API key.
+  [functions.kwikengage-webhook]
+    verify_jwt = false

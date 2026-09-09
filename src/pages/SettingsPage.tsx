@@ -87,6 +87,8 @@ const SettingsPage = () => {
     monthly_report: true,
     daily_digest: true,
   });
+  const [whatsappAlerts, setWhatsappAlerts] = useState(true);
+  const [prefsReady, setPrefsReady] = useState(false);
 
   const [fontSize, setFontSize] = useState(() => localStorage.getItem("app-font-size") || "default");
 
@@ -141,12 +143,17 @@ const SettingsPage = () => {
 
   useEffect(() => {
     if (!user?.id) return;
+    setPrefsReady(false);
     supabase
       .from("notification_preferences")
-      .select("task_assigned, task_due_reminder, monthly_report, daily_digest")
+      .select("task_assigned, task_due_reminder, monthly_report, daily_digest, whatsapp_alerts")
       .eq("user_id", user.id)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          toast.error("Failed to load notification preferences");
+          return;
+        }
         if (data) {
           setEmailPrefs({
             task_assigned: data.task_assigned,
@@ -154,7 +161,9 @@ const SettingsPage = () => {
             monthly_report: data.monthly_report,
             daily_digest: data.daily_digest ?? true,
           });
+          setWhatsappAlerts(data.whatsapp_alerts !== false);
         }
+        setPrefsReady(true);
       });
   }, [user?.id]);
 
@@ -251,7 +260,7 @@ const SettingsPage = () => {
   };
 
   const handleSaveNotifications = async () => {
-    if (!user) return;
+    if (!user || !prefsReady) return;
     setSaving(true);
     try {
       const { error } = await supabase.from("notification_preferences").upsert({
@@ -260,6 +269,7 @@ const SettingsPage = () => {
         task_due_reminder: emailPrefs.task_due_reminder,
         monthly_report: emailPrefs.monthly_report,
         daily_digest: emailPrefs.daily_digest,
+        whatsapp_alerts: whatsappAlerts,
       });
       if (error) throw error;
       toast.success("Notification preferences saved");
@@ -410,6 +420,9 @@ const SettingsPage = () => {
                 }}
                 placeholder="+91 XXXXX XXXXX"
               />
+              <p className="text-xs text-muted-foreground">
+                WhatsApp task alerts are sent to this number.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Role</Label>
@@ -474,25 +487,44 @@ const SettingsPage = () => {
       )}
 
       {activeTab === "notifications" && (
-        <div className="bg-card rounded-xl border p-6">
-          <h2 className="text-base font-semibold text-foreground mb-4">Email Notification Preferences</h2>
-          <div className="space-y-4">
-            {notificationEvents.map(({ label, dbKey }) => (
-              <div key={dbKey} className="flex items-center justify-between py-1">
-                <span className="text-sm text-foreground">{label}</span>
-                <div className="flex items-center gap-1.5">
-                  <Switch
-                    checked={emailPrefs[dbKey]}
-                    onCheckedChange={() =>
-                      setEmailPrefs((prev) => ({ ...prev, [dbKey]: !prev[dbKey] }))
-                    }
-                  />
-                  <span className="text-xs text-muted-foreground">Email</span>
+        <div className="space-y-4">
+          <div className="bg-card rounded-xl border p-6">
+            <h2 className="text-base font-semibold text-foreground mb-4">Email Notification Preferences</h2>
+            <div className="space-y-4">
+              {notificationEvents.map(({ label, dbKey }) => (
+                <div key={dbKey} className="flex items-center justify-between py-1">
+                  <span className="text-sm text-foreground">{label}</span>
+                  <div className="flex items-center gap-1.5">
+                    <Switch
+                      checked={emailPrefs[dbKey]}
+                      onCheckedChange={() =>
+                        setEmailPrefs((prev) => ({ ...prev, [dbKey]: !prev[dbKey] }))
+                      }
+                    />
+                    <span className="text-xs text-muted-foreground">Email</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-          <Button className="mt-4" onClick={handleSaveNotifications} disabled={saving}>
+          <div className="bg-card rounded-xl border p-6">
+            <h2 className="text-base font-semibold text-foreground mb-1">WhatsApp alerts</h2>
+            <p className="text-xs text-muted-foreground mb-4">
+              Task assignment messages go to the mobile number on your profile. Reply
+              Complete or tap Complete to mark that task done in TaskFlow.
+            </p>
+            <div className="flex items-center justify-between py-1">
+              <span className="text-sm text-foreground">Task assignment WhatsApp</span>
+              <div className="flex items-center gap-1.5">
+                <Switch
+                  checked={whatsappAlerts}
+                  onCheckedChange={setWhatsappAlerts}
+                />
+                <span className="text-xs text-muted-foreground">WhatsApp</span>
+              </div>
+            </div>
+          </div>
+          <Button onClick={handleSaveNotifications} disabled={saving || !prefsReady}>
             {saving ? "Saving..." : "Save Preferences"}
           </Button>
         </div>
