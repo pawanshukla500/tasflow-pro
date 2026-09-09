@@ -12,20 +12,48 @@
 -- EVERY cron job MUST send BOTH:
 --   Authorization: Bearer <vault report_cron_service_role_key>
 --   x-internal-service-key: <same>
--- Edge functions accept the current sb_secret_ key OR a legacy service_role JWT.
--- Sending only x-internal-service-key with a Vault JWT used to 401 daily digest
--- because the function compared it to SUPABASE_SERVICE_ROLE_KEY with !==.
+-- Edge functions accept:
+--   - the current sb_secret_ key (exact)
+--   - optional INTERNAL_CRON_KEY / GMAIL_CRON_KEY Edge secrets
+--   - a legacy service_role JWT (PostgREST-verified)
+--   - the Vault shared secret via public.internal_cron_key_matches
+-- Hosted Vault report_cron_service_role_key is a 48-char gmail-sync secret,
+-- not a JWT and not sb_secret_, so JWT/exact-match used to 401 the digest.
 --
 -- Dashboard: https://supabase.com/dashboard/project/nekdjoquirhecmejuoba/sql/new
 
 DO $$
 BEGIN
+  EXECUTE $fn$
+    CREATE OR REPLACE FUNCTION public.internal_cron_key_matches(candidate text)
+    RETURNS boolean
+    LANGUAGE sql
+    STABLE
+    SECURITY DEFINER
+    SET search_path = pg_catalog
+    AS $body$
+      SELECT
+        candidate IS NOT NULL
+        AND length(candidate) >= 16
+        AND EXISTS (
+          SELECT 1
+          FROM vault.decrypted_secrets s
+          WHERE s.name IN ('report_cron_service_role_key', 'gmail_cron_key')
+            AND s.decrypted_secret = candidate
+        );
+    $body$;
+  $fn$;
+  EXECUTE 'REVOKE ALL ON FUNCTION public.internal_cron_key_matches(text) FROM PUBLIC';
+  EXECUTE 'REVOKE ALL ON FUNCTION public.internal_cron_key_matches(text) FROM anon';
+  EXECUTE 'REVOKE ALL ON FUNCTION public.internal_cron_key_matches(text) FROM authenticated';
+  EXECUTE 'GRANT EXECUTE ON FUNCTION public.internal_cron_key_matches(text) TO service_role';
+
   IF NOT EXISTS (
     SELECT 1 FROM vault.decrypted_secrets WHERE name = 'report_cron_service_role_key'
   ) AND NOT EXISTS (
     SELECT 1 FROM vault.decrypted_secrets WHERE name = 'gmail_cron_key'
   ) THEN
-    RAISE NOTICE 'Skipping: report_cron_service_role_key / gmail_cron_key missing in vault.';
+    RAISE NOTICE 'Skipping cron reschedule: report_cron_service_role_key / gmail_cron_key missing in vault. RPC still applied.';
     RETURN;
   END IF;
 

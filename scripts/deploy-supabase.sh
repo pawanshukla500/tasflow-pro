@@ -167,6 +167,18 @@ for fn in "${CORE_FUNCTIONS[@]}"; do
     echo "    WARNING: $fn deploy failed (continuing)"
 done
 
+# After functions (and the Vault-key RPC) are live, queue today's IST digest
+# once. Idempotency is daily-digest-<IST date>-<user>, so a same-day redeploy
+# does not double-send. Recovers a missed 09:30 IST run on merge.
+if [[ -n "${SUPABASE_DB_URL:-}" && "${SKIP_DIGEST_ON_DEPLOY:-}" != "1" ]]; then
+  echo "==> Queueing today's IST daily digest (idempotent per user)..."
+  if $SUPABASE_CLI db query --db-url "$SUPABASE_DB_URL" -f "$REPO_DIR/scripts/send-daily-digest-now.sql"; then
+    echo "==> Daily digest queued via pg_net."
+  else
+    echo "WARNING: could not queue send-daily-digest — run scripts/send-daily-digest-now.sql in the SQL Editor." >&2
+  fi
+fi
+
 echo ""
 echo "============================================"
 if [[ "$DB_PUSH_OK" -eq 1 ]]; then

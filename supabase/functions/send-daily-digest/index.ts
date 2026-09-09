@@ -20,6 +20,7 @@ Deno.serve(async (req) => {
 
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   if (!await isInternalServiceRequest(req, serviceRoleKey)) {
+    console.warn("send-daily-digest: unauthorized cron/internal request");
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -193,6 +194,9 @@ Deno.serve(async (req) => {
   }
 
   // Admin / MD department overlook is Friday-only via send-weekly-pending-report.
+  const sent = results.filter((r) => r.status === "sent").length;
+  const skipped = results.length - sent;
+  console.log(`send-daily-digest ${today} IST: ${sent} sent, ${skipped} skipped, ${results.length} users`);
   return new Response(JSON.stringify({ ok: true, date: today, results }), {
     status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
   });

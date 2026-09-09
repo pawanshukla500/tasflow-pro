@@ -1,5 +1,33 @@
 # Email notification system
 
+## Daily digest 401 at 09:30 IST (fixed 2026-09-09)
+Task-create mail (`notify-task-assigned` → Resend) was already delivering. The
+Mon–Sat **09:30 IST** (`0 4 * * 1-6` UTC) consolidated digest was not:
+`cron.job` `send-daily-digest` was active and `pg_cron` reported success in
+~15ms (`"1 row"` = `net.http_post` queued), but `net._http_response` was
+**401 `{"error":"Unauthorized"}`**. Nothing landed in `email_send_log` for
+`daily-digest` after 2026-07-20.
+
+Cause: Vault `report_cron_service_role_key` is a 48-character **shared secret**
+copied from `gmail_cron_key` (gmail-sync). It is not a JWT and not the
+Edge-injected `SUPABASE_SERVICE_ROLE_KEY` (`sb_secret_…`). `isInternalServiceRequest`
+only accepted an exact Edge-key match or a PostgREST-verified `service_role`
+JWT, so every digest/admin/dept cron 401'd. Assignment mail uses the SPA
+session path, so Resend looked healthy.
+
+Permanent fixes:
+
+- `internal_cron_key_matches(candidate)` (SECURITY DEFINER, `service_role` only)
+  compares the cron header to Vault. Edge auth calls that RPC with the
+  injected service role.
+- Optional Edge secrets `INTERNAL_CRON_KEY` / `GMAIL_CRON_KEY` still match
+  without a round-trip.
+- `scripts/deploy-supabase.sh` queues **today's** IST digest once after
+  functions deploy (`scripts/send-daily-digest-now.sql`). Idempotency key
+  `daily-digest-<IST date>-<user>` prevents a same-day double send.
+- Schedule unchanged: Mon–Sat 09:30 IST. `send-due-reminders-daily` stays
+  retired.
+
 ## Task create + daily digest actually send (fixed 2026-09-05)
 Resend itself was fine (password-reset uses `renderAndSendEmail` and calls the
 API in-process). Assignment and digest mail still never arrived for two

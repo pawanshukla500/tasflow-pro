@@ -31,10 +31,27 @@ describe("task assignment email policy", () => {
 });
 
 describe("email cron SQL", () => {
-  it("schedules send-daily-digest with Authorization so Vault JWTs are accepted", () => {
+  it("schedules send-daily-digest at 09:30 IST with Authorization and the Vault-key RPC", () => {
     const sql = readFileSync(resolve(srcDir, "../scripts/fix-email-crons.sql"), "utf8");
     expect(sql).toMatch(/cron\.schedule\(\s*'send-daily-digest'[\s\S]*?Authorization/);
     expect(sql).toContain("x-internal-service-key");
     expect(sql).toContain("timeout_milliseconds");
+    expect(sql).toContain("0 4 * * 1-6");
+    expect(sql).toContain("internal_cron_key_matches");
+  });
+
+  it("queues today's digest after functions deploy so merge recovers a missed 09:30 IST run", () => {
+    const deploy = readFileSync(resolve(srcDir, "../scripts/deploy-supabase.sh"), "utf8");
+    const nowSql = readFileSync(resolve(srcDir, "../scripts/send-daily-digest-now.sql"), "utf8");
+    const migration = readFileSync(
+      resolve(srcDir, "../supabase/migrations/20260909093000_vault_cron_key_auth.sql"),
+      "utf8",
+    );
+    expect(deploy).toContain("send-daily-digest-now.sql");
+    expect(deploy.indexOf("functions deploy")).toBeLessThan(deploy.indexOf("send-daily-digest-now.sql"));
+    expect(nowSql).toContain("functions/v1/send-daily-digest");
+    expect(nowSql).toContain("report_cron_service_role_key");
+    expect(migration).toContain("internal_cron_key_matches");
+    expect(migration).toContain("GRANT EXECUTE");
   });
 });
