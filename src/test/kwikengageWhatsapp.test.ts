@@ -99,6 +99,8 @@ describe("WhatsApp wiring", () => {
     expect(notify).toContain("whatsapp_alerts");
     expect(settings).toContain("whatsappAlerts");
     expect(settings).toContain("whatsapp_alerts: whatsappAlerts");
+    expect(settings).toContain("Failed to load notification preferences");
+    expect(settings).toContain("disabled={saving || !prefsReady}");
   });
 
   it("does not commit the KwikEngage API key", () => {

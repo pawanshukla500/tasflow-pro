@@ -88,6 +88,7 @@ const SettingsPage = () => {
     daily_digest: true,
   });
   const [whatsappAlerts, setWhatsappAlerts] = useState(true);
+  const [prefsReady, setPrefsReady] = useState(false);
 
   const [fontSize, setFontSize] = useState(() => localStorage.getItem("app-font-size") || "default");
 
@@ -142,12 +143,17 @@ const SettingsPage = () => {
 
   useEffect(() => {
     if (!user?.id) return;
+    setPrefsReady(false);
     supabase
       .from("notification_preferences")
       .select("task_assigned, task_due_reminder, monthly_report, daily_digest, whatsapp_alerts")
       .eq("user_id", user.id)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          toast.error("Failed to load notification preferences");
+          return;
+        }
         if (data) {
           setEmailPrefs({
             task_assigned: data.task_assigned,
@@ -157,6 +163,7 @@ const SettingsPage = () => {
           });
           setWhatsappAlerts(data.whatsapp_alerts !== false);
         }
+        setPrefsReady(true);
       });
   }, [user?.id]);
 
@@ -253,7 +260,7 @@ const SettingsPage = () => {
   };
 
   const handleSaveNotifications = async () => {
-    if (!user) return;
+    if (!user || !prefsReady) return;
     setSaving(true);
     try {
       const { error } = await supabase.from("notification_preferences").upsert({
@@ -517,7 +524,7 @@ const SettingsPage = () => {
               </div>
             </div>
           </div>
-          <Button onClick={handleSaveNotifications} disabled={saving}>
+          <Button onClick={handleSaveNotifications} disabled={saving || !prefsReady}>
             {saving ? "Saving..." : "Save Preferences"}
           </Button>
         </div>
