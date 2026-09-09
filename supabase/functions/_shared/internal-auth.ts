@@ -1,15 +1,19 @@
 /**
  * Auth for cron / function-to-function calls.
  *
- * Production has two credential shapes in circulation:
+ * Production has three credential shapes in circulation:
  *   1. The current Edge-injected `SUPABASE_SERVICE_ROLE_KEY` (`sb_secret_…`,
  *      not a JWT). Exact string match is required.
- *   2. A legacy service_role JWT stored in Vault as `report_cron_service_role_key`
- *      / `gmail_cron_key`. pg_cron sends that value as `x-internal-service-key`
- *      and/or `Authorization: Bearer …`.
+ *   2. Optional Edge secrets `INTERNAL_CRON_KEY` / `GMAIL_CRON_KEY` — the
+ *      same shared secret pg_cron stores in Vault (not a JWT).
+ *   3. A legacy service_role JWT, accepted only after PostgREST verifies it.
  *
- * A JWT is accepted only after PostgREST verifies its signature. Decoding
- * `role: service_role` from the payload is not enough — anyone can forge that.
+ * Hosted Vault `report_cron_service_role_key` is a 48-char shared secret
+ * copied from `gmail_cron_key` (gmail-sync), not a JWT and not `sb_secret_…`.
+ * Exact-match against the Edge service role therefore 401s every 09:30 IST
+ * digest. After the JWT/env checks, we ask Postgres
+ * `internal_cron_key_matches(candidate)` (SECURITY DEFINER, service_role
+ * only) whether the header equals that Vault secret.
  */
 
 export function bearerToken(req: Request): string | null {
@@ -40,6 +44,13 @@ export function looksLikeJwt(token: string): boolean {
 function readEnv(name: string): string | undefined {
   const deno = (globalThis as { Deno?: { env?: { get?: (k: string) => string | undefined } } }).Deno;
   return deno?.env?.get?.(name)?.trim() || undefined;
+}
+
+function extraCronSecrets(): string[] {
+  return [
+    readEnv("INTERNAL_CRON_KEY"),
+    readEnv("GMAIL_CRON_KEY"),
+  ].filter((s): s is string => Boolean(s) && s.length >= 16);
 }
 
 /** Exact match only — never treats an unsigned JWT as a service key. */
@@ -80,6 +91,38 @@ export async function verifyServiceRoleJwt(
   }
 }
 
+/**
+ * Compare the cron header to Vault `report_cron_service_role_key` /
+ * `gmail_cron_key` via a service_role-only RPC. Uses the Edge-injected
+ * service role to call PostgREST — the request credential is only the
+ * candidate, never a grant of DB access by itself.
+ */
+export async function matchesVaultCronKey(
+  candidate: string,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+): Promise<boolean> {
+  if (!candidate || candidate.length < 16 || !serviceRoleKey) return false;
+  const base = supabaseUrl.replace(/\/$/, "");
+  try {
+    const res = await fetch(`${base}/rest/v1/rpc/internal_cron_key_matches`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serviceRoleKey,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ candidate }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function isInternalServiceRequest(
   req: Request,
   serviceRoleKey: string,
@@ -90,8 +133,13 @@ export async function isInternalServiceRequest(
     bearerToken(req),
   ].filter((c): c is string => Boolean(c));
 
+  const extras = extraCronSecrets();
+
   for (const c of candidates) {
     if (isServiceRoleCredential(c, serviceRoleKey)) return true;
+    for (const extra of extras) {
+      if (isServiceRoleCredential(c, extra)) return true;
+    }
   }
 
   const supabaseUrl = opts?.supabaseUrl || readEnv("SUPABASE_URL");
@@ -100,6 +148,10 @@ export async function isInternalServiceRequest(
 
   for (const c of candidates) {
     if (looksLikeJwt(c) && (await verifyServiceRoleJwt(c, supabaseUrl, apikey))) return true;
+  }
+
+  for (const c of candidates) {
+    if (await matchesVaultCronKey(c, supabaseUrl, serviceRoleKey)) return true;
   }
   return false;
 }
