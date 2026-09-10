@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mcpClientSnippets } from "@/lib/mcpTokens";
+import { assigneeIdsForCaller, escapeIlikeExact } from "../../supabase/functions/mcp-server/tools/assign";
 
 const URL = "https://nekdjoquirhecmejuoba.supabase.co/functions/v1/mcp-server";
 
@@ -32,10 +33,17 @@ describe("MCP client snippets", () => {
     expect(s.claudeDesktopWindows).toContain("/c");
   });
 
-  it("tells the agent TaskFlow owns tasks and git owns PRs", () => {
-    expect(s.agentRule).toContain("whoami");
-    expect(s.agentRule).toContain("create_task");
+  it("tells the agent to sync a project and a task assigned to the user", () => {
+    expect(s.agentRule).toContain("sync_coding_work");
+    expect(s.agentRule).toContain("assigned to the connected user");
     expect(s.agentRule).toContain("cannot merge PRs");
+  });
+
+  it("assigns the connected user when assignee_ids is omitted", () => {
+    expect(assigneeIdsForCaller("me", undefined)).toEqual(["me"]);
+    expect(assigneeIdsForCaller("me", [])).toEqual(["me"]);
+    expect(assigneeIdsForCaller("me", ["other"])).toEqual(["other"]);
+    expect(escapeIlikeExact("foo_bar%")).toBe("foo\\_bar\\%");
   });
 
   it("substitutes a minted token", () => {

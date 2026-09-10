@@ -123,7 +123,11 @@ export function McpTokensPanel() {
         <p className="text-sm font-medium text-foreground">What this does</p>
         <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
           <li>
-            TaskFlow tools: list/create/assign tasks, complete work, list projects, advance workflows.
+            When you start work, the agent calls <code className="font-mono">sync_coding_work</code>: it
+            creates the TaskFlow project if needed, creates a proper task, and assigns it to you.
+          </li>
+          <li>
+            It keeps that task updated (in progress / in review / done) as you go.
           </li>
           <li>
             Docs, git, pull requests, and GitHub Actions stay in the coding tool. TaskFlow cannot merge
@@ -171,7 +175,7 @@ export function McpTokensPanel() {
               {" "}(user config, not the project file).
             </li>
             <li>Paste the JSON, replace <code className="font-mono">YOUR_TOKEN</code>, restart Cursor.</li>
-            <li>In a chat, ask: “whoami in TaskFlow, then list my tasks.”</li>
+            <li>In a chat, ask it to start work on this repo — it should create your TaskFlow project and a task assigned to you.</li>
           </ol>
           <ConfigBlock title="~/.cursor/mcp.json" value={snippets.cursor} />
         </TabsContent>
@@ -181,7 +185,7 @@ export function McpTokensPanel() {
             <li>Generate a token below and copy it.</li>
             <li>Run the CLI command in a terminal (user scope, works in every project).</li>
             <li>Or paste the JSON into Claude Code user MCP config / a private <code className="font-mono">.mcp.json</code>.</li>
-            <li>Run <code className="font-mono">claude mcp list</code> then ask Claude to list your TaskFlow tasks.</li>
+            <li>Run <code className="font-mono">claude mcp list</code>, then ask it to start work on this repo so it creates your project and a task assigned to you.</li>
           </ol>
           <ConfigBlock title="Terminal (recommended)" value={snippets.claudeCodeCli} />
           <ConfigBlock title="JSON" value={snippets.claudeCodeJson} />
@@ -198,7 +202,7 @@ export function McpTokensPanel() {
               Paste the JSON. Antigravity uses <code className="font-mono">serverUrl</code>, not{" "}
               <code className="font-mono">url</code>.
             </li>
-            <li>Save and refresh MCP servers, then ask it to list your TaskFlow tasks.</li>
+            <li>Save and refresh MCP servers, then ask it to start work on this repo so it creates your project and a task assigned to you.</li>
           </ol>
           <ConfigBlock title="~/.gemini/config/mcp_config.json" value={snippets.antigravity} />
         </TabsContent>

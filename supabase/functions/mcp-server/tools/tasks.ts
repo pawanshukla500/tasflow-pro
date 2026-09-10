@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { type McpTool, objectSchema, type ToolContext } from "./types.ts";
+import { type McpTool, objectSchema } from "./types.ts";
+import { assigneeIdsForCaller } from "./assign.ts";
 
 const STATUSES = ["todo", "in_progress", "in_review", "done", "blocked"];
 const PRIORITIES = ["low", "medium", "high", "urgent"];
@@ -188,7 +189,7 @@ export const taskTools: McpTool[] = [
   {
     name: "create_task",
     description:
-      "Create a task. Title is required. The current user becomes the creator. Optionally assign users and set due date / priority / department.",
+      "Create a task. Title is required. The current user becomes the creator and is assigned unless assignee_ids is set. Optionally set due date / priority / department / project.",
     inputSchema: objectSchema(
       {
         title: { type: "string" },
@@ -204,7 +205,7 @@ export const taskTools: McpTool[] = [
         assignee_ids: {
           type: "array",
           items: { type: "string" },
-          description: "User UUIDs to assign.",
+          description: "User UUIDs to assign. Defaults to the connected user.",
         },
         blocked_by: {
           type: "array",
@@ -260,16 +261,12 @@ export const taskTools: McpTool[] = [
       if (error) throw new Error(error.message);
       if (!data) throw new Error("Task creation failed");
 
-      const assigneeIds = Array.isArray(args.assignee_ids)
-        ? [...new Set(args.assignee_ids.map(String))]
-        : [];
-      if (assigneeIds.length > 0) {
-        const { error: aErr } = await client
-          .from("task_assignees")
-          .insert(assigneeIds.map((uid) => ({ task_id: data.id, user_id: uid })));
-        if (aErr) throw new Error(aErr.message);
-      }
-      return data;
+      const assigneeIds = assigneeIdsForCaller(userId, args.assignee_ids);
+      const { error: aErr } = await client
+        .from("task_assignees")
+        .insert(assigneeIds.map((uid) => ({ task_id: data.id, user_id: uid })));
+      if (aErr) throw new Error(aErr.message);
+      return { ...data, assignee_ids: assigneeIds };
     },
   },
   {

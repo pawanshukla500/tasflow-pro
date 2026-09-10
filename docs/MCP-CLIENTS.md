@@ -32,7 +32,7 @@ repo’s `.cursor/mcp.json`.
 }
 ```
 
-Restart Cursor. Ask: “whoami in TaskFlow, then list my tasks.”
+Restart Cursor. Ask it to start work on this repo so it creates your TaskFlow project and a task assigned to you.
 
 ## Claude Code
 
@@ -64,11 +64,20 @@ Agent panel → … → MCP Servers → Manage → View raw config
 
 Save and refresh MCP servers.
 
-## What the agent can do in TaskFlow
+## What the agent must do in TaskFlow
 
-`whoami`, `list_my_tasks`, `create_task` (with `assignee_ids` + `project_id`),
-`update_task`, `complete_task`, `list_projects`, `list_workflows`,
-`advance_workflow_stage`.
+On every coding session call `sync_coding_work` with:
+
+- `project_name` — repo or product name
+- `task_title` — what you are doing
+- optional `task_description`, `status` (`in_progress` by default, `done` when finished)
+
+That finds or creates the project, creates a real task, and **assigns it to you**.
+Further calls update the same open task. `create_task` also assigns you unless
+`assignee_ids` is set.
+
+Other tools: `whoami`, `list_my_tasks`, `update_task`, `complete_task`,
+`list_projects`, `list_workflows`, `advance_workflow_stage`.
 
 ## What stays in the coding tool
 
