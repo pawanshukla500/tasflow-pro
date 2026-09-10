@@ -7,6 +7,7 @@
 - Must-run for local UI: `npm run dev` (after `.env` with `VITE_*` from `.env.example`; public keys also ship in production `https://task.youthnic.shop/runtime-env.js`).
 - Auth: Firebase email/password → `firebase-auth` edge function bridges to a Supabase session. Org registration requires a **verified** Firebase email.
 - Optional for full E2E: Firebase Storage uploads, Resend email, Google Calendar/AI, MCP tokens.
+- **MCP clients:** Sign in to TaskFlow → Settings → Integrations → generate a PAT. Connect Cursor (`~/.cursor/mcp.json` `url` + Bearer), Claude Code (`claude mcp add --transport http`), or Google Antigravity (`serverUrl` + headers). Token = that user’s account (RLS). Docs/PRs/CI stay in git/gh. See `docs/MCP-CLIENTS.md`.
 
 ### Commands
 - Install: `npm install` (lockfile: `package-lock.json`)

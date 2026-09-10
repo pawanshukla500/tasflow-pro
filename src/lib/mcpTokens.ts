@@ -21,6 +21,69 @@ export function mcpServerUrl(): string {
   return `${env.supabaseUrl}/functions/v1/mcp-server`;
 }
 
+/** Copy-paste MCP configs. Pass a live token only in the browser after minting. */
+export function mcpClientSnippets(url: string, token = "YOUR_TOKEN") {
+  const bearer = `Bearer ${token}`;
+  const cursor = {
+    mcpServers: {
+      "taskflow-pro": {
+        url,
+        headers: { Authorization: bearer },
+      },
+    },
+  };
+  const claudeCodeJson = {
+    mcpServers: {
+      "taskflow-pro": {
+        type: "http",
+        url,
+        headers: { Authorization: bearer },
+      },
+    },
+  };
+  const antigravity = {
+    mcpServers: {
+      "taskflow-pro": {
+        serverUrl: url,
+        headers: { Authorization: bearer },
+      },
+    },
+  };
+  const claudeDesktopUnix = {
+    mcpServers: {
+      "taskflow-pro": {
+        command: "npx",
+        args: ["-y", "mcp-remote", url, "--header", "Authorization:${AUTH_HEADER}"],
+        env: { AUTH_HEADER: bearer },
+      },
+    },
+  };
+  const claudeDesktopWindows = {
+    mcpServers: {
+      "taskflow-pro": {
+        command: "cmd",
+        args: ["/c", "npx", "-y", "mcp-remote", url, "--header", "Authorization:${AUTH_HEADER}"],
+        env: { AUTH_HEADER: bearer },
+      },
+    },
+  };
+  return {
+    cursor: JSON.stringify(cursor, null, 2),
+    claudeCodeCli: `claude mcp add --transport http taskflow-pro ${url} --header "Authorization: ${bearer}"`,
+    claudeCodeJson: JSON.stringify(claudeCodeJson, null, 2),
+    antigravity: JSON.stringify(antigravity, null, 2),
+    claudeDesktopUnix: JSON.stringify(claudeDesktopUnix, null, 2),
+    claudeDesktopWindows: JSON.stringify(claudeDesktopWindows, null, 2),
+    agentRule: [
+      "You are connected to TaskFlow Pro as this user (the MCP token is their account; RLS applies).",
+      "When starting work: whoami, then list_projects and list_my_tasks.",
+      "Create or update TaskFlow tasks for the work (create_task with assignee_ids + project_id). Keep status in sync (in_progress, in_review, complete_task).",
+      "Advance TaskFlow workflows with advance_workflow_stage when a stage is done.",
+      "Git commits, documentation files, pull requests, and GitHub Actions stay in this coding tool (git / gh). TaskFlow cannot merge PRs or run CI.",
+    ].join("\n"),
+  };
+}
+
 /** List the current user's active (non-revoked) MCP tokens. Never returns the hash. */
 export async function listMcpTokens(): Promise<McpToken[]> {
   const { data, error } = await db
