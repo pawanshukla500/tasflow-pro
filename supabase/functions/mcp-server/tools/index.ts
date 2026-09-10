@@ -3,8 +3,15 @@ import { taskTools } from "./tasks.ts";
 import { workflowTools } from "./workflows.ts";
 import { orgTools } from "./org.ts";
 import { projectTools } from "./projects.ts";
+import { codingWorkTools } from "./coding-work.ts";
 
-export const allTools: McpTool[] = [...taskTools, ...workflowTools, ...orgTools, ...projectTools];
+export const allTools: McpTool[] = [
+  ...codingWorkTools,
+  ...taskTools,
+  ...workflowTools,
+  ...orgTools,
+  ...projectTools,
+];
 
 export const toolsByName: Record<string, McpTool> = Object.fromEntries(
   allTools.map((t) => [t.name, t]),

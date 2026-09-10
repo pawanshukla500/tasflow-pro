@@ -30,6 +30,12 @@ describe("projects replace inbox", () => {
     expect(tools).toContain('name: "create_project"');
     expect(tools).toContain('name: "list_project_sections"');
     expect(tools).toContain('name: "lookup_entities"');
+    const coding = readFileSync(resolve(root, "supabase/functions/mcp-server/tools/coding-work.ts"), "utf8");
+    expect(index).toContain("codingWorkTools");
+    expect(coding).toContain('name: "sync_coding_work"');
+    expect(coding).toContain("assigned_to");
+    expect(coding).toContain("progress_note");
+    expect(coding).toContain("task_url");
   });
 
   it("shows project status as pipeline steps on the detail board", () => {

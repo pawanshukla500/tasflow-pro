@@ -45,8 +45,7 @@ async function dispatch(msg: JsonRpcMessage, ctx: ToolContext): Promise<object |
         capabilities: { tools: { listChanged: false } },
         serverInfo: SERVER_INFO,
         instructions:
-          "Tools act on TaskFlow Pro tasks, subtasks, workflows, departments and people. " +
-          "Everything is scoped to the connected user's role and permissions.",
+          "You are the connected TaskFlow user. At the start of coding work call sync_coding_work with the project name and a clear task title so a project exists and a task is assigned to you. Keep calling it with task_id and progress_note as you go (in_progress → in_review → done). Git commits, PRs, and CI stay in git/gh.",
       });
 
     case "notifications/initialized":

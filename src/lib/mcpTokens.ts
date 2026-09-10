@@ -21,6 +21,69 @@ export function mcpServerUrl(): string {
   return `${env.supabaseUrl}/functions/v1/mcp-server`;
 }
 
+/** Copy-paste MCP configs. Pass a live token only in the browser after minting. */
+export function mcpClientSnippets(url: string, token = "YOUR_TOKEN") {
+  const bearer = `Bearer ${token}`;
+  const cursor = {
+    mcpServers: {
+      "taskflow-pro": {
+        url,
+        headers: { Authorization: bearer },
+      },
+    },
+  };
+  const claudeCodeJson = {
+    mcpServers: {
+      "taskflow-pro": {
+        type: "http",
+        url,
+        headers: { Authorization: bearer },
+      },
+    },
+  };
+  const antigravity = {
+    mcpServers: {
+      "taskflow-pro": {
+        serverUrl: url,
+        headers: { Authorization: bearer },
+      },
+    },
+  };
+  const claudeDesktopUnix = {
+    mcpServers: {
+      "taskflow-pro": {
+        command: "npx",
+        args: ["-y", "mcp-remote", url, "--header", "Authorization:${AUTH_HEADER}"],
+        env: { AUTH_HEADER: bearer },
+      },
+    },
+  };
+  const claudeDesktopWindows = {
+    mcpServers: {
+      "taskflow-pro": {
+        command: "cmd",
+        args: ["/c", "npx", "-y", "mcp-remote", url, "--header", "Authorization:${AUTH_HEADER}"],
+        env: { AUTH_HEADER: bearer },
+      },
+    },
+  };
+  return {
+    cursor: JSON.stringify(cursor, null, 2),
+    claudeCodeCli: `claude mcp add --transport http taskflow-pro ${url} --header "Authorization: ${bearer}"`,
+    claudeCodeJson: JSON.stringify(claudeCodeJson, null, 2),
+    antigravity: JSON.stringify(antigravity, null, 2),
+    claudeDesktopUnix: JSON.stringify(claudeDesktopUnix, null, 2),
+    claudeDesktopWindows: JSON.stringify(claudeDesktopWindows, null, 2),
+    agentRule: [
+      "You are connected to TaskFlow Pro as this user (the MCP token is their account; RLS applies).",
+      "At the start of any coding session call sync_coding_work with project_name (repo or product) and a clear task_title. That finds or creates the TaskFlow project and a task assigned to the connected user.",
+      "Keep that same task updated: pass task_id from the first response, plus progress_note (what changed, PR link). Use status in_progress, then in_review when a PR is open, done when finished.",
+      "Do not create unassigned tasks. create_task assigns the connected user unless assignee_ids is set.",
+      "Git commits, documentation files, pull requests, and GitHub Actions stay in this coding tool (git / gh). TaskFlow cannot merge PRs or run CI.",
+    ].join("\n"),
+  };
+}
+
 /** List the current user's active (non-revoked) MCP tokens. Never returns the hash. */
 export async function listMcpTokens(): Promise<McpToken[]> {
   const { data, error } = await db
