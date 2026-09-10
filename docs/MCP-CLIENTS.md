@@ -70,11 +70,12 @@ On every coding session call `sync_coding_work` with:
 
 - `project_name` — repo or product name
 - `task_title` — what you are doing
-- optional `task_description`, `status` (`in_progress` by default, `done` when finished)
+- optional `task_description`, `status` (`in_progress` by default, `in_review` when a PR is open, `done` when finished)
+- later calls: `task_id` from the first response and `progress_note` (what changed, PR link)
 
 That finds or creates the project, creates a real task, and **assigns it to you**.
-Further calls update the same open task. `create_task` also assigns you unless
-`assignee_ids` is set.
+Further calls update the same task (description, comments, status, assignee).
+`create_task` also assigns you unless `assignee_ids` is set.
 
 Other tools: `whoami`, `list_my_tasks`, `update_task`, `complete_task`,
 `list_projects`, `list_workflows`, `advance_workflow_stage`.

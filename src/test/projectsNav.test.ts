@@ -34,6 +34,8 @@ describe("projects replace inbox", () => {
     expect(index).toContain("codingWorkTools");
     expect(coding).toContain('name: "sync_coding_work"');
     expect(coding).toContain("assigned_to");
+    expect(coding).toContain("progress_note");
+    expect(coding).toContain("task_url");
   });
 
   it("shows project status as pipeline steps on the detail board", () => {

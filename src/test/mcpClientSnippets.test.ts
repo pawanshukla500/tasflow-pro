@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { mcpClientSnippets } from "@/lib/mcpTokens";
-import { assigneeIdsForCaller, escapeIlikeExact } from "../../supabase/functions/mcp-server/tools/assign";
+import {
+  applyTaskWriteup,
+  assigneeIdsForCaller,
+  escapeIlikeExact,
+  normalizeCodingStatus,
+  taskDeepLink,
+} from "../../supabase/functions/mcp-server/tools/assign";
 
 const URL = "https://nekdjoquirhecmejuoba.supabase.co/functions/v1/mcp-server";
 
@@ -36,6 +42,7 @@ describe("MCP client snippets", () => {
   it("tells the agent to sync a project and a task assigned to the user", () => {
     expect(s.agentRule).toContain("sync_coding_work");
     expect(s.agentRule).toContain("assigned to the connected user");
+    expect(s.agentRule).toContain("progress_note");
     expect(s.agentRule).toContain("cannot merge PRs");
   });
 
@@ -44,6 +51,20 @@ describe("MCP client snippets", () => {
     expect(assigneeIdsForCaller("me", [])).toEqual(["me"]);
     expect(assigneeIdsForCaller("me", ["other"])).toEqual(["other"]);
     expect(escapeIlikeExact("foo_bar%")).toBe("foo\\_bar\\%");
+  });
+
+  it("defaults coding status to in_progress and appends progress notes", () => {
+    expect(normalizeCodingStatus(undefined)).toBe("in_progress");
+    expect(normalizeCodingStatus("in_review")).toBe("in_review");
+    expect(normalizeCodingStatus("nope")).toBe("in_progress");
+    const at = new Date("2026-09-10T06:40:00.000Z");
+    expect(applyTaskWriteup("Goal: ship MCP", "Goal: ship MCP", "Opened PR 76", at)).toBe(
+      "Goal: ship MCP\n\n[2026-09-10 06:40 UTC] Opened PR 76",
+    );
+    expect(applyTaskWriteup("Opened PR 76 already", null, "Opened PR 76 already")).toBe(
+      "Opened PR 76 already",
+    );
+    expect(taskDeepLink("abc-1")).toBe("https://task.youthnic.shop/my-tasks?task=abc-1");
   });
 
   it("substitutes a minted token", () => {

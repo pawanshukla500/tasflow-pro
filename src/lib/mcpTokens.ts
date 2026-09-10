@@ -77,7 +77,7 @@ export function mcpClientSnippets(url: string, token = "YOUR_TOKEN") {
     agentRule: [
       "You are connected to TaskFlow Pro as this user (the MCP token is their account; RLS applies).",
       "At the start of any coding session call sync_coding_work with project_name (repo or product) and a clear task_title. That finds or creates the TaskFlow project and a task assigned to the connected user.",
-      "Keep TaskFlow in sync: call sync_coding_work or update_task as you go (in_progress, in_review). When the work is finished use status=done or complete_task.",
+      "Keep that same task updated: pass task_id from the first response, plus progress_note (what changed, PR link). Use status in_progress, then in_review when a PR is open, done when finished.",
       "Do not create unassigned tasks. create_task assigns the connected user unless assignee_ids is set.",
       "Git commits, documentation files, pull requests, and GitHub Actions stay in this coding tool (git / gh). TaskFlow cannot merge PRs or run CI.",
     ].join("\n"),

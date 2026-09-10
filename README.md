@@ -117,13 +117,6 @@ npx supabase db push
 
 **Note:** The React app does **not** use `DATABASE_URL` directly — it uses `VITE_SUPABASE_URL` + anon key. `DATABASE_URL` is for migrations (`npx supabase db push`).
 
-### AI tools (MCP)
-Connect **Cursor**, **Claude Code**, or **Google Antigravity** as your TaskFlow account.
-Generate a Personal Access Token in **Settings → Integrations → AI connections**, then paste
-the client-specific config (see `docs/MCP-CLIENTS.md`). The token maps to one user; every tool
-call runs under that user's RLS. TaskFlow tools cover tasks, workflows, and projects. Git
-commits, PRs, and GitHub Actions stay in the coding tool (`git` / `gh`).
-
 ---
 
 ## Key features
@@ -146,11 +139,11 @@ commits, PRs, and GitHub Actions stay in the coding tool (`git` / `gh`).
 Branded HTML via **Gmail API** (not Resend). Welcome email on team member create.
 
 ### AI tools (MCP)
-Connect **Cursor**, **Claude Code**, or **Google Antigravity** as your TaskFlow account.
-Generate a Personal Access Token in **Settings → Integrations → AI connections**, then paste
-the client-specific config (see `docs/MCP-CLIENTS.md`). The token maps to one user; every tool
-call runs under that user's RLS. TaskFlow tools cover tasks, workflows, and projects. Git
-commits, PRs, and GitHub Actions stay in the coding tool (`git` / `gh`).
+Connect **Cursor**, **Claude Code**, or **Google Antigravity** as your TaskFlow account
+(**Settings → Integrations**, see `docs/MCP-CLIENTS.md`). The token is that user; RLS applies.
+When you start coding, the agent calls `sync_coding_work`: find or create the project, create a
+task **assigned to you**, then keep it updated (`progress_note`, `in_progress` → `in_review` /
+`done`). Git commits, PRs, and GitHub Actions stay in the coding tool (`git` / `gh`).
 
 ### Automatic deploy (GitHub Actions)
 

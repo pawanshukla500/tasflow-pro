@@ -45,7 +45,7 @@ async function dispatch(msg: JsonRpcMessage, ctx: ToolContext): Promise<object |
         capabilities: { tools: { listChanged: false } },
         serverInfo: SERVER_INFO,
         instructions:
-          "You are the connected TaskFlow user. At the start of coding work call sync_coding_work with the project name and a clear task title so a project exists and a task is assigned to you. Keep calling it (or update_task / complete_task) as status changes. Git commits, PRs, and CI stay in git/gh.",
+          "You are the connected TaskFlow user. At the start of coding work call sync_coding_work with the project name and a clear task title so a project exists and a task is assigned to you. Keep calling it with task_id and progress_note as you go (in_progress → in_review → done). Git commits, PRs, and CI stay in git/gh.",
       });
 
     case "notifications/initialized":

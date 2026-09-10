@@ -127,7 +127,9 @@ export function McpTokensPanel() {
             creates the TaskFlow project if needed, creates a proper task, and assigns it to you.
           </li>
           <li>
-            It keeps that task updated (in progress / in review / done) as you go.
+            Later calls reuse that task (<code className="font-mono">task_id</code> +{" "}
+            <code className="font-mono">progress_note</code>) so status, description, and comments stay
+            current (in progress / in review / done).
           </li>
           <li>
             Docs, git, pull requests, and GitHub Actions stay in the coding tool. TaskFlow cannot merge
@@ -157,7 +159,7 @@ export function McpTokensPanel() {
             antigravity: "Antigravity",
             desktop: "Claude Desktop",
           };
-          if (!newToken) setName(names[v] || "Cursor");
+          if (Object.values(names).includes(name)) setName(names[v] || "Cursor");
         }}
       >
         <TabsList className="h-auto flex-wrap">
