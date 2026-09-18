@@ -127,4 +127,25 @@ describe("Kapso daily digest WhatsApp", () => {
     expect(helper).toContain("X-API-Key");
     expect(helper).not.toMatch(/sk_live|kapso_[A-Za-z0-9]{20,}/);
   });
+
+  it("sends a merge-time WhatsApp to MD / system_admin phones even with no pending work", () => {
+    const digest = readFileSync(
+      resolve(repoRoot, "supabase/functions/send-daily-digest/index.ts"),
+      "utf8",
+    );
+    const nowSql = readFileSync(resolve(repoRoot, "scripts/send-daily-digest-now.sql"), "utf8");
+    const cronSql = readFileSync(resolve(repoRoot, "scripts/fix-email-crons.sql"), "utf8");
+    expect(digest).toContain("smoke_admins");
+    expect(digest).toContain("managing_director");
+    expect(digest).toContain("system_admin");
+    expect(digest).toContain("admin_smoke");
+    expect(digest).toContain("Post-merge admin WhatsApp digest test.");
+    expect(nowSql).toContain('{"smoke_admins": true}');
+    expect(cronSql).toContain("body := '{}'::jsonb");
+    expect(cronSql).not.toContain("smoke_admins");
+    for (const mobile of ["+91 9426279142", "+91 7227076777", "+91 9825149497"]) {
+      expect(TEAM_MOBILES).toContain(mobile);
+      expect(toWhatsAppDigits(mobile)).toMatch(/^91\d{10}$/);
+    }
+  });
 });

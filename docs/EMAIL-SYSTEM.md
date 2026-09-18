@@ -24,7 +24,9 @@ Permanent fixes:
   without a round-trip.
 - `scripts/deploy-supabase.sh` queues **today's** IST digest once after
   functions deploy (`scripts/send-daily-digest-now.sql`). Idempotency key
-  `daily-digest-<IST date>-<user>` prevents a same-day double send.
+  `daily-digest-<IST date>-<user>` prevents a same-day double send. The
+  merge-time body sets `smoke_admins` so MD / system_admin WhatsApp numbers
+  get a Kapso test even with no pending work; the 09:30 IST cron stays `{}`.
 - Schedule unchanged: Mon–Sat 09:30 IST. `send-due-reminders-daily` stays
   retired.
 

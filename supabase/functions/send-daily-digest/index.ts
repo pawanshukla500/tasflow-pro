@@ -22,6 +22,67 @@ interface TaskRow {
   priority?: string;
 }
 
+async function deliverKapsoDigest(
+  supabase: ReturnType<typeof createClient>,
+  kapso: NonNullable<Awaited<ReturnType<typeof loadKapsoConfig>>>,
+  opts: {
+    userId: string;
+    phone: string;
+    email: string;
+    name: string;
+    digestKey: string;
+    dateLabel: string;
+    overdue: number;
+    dueSoon: number;
+    pending: number;
+    workflows: number;
+    highlights: string;
+  },
+): Promise<string> {
+  const waKey = `${opts.digestKey}-wa-${opts.userId}`;
+  const { error: claimErr } = await supabase.from("whatsapp_outbound").insert({
+    task_id: null,
+    user_id: opts.userId,
+    phone: opts.phone,
+    message_id: null,
+    provider: "kapso",
+    purpose: "daily_digest",
+    idempotency_key: waKey,
+  });
+  if (claimErr && /duplicate|unique|23505/i.test(claimErr.message)) return "deduped";
+  if (claimErr) {
+    console.warn("kapso digest claim failed", opts.email, claimErr.message);
+    return "log_failed";
+  }
+  const wa = await sendKapsoTemplate({
+    apiKey: kapso.apiKey,
+    phoneNumberId: kapso.phoneNumberId,
+    payload: buildKapsoDailyDigestPayload({
+      to: opts.phone,
+      templateName: kapso.templateDailyDigest,
+      language: kapso.templateLanguage,
+      name: opts.name || "there",
+      dateLabel: opts.dateLabel,
+      overdue: opts.overdue,
+      dueSoon: opts.dueSoon,
+      pending: opts.pending,
+      workflows: opts.workflows,
+      highlights: opts.highlights,
+    }),
+  });
+  if (wa.ok) {
+    const { error: updErr } = await supabase
+      .from("whatsapp_outbound")
+      .update({ message_id: wa.messageId || null })
+      .eq("idempotency_key", waKey);
+    if (updErr) console.warn("kapso digest outbound update failed", updErr.message);
+    return "sent";
+  }
+  console.warn("kapso daily digest failed", opts.email, wa.error);
+  await supabase.from("whatsapp_outbound").delete().eq("idempotency_key", waKey);
+  return wa.error || "failed";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -35,6 +96,13 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabase = createClient(supabaseUrl, serviceRoleKey);
+  let smokeAdmins = false;
+  try {
+    const body = await req.json() as { smoke_admins?: unknown };
+    smokeAdmins = body?.smoke_admins === true;
+  } catch {
+    smokeAdmins = false;
+  }
   const appUrl = (Deno.env.get("APP_URL") || "https://task.youthnic.shop").replace(/\/$/, "");
   const today = istToday();
   const dueSoonEnd = istAddDays(today, 3);
@@ -206,57 +274,24 @@ Deno.serve(async (req) => {
     } else if (!kapso) {
       whatsapp = "skipped_no_kapso_key";
     } else {
-      const waKey = `${digestKey}-wa-${profile.id}`;
-      const { error: claimErr } = await supabase.from("whatsapp_outbound").insert({
-        task_id: null,
-        user_id: profile.id,
+      whatsapp = await deliverKapsoDigest(supabase, kapso, {
+        userId: profile.id,
         phone,
-        message_id: null,
-        provider: "kapso",
-        purpose: "daily_digest",
-        idempotency_key: waKey,
+        email: profile.email,
+        name: profile.name || "there",
+        digestKey,
+        dateLabel,
+        overdue: delayed.length,
+        dueSoon: dueSoon.length,
+        pending: pending.length,
+        workflows: workflowItems.length,
+        highlights: buildDigestHighlights({
+          delayed,
+          dueSoon,
+          pending,
+          workflows: workflowItems,
+        }),
       });
-      if (claimErr && /duplicate|unique|23505/i.test(claimErr.message)) {
-        whatsapp = "deduped";
-      } else if (claimErr) {
-        whatsapp = "log_failed";
-        console.warn("kapso digest claim failed", profile.email, claimErr.message);
-      } else {
-        const payload = buildKapsoDailyDigestPayload({
-          to: phone,
-          templateName: kapso.templateDailyDigest,
-          language: kapso.templateLanguage,
-          name: profile.name || "there",
-          dateLabel,
-          overdue: delayed.length,
-          dueSoon: dueSoon.length,
-          pending: pending.length,
-          workflows: workflowItems.length,
-          highlights: buildDigestHighlights({
-            delayed,
-            dueSoon,
-            pending,
-            workflows: workflowItems,
-          }),
-        });
-        const wa = await sendKapsoTemplate({
-          apiKey: kapso.apiKey,
-          phoneNumberId: kapso.phoneNumberId,
-          payload,
-        });
-        if (wa.ok) {
-          whatsapp = "sent";
-          const { error: updErr } = await supabase
-            .from("whatsapp_outbound")
-            .update({ message_id: wa.messageId || null })
-            .eq("idempotency_key", waKey);
-          if (updErr) console.warn("kapso digest outbound update failed", updErr.message);
-        } else {
-          whatsapp = wa.error || "failed";
-          console.warn("kapso daily digest failed", profile.email, wa.error);
-          await supabase.from("whatsapp_outbound").delete().eq("idempotency_key", waKey);
-        }
-      }
     }
 
     results.push({
@@ -265,6 +300,63 @@ Deno.serve(async (req) => {
       whatsapp,
       reason: dispatch.reason,
     });
+  }
+
+  if (smokeAdmins && kapso) {
+    const { data: adminRoles } = await supabase
+      .from("user_roles")
+      .select("user_id, role")
+      .in("role", ["managing_director", "system_admin"]);
+    const adminIds = [...new Set((adminRoles || []).map((r) => r.user_id))];
+    const already = new Set(
+      results
+        .filter((r) => r.whatsapp === "sent" || r.whatsapp === "deduped")
+        .map((r) => r.email),
+    );
+    if (adminIds.length) {
+      const { data: adminProfiles } = await supabase
+        .from("profiles")
+        .select("id, name, email, mobile_no, active")
+        .in("id", adminIds)
+        .eq("active", true);
+      for (const admin of adminProfiles || []) {
+        if (!admin.email || already.has(admin.email)) continue;
+        const { data: prefs } = await supabase
+          .from("notification_preferences")
+          .select("whatsapp_alerts")
+          .eq("user_id", admin.id)
+          .maybeSingle();
+        if (prefs && prefs.whatsapp_alerts === false) {
+          results.push({ email: admin.email, status: "skipped_empty", whatsapp: "skipped_pref", reason: "admin_smoke" });
+          continue;
+        }
+        const phone = toWhatsAppDigits(admin.mobile_no);
+        if (!phone) {
+          results.push({ email: admin.email, status: "skipped_empty", whatsapp: "skipped_no_phone", reason: "admin_smoke" });
+          continue;
+        }
+        const whatsapp = await deliverKapsoDigest(supabase, kapso, {
+          userId: admin.id,
+          phone,
+          email: admin.email,
+          name: admin.name || "there",
+          digestKey,
+          dateLabel,
+          overdue: 0,
+          dueSoon: 0,
+          pending: 0,
+          workflows: 0,
+          highlights: "Post-merge admin WhatsApp digest test.",
+        });
+        already.add(admin.email);
+        results.push({
+          email: admin.email,
+          status: "skipped_empty",
+          whatsapp,
+          reason: "admin_smoke",
+        });
+      }
+    }
   }
 
   // Admin / MD department overlook is Friday-only via send-weekly-pending-report.
