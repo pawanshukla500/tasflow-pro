@@ -98,6 +98,11 @@ describe("WhatsApp wiring", () => {
     expect(notify).toContain("sendKwikEngageTemplate");
     expect(notify).toContain("whatsapp_outbound");
     expect(notify).toContain("whatsapp_alerts");
+    const webhook = readFileSync(
+      resolve(repoRoot, "supabase/functions/kwikengage-webhook/index.ts"),
+      "utf8",
+    );
+    expect(webhook).toContain('.eq("purpose", "assignment")');
     expect(settings).toContain("whatsappAlerts");
     expect(settings).toContain("WhatsApp (assignment + daily digest)");
     expect(settings).toContain("Failed to load notification preferences");

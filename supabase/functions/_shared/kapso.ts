@@ -153,33 +153,37 @@ export async function sendKapsoTemplate(opts: {
   phoneNumberId: string;
   payload: Record<string, unknown>;
 }): Promise<{ ok: boolean; messageId?: string; error?: string; httpStatus: number }> {
-  const res = await fetch(
-    `${KAPSO_MESSAGES_URL}/${encodeURIComponent(opts.phoneNumberId)}/messages`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": opts.apiKey,
+  try {
+    const res = await fetch(
+      `${KAPSO_MESSAGES_URL}/${encodeURIComponent(opts.phoneNumberId)}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": opts.apiKey,
+        },
+        body: JSON.stringify(opts.payload),
       },
-      body: JSON.stringify(opts.payload),
-    },
-  );
-  const json = await res.json().catch(() => ({})) as Record<string, unknown>;
-  if (!res.ok) {
-    const errObj = json.error && typeof json.error === "object"
-      ? json.error as Record<string, unknown>
-      : {};
-    const error = firstString(errObj.message, json.message, json.error, `HTTP ${res.status}`);
-    return { ok: false, error, httpStatus: res.status };
+    );
+    const json = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (!res.ok) {
+      const errObj = json.error && typeof json.error === "object"
+        ? json.error as Record<string, unknown>
+        : {};
+      const error = firstString(errObj.message, json.message, json.error, `HTTP ${res.status}`);
+      return { ok: false, error, httpStatus: res.status };
+    }
+    const messages = Array.isArray(json.messages) ? json.messages[0] as Record<string, unknown> : null;
+    const messageId = firstString(
+      messages?.id,
+      json.message_id,
+      json.wamid,
+      json.id,
+    );
+    return { ok: true, messageId: messageId || undefined, httpStatus: res.status };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message || "network_error", httpStatus: 0 };
   }
-  const messages = Array.isArray(json.messages) ? json.messages[0] as Record<string, unknown> : null;
-  const messageId = firstString(
-    messages?.id,
-    json.message_id,
-    json.wamid,
-    json.id,
-  );
-  return { ok: true, messageId: messageId || undefined, httpStatus: res.status };
 }
 
 export { toWhatsAppDigits };

@@ -207,13 +207,20 @@ Deno.serve(async (req) => {
       whatsapp = "skipped_no_kapso_key";
     } else {
       const waKey = `${digestKey}-wa-${profile.id}`;
-      const { data: already } = await supabase
-        .from("whatsapp_outbound")
-        .select("id")
-        .eq("idempotency_key", waKey)
-        .maybeSingle();
-      if (already) {
+      const { error: claimErr } = await supabase.from("whatsapp_outbound").insert({
+        task_id: null,
+        user_id: profile.id,
+        phone,
+        message_id: null,
+        provider: "kapso",
+        purpose: "daily_digest",
+        idempotency_key: waKey,
+      });
+      if (claimErr && /duplicate|unique|23505/i.test(claimErr.message)) {
         whatsapp = "deduped";
+      } else if (claimErr) {
+        whatsapp = "log_failed";
+        console.warn("kapso digest claim failed", profile.email, claimErr.message);
       } else {
         const payload = buildKapsoDailyDigestPayload({
           to: phone,
@@ -239,19 +246,15 @@ Deno.serve(async (req) => {
         });
         if (wa.ok) {
           whatsapp = "sent";
-          const { error: logErr } = await supabase.from("whatsapp_outbound").insert({
-            task_id: null,
-            user_id: profile.id,
-            phone,
-            message_id: wa.messageId || null,
-            provider: "kapso",
-            purpose: "daily_digest",
-            idempotency_key: waKey,
-          });
-          if (logErr) console.warn("kapso digest outbound log failed", logErr.message);
+          const { error: updErr } = await supabase
+            .from("whatsapp_outbound")
+            .update({ message_id: wa.messageId || null })
+            .eq("idempotency_key", waKey);
+          if (updErr) console.warn("kapso digest outbound update failed", updErr.message);
         } else {
           whatsapp = wa.error || "failed";
           console.warn("kapso daily digest failed", profile.email, wa.error);
+          await supabase.from("whatsapp_outbound").delete().eq("idempotency_key", waKey);
         }
       }
     }

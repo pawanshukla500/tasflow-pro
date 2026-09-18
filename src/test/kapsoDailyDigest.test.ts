@@ -111,6 +111,16 @@ describe("Kapso daily digest WhatsApp", () => {
     expect(digest).toContain("buildKapsoDailyDigestPayload");
     expect(digest).toContain("whatsapp_alerts");
     expect(digest).toContain("purpose: \"daily_digest\"");
+    expect(digest).toContain("idempotency_key: waKey");
+    expect(digest).toMatch(/duplicate\|unique\|23505/);
+    expect(helper).toContain("network_error");
+    expect(helper).toContain("try {");
+    const webhook = readFileSync(
+      resolve(repoRoot, "supabase/functions/kwikengage-webhook/index.ts"),
+      "utf8",
+    );
+    expect(webhook).toContain('.eq("purpose", "assignment")');
+    expect(webhook).toContain('.not("task_id", "is", null)');
     expect(migration).toContain("kapso_config");
     expect(migration).toContain("kapso_api_key");
     expect(migration).toContain(KAPSO_PHONE_NUMBER_ID_DEFAULT);
