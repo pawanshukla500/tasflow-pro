@@ -10,6 +10,16 @@ export function escapeIlikeExact(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
+/** Reject missing, blank, or the literal strings JS clients send for unset values. */
+export function requiredLabel(raw: unknown, field: string): string {
+  if (raw == null) throw new Error(`${field} is required`);
+  const value = String(raw).trim();
+  if (!value || /^undefined$/i.test(value) || /^null$/i.test(value)) {
+    throw new Error(`${field} is required`);
+  }
+  return value;
+}
+
 export const CODING_STATUSES = ["todo", "in_progress", "in_review", "done", "blocked"] as const;
 export type CodingStatus = (typeof CODING_STATUSES)[number];
 
