@@ -4,6 +4,13 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { istToday, istAddDays } from "../_shared/ist.ts";
 import { dispatchTransactionalEmail } from "../_shared/dispatch-transactional-email.ts";
 import { isInternalServiceRequest } from "../_shared/internal-auth.ts";
+import {
+  buildDigestHighlights,
+  buildKapsoDailyDigestPayload,
+  loadKapsoConfig,
+  sendKapsoTemplate,
+  toWhatsAppDigits,
+} from "../_shared/kapso.ts";
 
 const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*" };
 
@@ -37,17 +44,20 @@ Deno.serve(async (req) => {
     day: "numeric", month: "short", year: "numeric",
   });
 
+  const kapso = await loadKapsoConfig(supabaseUrl, serviceRoleKey);
+
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("id, name, email, active, organization_id")
+    .select("id, name, email, mobile_no, active, organization_id")
     .eq("active", true);
 
   const orgDigestCache = new Map<string, boolean>();
-  const results: { email: string; status: string; reason?: string }[] = [];
+  const results: { email: string; status: string; whatsapp?: string; reason?: string }[] = [];
 
   for (const profile of profiles || []) {
     if (!profile.email) continue;
 
+    let orgEmailEnabled = true;
     if (profile.organization_id) {
       let orgEnabled = orgDigestCache.get(profile.organization_id);
       if (orgEnabled === undefined) {
@@ -60,22 +70,16 @@ Deno.serve(async (req) => {
         orgEnabled = settings.email?.daily_digest_enabled !== false;
         orgDigestCache.set(profile.organization_id, orgEnabled);
       }
-      if (!orgEnabled) {
-        results.push({ email: profile.email, status: "skipped_org_disabled" });
-        continue;
-      }
+      orgEmailEnabled = orgEnabled;
     }
 
     const { data: prefs } = await supabase
       .from("notification_preferences")
-      .select("daily_digest")
+      .select("daily_digest, whatsapp_alerts")
       .eq("user_id", profile.id)
       .maybeSingle();
-
-    if (prefs && prefs.daily_digest === false) {
-      results.push({ email: profile.email, status: "skipped_pref" });
-      continue;
-    }
+    const emailWanted = orgEmailEnabled && !(prefs && prefs.daily_digest === false);
+    const waWanted = !(prefs && prefs.whatsapp_alerts === false);
 
     const { data: assigned } = await supabase
       .from("task_assignees")
@@ -169,34 +173,104 @@ Deno.serve(async (req) => {
       url: `${appUrl}/my-tasks?task=${t.id}`,
     });
 
-    const dispatch = await dispatchTransactionalEmail({
-      supabaseUrl,
-      serviceRoleKey,
-      templateName: "daily-digest",
-      recipientEmail: profile.email,
-      idempotencyKey: `${digestKey}-${profile.id}`,
-      templateData: {
-        title: `Your daily summary — ${allTasks.length} task${allTasks.length === 1 ? "" : "s"}, ${workflowItems.length} workflow${workflowItems.length === 1 ? "" : "s"}`,
-        recipientName: profile.name,
-        dateLabel,
-        delayed: delayed.map(fmt),
-        dueSoon: dueSoon.map(fmt),
-        pending: pending.map(fmt),
-        criticalCount,
-        highCount,
-        mediumCount,
-        lowCount,
-        workflowItems: activeWorkflows.map(({ overdue: _, ...w }) => w),
-        overdueWorkflows: overdueWorkflows.map(({ overdue: _, ...w }) => w),
-      },
+    const dispatch = emailWanted
+      ? await dispatchTransactionalEmail({
+          supabaseUrl,
+          serviceRoleKey,
+          templateName: "daily-digest",
+          recipientEmail: profile.email,
+          idempotencyKey: `${digestKey}-${profile.id}`,
+          templateData: {
+            title: `Your daily summary — ${allTasks.length} task${allTasks.length === 1 ? "" : "s"}, ${workflowItems.length} workflow${workflowItems.length === 1 ? "" : "s"}`,
+            recipientName: profile.name,
+            dateLabel,
+            delayed: delayed.map(fmt),
+            dueSoon: dueSoon.map(fmt),
+            pending: pending.map(fmt),
+            criticalCount,
+            highCount,
+            mediumCount,
+            lowCount,
+            workflowItems: activeWorkflows.map(({ overdue: _, ...w }) => w),
+            overdueWorkflows: overdueWorkflows.map(({ overdue: _, ...w }) => w),
+          },
+        })
+      : { status: orgEmailEnabled ? "skipped_pref" : "skipped_org_disabled", reason: undefined as string | undefined };
+
+    let whatsapp = "skipped";
+    const phone = toWhatsAppDigits(profile.mobile_no);
+    if (!waWanted) {
+      whatsapp = "skipped_pref";
+    } else if (!phone) {
+      whatsapp = "skipped_no_phone";
+    } else if (!kapso) {
+      whatsapp = "skipped_no_kapso_key";
+    } else {
+      const waKey = `${digestKey}-wa-${profile.id}`;
+      const { data: already } = await supabase
+        .from("whatsapp_outbound")
+        .select("id")
+        .eq("idempotency_key", waKey)
+        .maybeSingle();
+      if (already) {
+        whatsapp = "deduped";
+      } else {
+        const payload = buildKapsoDailyDigestPayload({
+          to: phone,
+          templateName: kapso.templateDailyDigest,
+          language: kapso.templateLanguage,
+          name: profile.name || "there",
+          dateLabel,
+          overdue: delayed.length,
+          dueSoon: dueSoon.length,
+          pending: pending.length,
+          workflows: workflowItems.length,
+          highlights: buildDigestHighlights({
+            delayed,
+            dueSoon,
+            pending,
+            workflows: workflowItems,
+          }),
+        });
+        const wa = await sendKapsoTemplate({
+          apiKey: kapso.apiKey,
+          phoneNumberId: kapso.phoneNumberId,
+          payload,
+        });
+        if (wa.ok) {
+          whatsapp = "sent";
+          const { error: logErr } = await supabase.from("whatsapp_outbound").insert({
+            task_id: null,
+            user_id: profile.id,
+            phone,
+            message_id: wa.messageId || null,
+            provider: "kapso",
+            purpose: "daily_digest",
+            idempotency_key: waKey,
+          });
+          if (logErr) console.warn("kapso digest outbound log failed", logErr.message);
+        } else {
+          whatsapp = wa.error || "failed";
+          console.warn("kapso daily digest failed", profile.email, wa.error);
+        }
+      }
+    }
+
+    results.push({
+      email: profile.email,
+      status: dispatch.status,
+      whatsapp,
+      reason: dispatch.reason,
     });
-    results.push({ email: profile.email, status: dispatch.status, reason: dispatch.reason });
   }
 
   // Admin / MD department overlook is Friday-only via send-weekly-pending-report.
   const sent = results.filter((r) => r.status === "sent").length;
+  const waSent = results.filter((r) => r.whatsapp === "sent").length;
   const skipped = results.length - sent;
-  console.log(`send-daily-digest ${today} IST: ${sent} sent, ${skipped} skipped, ${results.length} users`);
+  console.log(
+    `send-daily-digest ${today} IST: ${sent} email sent, ${waSent} whatsapp sent, ${skipped} email skipped, ${results.length} users`,
+  );
   return new Response(JSON.stringify({ ok: true, date: today, results }), {
     status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
   });

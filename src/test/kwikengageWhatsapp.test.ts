@@ -18,6 +18,7 @@ const TASK_ID = "11111111-1111-4111-8111-111111111111";
 describe("KwikEngage WhatsApp helpers", () => {
   it("normalizes Indian mobiles to WhatsApp digits", () => {
     expect(toWhatsAppDigits("+91 94262 79142")).toBe("919426279142");
+    expect(toWhatsAppDigits("+91  6376573077")).toBe("916376573077");
     expect(toWhatsAppDigits("9426279142")).toBe("919426279142");
     expect(toWhatsAppDigits("0091-9426279142")).toBe("919426279142");
     expect(toWhatsAppDigits("91")).toBeNull();
@@ -98,7 +99,7 @@ describe("WhatsApp wiring", () => {
     expect(notify).toContain("whatsapp_outbound");
     expect(notify).toContain("whatsapp_alerts");
     expect(settings).toContain("whatsappAlerts");
-    expect(settings).toContain("whatsapp_alerts: whatsappAlerts");
+    expect(settings).toContain("WhatsApp (assignment + daily digest)");
     expect(settings).toContain("Failed to load notification preferences");
     expect(settings).toContain("disabled={saving || !prefsReady}");
   });

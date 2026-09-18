@@ -19,6 +19,7 @@
 | `EMAIL_FROM` / `EMAIL_FROM_NAME` | From address / display name | `_shared/send-email.ts`, `_shared/env.ts` |
 | `EMAIL_LOGO_URL` | Email header logo (**PNG**, not SVG) | `_shared/transactional-email-templates/_layout.tsx` |
 | `APP_URL` | Deep links in emails | `_shared/env.ts`, email templates |
+| `KAPSO_API_KEY` | Optional Edge override for daily WhatsApp digest | `_shared/kapso.ts`, `send-daily-digest` |
 | `SUPABASE_URL` | Edge function DB / function calls | Most edge functions + `_shared/env.ts` |
 | `SUPABASE_ANON_KEY` | User-scoped Supabase clients | `firebase-auth`, `mcp-auth`, etc. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Admin DB access | Most edge functions |

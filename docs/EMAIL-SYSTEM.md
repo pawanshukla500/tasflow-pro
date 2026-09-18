@@ -133,8 +133,10 @@ a dry run — sends nothing — and checks, in one click:
 3. **Every active team member, evaluated against send-daily-digest's exact eligibility rules**
    (profile active, org digest enabled, personal preference, suppression, pending-task count) —
    so "would this specific person get today's digest, and if not, which single check stopped it"
-   is answered per person instead of guessed. Admins/MDs are marked with a badge in this same
-   list, since they go through identical eligibility rules for their own *personal* digest.
+   is answered per person instead of guessed. The same run also sends a consolidated **Kapso
+   WhatsApp** to each teammate’s country-coded mobile (`docs/WHATSAPP-KAPSO.md`). Admins/MDs are
+   marked with a badge in this same list, since they go through identical eligibility rules for
+   their own *personal* digest.
 4. **Real send failures from `email_send_log` in the last 48h** — surfaces the actual Resend
    rejection error text when #1 is the cause, without needing dashboard access.
 
