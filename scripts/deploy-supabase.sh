@@ -139,7 +139,7 @@ GOOGLE_FUNCTIONS=(
 )
 CORE_FUNCTIONS=(
   firebase-auth create-team-member delete-team-member register-organization
-  manage-email-suppression email-system-smoke-test
+  manage-email-suppression email-system-smoke-test trigger-daily-digest
   firebase-upload daily-motivation notify-task-assigned notify-workflow-stage
   kwikengage-webhook
   process-email-queue send-daily-digest send-department-daily-summary
@@ -177,7 +177,7 @@ done
 
 # After the digest function (and Vault-key RPC) are live, queue today's IST
 # digest once. Idempotency is daily-digest-<IST date>-<user>, so a same-day
-# redeploy does not double-send. Recovers a missed 09:30 IST run on merge.
+# redeploy does not double-send. Recovers a missed 10:00 IST run on merge.
 # Skip if send-daily-digest itself failed to deploy — posting would hit the
 # old 401 handler and look like a successful recovery.
 if [[ "${SKIP_DIGEST_ON_DEPLOY:-}" == "1" ]]; then

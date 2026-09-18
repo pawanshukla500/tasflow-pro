@@ -1,7 +1,7 @@
 # Daily pending-task WhatsApp (Kapso)
 
 Every active teammate already has a **country-coded** mobile on Team
-(`+91 …`). The 09:30 IST daily digest (Mon–Sat) now also sends a **consolidated**
+(`+91 …`). The **10:00 IST** daily digest (Mon–Sat, no Sunday) now also sends a **consolidated**
 WhatsApp to that number via Kapso — same pending / overdue / due-soon counts as
 the email.
 
@@ -48,8 +48,11 @@ phone also gets a WhatsApp even with nothing pending:
 - Pawan Shukla `+91 9426279142` (system_admin)
 
 MD numbers are not part of this merge-time smoke. Same-day real digest still
-dedupes. The scheduled 09:30 IST cron body is `{}` and does **not** send this
+dedupes. The scheduled 10:00 IST cron body is `{}` and does **not** send this
 empty admin smoke.
+
+Admins can **Check** names/numbers and **Send today's digest** from
+Settings → Admin.
 
 ## Opt-out
 

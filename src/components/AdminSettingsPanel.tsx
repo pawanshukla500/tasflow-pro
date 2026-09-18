@@ -8,8 +8,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/edgeFunctions";
 import { toast } from "sonner";
-import { Shield, Building2, Mail, ScrollText, Users, Workflow, SearchCheck, MailWarning, MailCheck, FlaskConical, TriangleAlert, MessageCircle } from "lucide-react";
+import { Shield, Building2, Mail, ScrollText, Users, Workflow, SearchCheck, MailWarning, MailCheck, FlaskConical, TriangleAlert, MessageCircle, Send } from "lucide-react";
 import { formatDateTimeIST } from "@/lib/time";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface EmailDeliveryLookup {
   email: string;
@@ -25,6 +26,11 @@ interface SmokeTestMember {
   active: boolean;
   pendingTaskCount: number;
   verdict: string;
+  whatsappVerdict?: string;
+  mobileNo?: string | null;
+  displayMobile?: string | null;
+  whatsappDigits?: string | null;
+  phoneFormatOk?: boolean;
 }
 
 interface SmokeTestResult {
@@ -36,6 +42,10 @@ interface SmokeTestResult {
     domains: { name: string; status: string }[];
     warning?: string;
   };
+  kapso?: {
+    configured: boolean;
+    schedule: string;
+  };
   weeklyLeadershipReport: {
     recipientCount: number;
     warning?: string;
@@ -46,13 +56,22 @@ interface SmokeTestResult {
 }
 
 const VERDICT_LABEL: Record<string, string> = {
-  would_send: "Would send today",
-  skipped_no_pending_tasks: "No pending tasks (healthy)",
-  skipped_pref_off: "Digest turned off (their setting)",
+  would_send: "Email today",
+  skipped_no_pending_tasks: "No pending work",
+  skipped_pref_off: "Digest turned off",
   skipped_org_disabled: "Org digest disabled",
-  skipped_suppressed: "Suppressed — see above",
-  skipped_inactive: "Inactive profile",
-  skipped_no_email: "No email on profile",
+  skipped_suppressed: "Suppressed",
+  skipped_inactive: "Inactive",
+  skipped_no_email: "No email",
+};
+
+const WA_VERDICT_LABEL: Record<string, string> = {
+  would_send: "WhatsApp today",
+  skipped_no_pending_tasks: "No pending work",
+  skipped_pref: "WhatsApp off",
+  skipped_no_phone: "No mobile",
+  skipped_no_kapso_key: "Kapso key missing",
+  skipped_inactive: "Inactive",
 };
 
 export function AdminSettingsPanel() {
@@ -68,6 +87,8 @@ export function AdminSettingsPanel() {
   const [removingSuppression, setRemovingSuppression] = useState(false);
   const [smokeTest, setSmokeTest] = useState<SmokeTestResult | null>(null);
   const [runningSmokeTest, setRunningSmokeTest] = useState(false);
+  const [sendingDigest, setSendingDigest] = useState(false);
+  const [confirmSend, setConfirmSend] = useState(false);
 
   useEffect(() => {
     if (!user?.organization) return;
@@ -98,7 +119,7 @@ export function AdminSettingsPanel() {
     try {
       const settings = {
         ...(user.organization.settings || {}),
-        email: { daily_digest_enabled: dailyDigest, digest_hour_ist: 9.5 },
+        email: { daily_digest_enabled: dailyDigest, digest_hour_ist: 10 },
       };
       const { error } = await supabase.from("organizations").update({
         name: orgName,
@@ -163,7 +184,10 @@ export function AdminSettingsPanel() {
     try {
       const data = await invokeEdgeFunction<SmokeTestResult>("email-system-smoke-test", { body: {} });
       setSmokeTest(data);
-      const problems = data.members.filter((m) => m.verdict !== "would_send" && m.verdict !== "skipped_no_pending_tasks").length;
+      const problems = data.members.filter((m) =>
+        (m.verdict !== "would_send" && m.verdict !== "skipped_no_pending_tasks")
+        || m.phoneFormatOk === false
+      ).length;
       if (data.resend.warning || data.weeklyLeadershipReport.warning || problems > 0) {
         toast.warning(`Smoke test found ${problems} member issue${problems === 1 ? "" : "s"}${data.resend.warning ? " + a Resend warning" : ""} — see below`);
       } else {
@@ -173,6 +197,29 @@ export function AdminSettingsPanel() {
       toast.error(err instanceof Error ? err.message : "Smoke test failed to run");
     } finally {
       setRunningSmokeTest(false);
+    }
+  };
+
+  const sendDigestNow = async () => {
+    setSendingDigest(true);
+    try {
+      const data = await invokeEdgeFunction<{
+        ok?: boolean;
+        date?: string;
+        results?: { email: string; status: string; whatsapp?: string }[];
+      }>("trigger-daily-digest", { body: {} });
+      const results = data.results || [];
+      const emailSent = results.filter((r) => r.status === "sent").length;
+      const waSent = results.filter((r) => r.whatsapp === "sent").length;
+      toast.success(
+        `Today's digest queued (${data.date || "IST today"}): ${emailSent} email, ${waSent} WhatsApp. Same-day duplicates are skipped.`,
+      );
+      await runSmokeTest();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to send digest");
+    } finally {
+      setSendingDigest(false);
+      setConfirmSend(false);
     }
   };
 
@@ -206,7 +253,7 @@ export function AdminSettingsPanel() {
             <div>
               <p className="font-medium text-sm">Daily digest emails</p>
               <p className="text-xs text-muted-foreground">
-                Consolidated pending-task briefing Mon–Sat at 9:30 AM IST. Users with no due or pending work are skipped.
+                Consolidated pending-task briefing Mon–Sat at 10:00 AM IST (no Sunday). Users with no due or pending work are skipped.
               </p>
             </div>
             <Switch checked={dailyDigest} onCheckedChange={setDailyDigest} />
@@ -350,18 +397,22 @@ export function AdminSettingsPanel() {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
             <FlaskConical className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold text-lg">System Smoke Test</h3>
+            <h3 className="font-semibold text-lg">Daily digest check &amp; send</h3>
           </div>
-          <Button onClick={runSmokeTest} disabled={runningSmokeTest} size="sm">
-            {runningSmokeTest ? "Running…" : "Run smoke test"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={runSmokeTest} disabled={runningSmokeTest || sendingDigest} size="sm" variant="outline">
+              {runningSmokeTest ? "Checking…" : "Check who would get it"}
+            </Button>
+            <Button onClick={() => setConfirmSend(true)} disabled={runningSmokeTest || sendingDigest} size="sm">
+              <Send className="h-4 w-4 mr-1.5" />
+              {sendingDigest ? "Sending…" : "Send today's digest"}
+            </Button>
+          </div>
         </div>
         <p className="text-xs text-muted-foreground max-w-2xl -mt-2">
-          Dry run — sends nothing. Checks whether Resend is actually able to deliver mail to
-          anyone besides the account owner, whether the weekly leadership report has any
-          Admin/MD recipients at all, and evaluates every active team member against the same
-          eligibility rules the daily digest uses, so you can see who'd get today's digest and
-          why anyone else wouldn't.
+          Scheduled Mon–Sat at <span className="font-medium text-foreground">10:00 AM IST</span> (skipped on Sunday).
+          Check lists every teammate’s name and <code className="text-[11px]">+91 XXXXXXXXXX</code> mobile, plus who
+          would get email and WhatsApp today. Send runs the same job as the cron; same-day duplicates are skipped.
         </p>
 
         {smokeTest && (
@@ -384,6 +435,21 @@ export function AdminSettingsPanel() {
                   Domain verified: {smokeTest.resend.domains.map((d) => `${d.name} (${d.status})`).join(", ") || "—"}
                 </p>
               )}
+            </div>
+
+            <div className={`rounded-lg border p-4 space-y-2 ${smokeTest.kapso && !smokeTest.kapso.configured ? "border-destructive/30 bg-destructive/5" : "border-success/30 bg-success/5"}`}>
+              <div className="flex items-center gap-2">
+                <MessageCircle className="h-4 w-4 shrink-0" />
+                <span className="text-sm font-medium">
+                  Kapso WhatsApp {smokeTest.kapso?.configured ? "configured" : "key missing"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {smokeTest.kapso?.schedule || "Mon–Sat 10:00 AM IST (no Sunday)"}
+                {smokeTest.kapso && !smokeTest.kapso.configured
+                  ? " — email still sends; WhatsApp is skipped_no_kapso_key until Vault kapso_api_key is set."
+                  : "."}
+              </p>
             </div>
 
             <div className={`rounded-lg border p-4 space-y-2 ${smokeTest.weeklyLeadershipReport.warning ? "border-destructive/30 bg-destructive/5" : "border-success/30 bg-success/5"}`}>
@@ -424,23 +490,35 @@ export function AdminSettingsPanel() {
 
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Every team member — daily digest eligibility for {smokeTest.todayIST}
+                Every teammate — name, +91 mobile, email & WhatsApp for {smokeTest.todayIST}
               </p>
               <div className="rounded-md border divide-y max-h-96 overflow-y-auto">
                 {smokeTest.members.map((m, i) => (
-                  <div key={i} className="p-2.5 text-xs flex items-center justify-between gap-2">
+                  <div key={i} className="p-2.5 text-xs flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <span className="font-medium">{m.name || "(no name)"}</span>
                       <span className="text-muted-foreground"> · {m.email || "no email"}</span>
                       {(m.roles.includes("managing_director") || m.roles.includes("system_admin")) && (
                         <Badge variant="outline" className="ml-2 text-[10px]">Admin/MD</Badge>
                       )}
+                      <p className="text-muted-foreground mt-0.5">
+                        {m.mobileNo || "no mobile"}
+                        {m.whatsappDigits ? ` → ${m.whatsappDigits}` : ""}
+                        {m.phoneFormatOk === false && (
+                          <Badge variant="destructive" className="ml-2 text-[10px]">Fix number</Badge>
+                        )}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-col items-end gap-1 shrink-0">
                       <span className="text-muted-foreground">{m.pendingTaskCount} pending</span>
-                      <Badge variant={m.verdict === "would_send" ? "secondary" : m.verdict === "skipped_no_pending_tasks" ? "outline" : "destructive"}>
-                        {VERDICT_LABEL[m.verdict] || m.verdict}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge variant={m.verdict === "would_send" ? "secondary" : m.verdict === "skipped_no_pending_tasks" ? "outline" : "destructive"}>
+                          {VERDICT_LABEL[m.verdict] || m.verdict}
+                        </Badge>
+                        <Badge variant={m.whatsappVerdict === "would_send" ? "secondary" : m.whatsappVerdict === "skipped_no_pending_tasks" ? "outline" : "destructive"}>
+                          {WA_VERDICT_LABEL[m.whatsappVerdict || ""] || m.whatsappVerdict || "—"}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -453,6 +531,30 @@ export function AdminSettingsPanel() {
           </div>
         )}
       </section>
+
+      <AlertDialog open={confirmSend} onOpenChange={setConfirmSend}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send today's digest now?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This emails and WhatsApps everyone with pending work, using the same 10:00 AM IST job.
+              People who already received today are skipped. MD numbers are not force-smoked.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={sendingDigest}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void sendDigestNow();
+              }}
+              disabled={sendingDigest}
+            >
+              {sendingDigest ? "Sending…" : "Send now"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <section className="space-y-4">
         <div className="flex items-center gap-2">

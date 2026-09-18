@@ -11,6 +11,8 @@ export const KWIKENGAGE_SEND_URL = "https://api.kwikengage.ai/send-message/v2";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+export const INDIA_MOBILE_DISPLAY_RE = /^\+91 \d{10}$/;
+
 export function toWhatsAppDigits(mobile: string | null | undefined): string | null {
   if (!mobile) return null;
   let digits = mobile.replace(/\D/g, "");
@@ -18,6 +20,17 @@ export function toWhatsAppDigits(mobile: string | null | undefined): string | nu
   if (digits.length === 10) digits = `91${digits}`;
   if (digits.length < 11 || digits.length > 15) return null;
   return digits;
+}
+
+/** Canonical Team display: `+91` then a space then 10 digits. */
+export function formatIndiaMobileDisplay(mobile: string | null | undefined): string | null {
+  const digits = toWhatsAppDigits(mobile);
+  if (!digits || digits.length !== 12 || !digits.startsWith("91")) return null;
+  return `+91 ${digits.slice(2)}`;
+}
+
+export function isIndiaTeamMobile(mobile: string | null | undefined): boolean {
+  return INDIA_MOBILE_DISPLAY_RE.test((mobile || "").trim());
 }
 
 export function completeButtonId(taskId: string): string {

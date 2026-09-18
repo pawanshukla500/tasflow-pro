@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildTemplatePayload,
   completeButtonId,
+  formatIndiaMobileDisplay,
   isCompleteIntent,
+  isIndiaTeamMobile,
   isKwikEngageAuthorized,
   parseInboundWhatsApp,
   taskIdFromToken,
@@ -23,6 +25,10 @@ describe("KwikEngage WhatsApp helpers", () => {
     expect(toWhatsAppDigits("0091-9426279142")).toBe("919426279142");
     expect(toWhatsAppDigits("91")).toBeNull();
     expect(toWhatsAppDigits("")).toBeNull();
+    expect(formatIndiaMobileDisplay("+91 94262 79142")).toBe("+91 9426279142");
+    expect(formatIndiaMobileDisplay("+91  6376573077")).toBe("+91 6376573077");
+    expect(isIndiaTeamMobile("+91 9426279142")).toBe(true);
+    expect(isIndiaTeamMobile("+91  6376573077")).toBe(false);
   });
 
   it("detects Complete replies and button tokens", () => {
