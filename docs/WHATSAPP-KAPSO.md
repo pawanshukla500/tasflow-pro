@@ -38,19 +38,18 @@ Until `kapso_api_key` is set, email still goes out and WhatsApp is logged
 
 Skipped: no pending work, no phone, opted out, duplicate same IST day.
 
-## After merge: admin numbers too
+## After merge: system admin phone too
 
 CI queues `send-daily-digest` once after functions deploy
 (`scripts/send-daily-digest-now.sql`) with `{"smoke_admins": true}`. Everyone
-with pending work still gets the real digest. Then **MD / system_admin**
-phones also get a WhatsApp even if they have nothing pending:
+with pending work still gets the real digest. Then the **system_admin**
+phone also gets a WhatsApp even with nothing pending:
 
 - Pawan Shukla `+91 9426279142` (system_admin)
-- Vaibhav Bajaj `+91 7227076777` (MD)
-- Nidhi Bajaj `+91 9825149497` (MD)
 
-Same-day real digest still dedupes. The scheduled 09:30 IST cron body is `{}`
-and does **not** send this empty admin smoke.
+MD numbers are not part of this merge-time smoke. Same-day real digest still
+dedupes. The scheduled 09:30 IST cron body is `{}` and does **not** send this
+empty admin smoke.
 
 ## Opt-out
 

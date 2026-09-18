@@ -306,7 +306,7 @@ Deno.serve(async (req) => {
     const { data: adminRoles } = await supabase
       .from("user_roles")
       .select("user_id, role")
-      .in("role", ["managing_director", "system_admin"]);
+      .eq("role", "system_admin");
     const adminIds = [...new Set((adminRoles || []).map((r) => r.user_id))];
     const already = new Set(
       results

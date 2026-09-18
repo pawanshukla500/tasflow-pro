@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
     .select("task_id, user_id")
     .eq("task_id", taskId)
     .eq("phone", inbound.phone)
+    .eq("purpose", "assignment")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

@@ -41,6 +41,15 @@ ALTER TABLE public.whatsapp_outbound
   ADD COLUMN IF NOT EXISTS purpose text NOT NULL DEFAULT 'assignment',
   ADD COLUMN IF NOT EXISTS idempotency_key text;
 
+-- Digest rows may have a null task_id. Assignment Complete replies must not
+-- pick those up: keep assignment rows tied to a task, and look them up by
+-- purpose=assignment in kwikengage-webhook.
+ALTER TABLE public.whatsapp_outbound
+  DROP CONSTRAINT IF EXISTS whatsapp_outbound_assignment_has_task;
+ALTER TABLE public.whatsapp_outbound
+  ADD CONSTRAINT whatsapp_outbound_assignment_has_task
+  CHECK (purpose <> 'assignment' OR task_id IS NOT NULL);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_outbound_idempotency
   ON public.whatsapp_outbound (idempotency_key)
   WHERE idempotency_key IS NOT NULL;
