@@ -157,7 +157,7 @@ not duplicates: daily pulse vs. weekly analysis.
 
 ## Policy
 - **Email on every task create** — in-app notification plus assignment email (`notify-task-assigned`, default `sendEmail: true`; opt-out: Settings → Task assignment emails). Bulk CSV import stays in-app only so a large import cannot flood inboxes; those tasks still appear on the next daily digest.
-- **Daily pending briefing** Mon–Sat at **09:30 IST** via `send-daily-digest` for every active user who has due/pending work (skipped if empty; opt-out: Settings → Daily digest). This is the **only** personal "pending tasks" email — see Deduping below.
+- **Daily pending briefing** Mon–Sat at **10:00 IST** via `send-daily-digest` for every active user who has due/pending work (skipped if empty; opt-out: Settings → Daily digest). This is the **only** personal "pending tasks" email — see Deduping below. Admins can Check and Send it from Settings → Admin.
 - **Department manager summary** daily at **08:30 IST** via `send-department-daily-summary` for users in `department_managers` (team-wide rollup, separate from their own personal digest).
 - **Admin daily team overview** Mon–Sat at **09:30 IST** via `send-admin-daily-overview` for System Admin / MD — company-wide open/overdue/due-soon totals + department breakdown, skipped when nothing's open. See "Admin daily team overview" below.
 - **Friday management overview** at **09:00 IST** via `send-weekly-pending-report` for System Admin / MD — department-wise completion, top performers, departments needing attention, employee productivity, insights, recommendations.

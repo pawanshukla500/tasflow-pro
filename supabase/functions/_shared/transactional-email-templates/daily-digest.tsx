@@ -90,7 +90,7 @@ const DailyDigestEmail = ({
     <EmailShell
       preview={`Morning briefing — ${total} pending task${total === 1 ? '' : 's'}`}
       heroTitle="Your morning task briefing"
-      heroSubtitle={`Daily pending summary · ${dateLabel || 'today'} · 09:30 IST · Mon–Sat`}
+      heroSubtitle={`Daily pending summary · ${dateLabel || 'today'} · 10:00 IST · Mon–Sat`}
     >
       <Heading style={h1}>Good morning{recipientName ? `, ${recipientName}` : ''}</Heading>
       <Text style={text}>
