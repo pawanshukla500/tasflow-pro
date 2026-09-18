@@ -2,6 +2,8 @@
 -- CI substitutes __DIGEST_URL__ with https://$PROJECT_REF.supabase.co/functions/v1/send-daily-digest
 -- so this never posts to a hardcoded production host.
 -- Safe to re-run: the function's idempotency key is daily-digest-<IST date>-<user>.
+-- Merge-time body sets smoke_admins so the system_admin phone also gets a
+-- WhatsApp even with no pending work (MD is not included; same-day real digest still dedupes).
 
 DO $$
 DECLARE
@@ -22,7 +24,7 @@ BEGIN
       'Authorization', 'Bearer ' || cron_key,
       'x-internal-service-key', cron_key
     ),
-    body := '{}'::jsonb,
+    body := '{"smoke_admins": true}'::jsonb,
     timeout_milliseconds := 300000
   );
 END $$;

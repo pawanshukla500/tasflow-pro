@@ -510,11 +510,12 @@ const SettingsPage = () => {
           <div className="bg-card rounded-xl border p-6">
             <h2 className="text-base font-semibold text-foreground mb-1">WhatsApp alerts</h2>
             <p className="text-xs text-muted-foreground mb-4">
-              Task assignment messages go to the mobile number on your profile. Reply
-              Complete or tap Complete to mark that task done in TaskFlow.
+              Assignment alerts and the daily pending-task digest go to the mobile number on
+              your profile (with country code). Reply Complete on an assignment to mark that
+              task done.
             </p>
             <div className="flex items-center justify-between py-1">
-              <span className="text-sm text-foreground">Task assignment WhatsApp</span>
+              <span className="text-sm text-foreground">WhatsApp (assignment + daily digest)</span>
               <div className="flex items-center gap-1.5">
                 <Switch
                   checked={whatsappAlerts}

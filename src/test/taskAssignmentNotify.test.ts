@@ -55,6 +55,7 @@ describe("email cron SQL", () => {
     expect(nowSql).not.toContain("nekdjoquirhecmejuoba");
     expect(nowSql).toContain("RAISE EXCEPTION");
     expect(nowSql).toContain("report_cron_service_role_key");
+    expect(nowSql).toContain('{"smoke_admins": true}');
     expect(migration).toContain("internal_cron_key_matches");
     expect(migration).toContain("GRANT EXECUTE");
   });

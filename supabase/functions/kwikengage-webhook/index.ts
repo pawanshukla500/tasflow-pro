@@ -57,6 +57,8 @@ Deno.serve(async (req) => {
       .from("whatsapp_outbound")
       .select("task_id")
       .eq("phone", inbound.phone)
+      .eq("purpose", "assignment")
+      .not("task_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -73,6 +75,7 @@ Deno.serve(async (req) => {
     .select("task_id, user_id")
     .eq("task_id", taskId)
     .eq("phone", inbound.phone)
+    .eq("purpose", "assignment")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
