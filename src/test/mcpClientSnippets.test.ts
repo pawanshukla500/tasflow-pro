@@ -5,6 +5,7 @@ import {
   assigneeIdsForCaller,
   escapeIlikeExact,
   normalizeCodingStatus,
+  requiredLabel,
   taskDeepLink,
 } from "../../supabase/functions/mcp-server/tools/assign";
 
@@ -51,6 +52,9 @@ describe("MCP client snippets", () => {
     expect(assigneeIdsForCaller("me", [])).toEqual(["me"]);
     expect(assigneeIdsForCaller("me", ["other"])).toEqual(["other"]);
     expect(escapeIlikeExact("foo_bar%")).toBe("foo\\_bar\\%");
+    expect(() => requiredLabel(undefined, "project_name")).toThrow(/project_name is required/);
+    expect(() => requiredLabel("undefined", "task_title")).toThrow(/task_title is required/);
+    expect(requiredLabel("  tasflow-pro  ", "project_name")).toBe("tasflow-pro");
   });
 
   it("defaults coding status to in_progress and appends progress notes", () => {

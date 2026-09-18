@@ -5,6 +5,7 @@ import {
   CODING_STATUSES,
   escapeIlikeExact,
   normalizeCodingStatus,
+  requiredLabel,
   taskDeepLink,
 } from "./assign.ts";
 
@@ -209,10 +210,8 @@ export const codingWorkTools: McpTool[] = [
     ),
     handler: async (ctx, args) => {
       const { client, userId, organizationId } = ctx;
-      const projectName = String(args.project_name).trim();
-      const taskTitle = String(args.task_title).trim();
-      if (!projectName) throw new Error("project_name is required");
-      if (!taskTitle) throw new Error("task_title is required");
+      const projectName = requiredLabel(args.project_name, "project_name");
+      const taskTitle = requiredLabel(args.task_title, "task_title");
       const status = normalizeCodingStatus(args.status);
       const descriptionArg = args.task_description != null ? String(args.task_description) : null;
       const progressNote = args.progress_note ? String(args.progress_note).trim() : null;
