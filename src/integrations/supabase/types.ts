@@ -1049,6 +1049,7 @@ export type Database = {
       }
       task_attachments: {
         Row: {
+          comment_id: string | null
           created_at: string
           file_name: string
           file_path: string | null
@@ -1060,6 +1061,7 @@ export type Database = {
           uploaded_by: string | null
         }
         Insert: {
+          comment_id?: string | null
           created_at?: string
           file_name: string
           file_path?: string | null
@@ -1071,6 +1073,7 @@ export type Database = {
           uploaded_by?: string | null
         }
         Update: {
+          comment_id?: string | null
           created_at?: string
           file_name?: string
           file_path?: string | null
@@ -1083,10 +1086,111 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "task_attachments_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "task_comments"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "task_attachments_task_id_fkey"
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_comment_mentions: {
+        Row: {
+          comment_id: string
+          created_at: string
+          id: string
+          mentioned_user_id: string
+          task_id: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          id?: string
+          mentioned_user_id: string
+          task_id: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          id?: string
+          mentioned_user_id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_comment_mentions_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "task_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_comment_mentions_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_comments: {
+        Row: {
+          body: string
+          comment_type: string
+          created_at: string
+          edited_at: string | null
+          id: string
+          parent_id: string | null
+          task_id: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          comment_type?: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          parent_id?: string | null
+          task_id: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          comment_type?: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          parent_id?: string | null
+          task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "task_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_comments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_comments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1721,6 +1825,10 @@ export type Database = {
         Args: { _task_id: string; _user_id: string }
         Returns: boolean
       }
+      can_discuss_task: {
+        Args: { _task_id: string; _user_id: string }
+        Returns: boolean
+      }
       create_conversation_with_participants: {
         Args: { _is_group: boolean; _participant_ids: string[]; _title: string }
         Returns: string
@@ -1755,6 +1863,14 @@ export type Database = {
         Returns: boolean
       }
       is_hr: { Args: { _user_id: string }; Returns: boolean }
+      list_task_discussion_participants: {
+        Args: { _task_id: string }
+        Returns: {
+          avatar_url: string | null
+          id: string
+          name: string
+        }[]
+      }
       is_org_admin: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean

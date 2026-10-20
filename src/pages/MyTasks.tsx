@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search, Download, Upload, ChevronDown, ChevronRight, Circle, CheckCircle2,
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTasks, TaskRow } from "@/hooks/useTasks";
+import { fetchTaskById } from "@/lib/tasksApi";
 import CreateTaskModal from "@/components/CreateTaskModal";
 import EditTaskModal from "@/components/EditTaskModal";
 import CompleteTaskDialog from "@/components/CompleteTaskDialog";
@@ -98,6 +99,7 @@ const MyTasks = () => {
     [tasks, filterableUsers, canFilterByUser, filterTasks],
   );
 
+  const fetchedTaskQuery = useRef<string | null>(null);
   useEffect(() => {
     const taskId = searchParams.get("task");
     if (!taskId || loading) return;
@@ -105,8 +107,16 @@ const MyTasks = () => {
     if (t) {
       setHighlightTaskId(taskId);
       setEditingTask(t);
-      setTimeout(() => setHighlightTaskId(null), 4000);
+      const timer = setTimeout(() => setHighlightTaskId(null), 4000);
+      return () => clearTimeout(timer);
     }
+    if (fetchedTaskQuery.current === taskId) return;
+    fetchedTaskQuery.current = taskId;
+    fetchTaskById(taskId)
+      .then((task) => {
+        if (task) setEditingTask(task);
+      })
+      .catch(() => {});
   }, [searchParams, tasks, loading]);
 
   useEffect(() => {

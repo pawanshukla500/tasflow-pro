@@ -17,8 +17,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { usePerformance } from "@/hooks/usePerformance";
 import { useUserRolesMap } from "@/hooks/useUserRolesMap";
 import { filterPerformanceLeaderboardProfiles } from "@/lib/performanceVisibility";
-import { useTasks } from "@/hooks/useTasks";
+import { useTasks, type TaskRow } from "@/hooks/useTasks";
 import CreateTaskModal from "@/components/CreateTaskModal";
+import EditTaskModal from "@/components/EditTaskModal";
 import { PageHeader } from "@/components/PageHeader";
 import { CountUp } from "@/components/motion";
 import { todayIST, formatDateIST, addDaysIST } from "@/lib/time";
@@ -121,6 +122,7 @@ const Dashboard = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowRow[]>([]);
   const [showCreate, setShowCreate] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskRow | null>(null);
   const [motivation, setMotivation] = useState<{ quote: string; author: string } | null>(null);
   const [scope, setScope] = useState<Scope>("all");
   const [userFilter, setUserFilter] = useState<string>("all");
@@ -571,7 +573,9 @@ const Dashboard = () => {
                   return (
                     <div key={task.id} className="flex items-center gap-3 px-2.5 py-2 rounded-lg hover:bg-muted/40 transition-colors duration-150">
                       <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: priorityColors[task.priority] || priorityColors.medium }} />
-                      <span className="flex-1 text-sm text-foreground truncate">{task.title}</span>
+                      <button type="button" className="flex-1 min-h-11 text-left text-sm text-foreground truncate hover:text-primary" onClick={() => setEditingTask(task)}>
+                        {task.title}
+                      </button>
                       <Badge variant="outline" className="text-[10px] shrink-0 hidden sm:inline-flex border-0 px-2" style={{ color: statusColors[task.status], background: `${statusColors[task.status]}14` }}>
                         {statusLabels[task.status] || task.status}
                       </Badge>
@@ -718,7 +722,9 @@ const Dashboard = () => {
               {tasks.slice(0, 8).map(task => (
                 <div key={task.id} className="flex items-center gap-3 px-2.5 py-2 rounded-lg hover:bg-muted/40 transition-colors duration-150 group">
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: priorityColors[task.priority] || priorityColors.medium }} />
-                  <span className="flex-1 text-sm text-foreground truncate group-hover:text-primary transition-colors">{task.title}</span>
+                  <button type="button" className="flex-1 min-h-11 text-left text-sm text-foreground truncate group-hover:text-primary transition-colors" onClick={() => setEditingTask(task)}>
+                    {task.title}
+                  </button>
                   <Badge variant="outline" className="text-[10px] shrink-0 border-0 px-2" style={{ color: statusColors[task.status], background: `${statusColors[task.status]}14` }}>
                     {statusLabels[task.status] || task.status}
                   </Badge>
@@ -745,6 +751,9 @@ const Dashboard = () => {
       </div>
 
       {showCreate && <CreateTaskModal onClose={() => setShowCreate(false)} onCreated={fetchTasks} />}
+      {editingTask && (
+        <EditTaskModal task={editingTask} onClose={() => setEditingTask(null)} onSaved={fetchTasks} />
+      )}
     </div>
   );
 };

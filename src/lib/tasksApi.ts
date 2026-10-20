@@ -501,6 +501,22 @@ export async function fetchTasksPage(
  * Load up to `maxRows` tasks in paginated chunks (eager). Used by dashboards
  * that need a wider window without a single unbounded SELECT *.
  */
+/** One task for a notification deep link, using the same select fallbacks as the list. */
+export async function fetchTaskById(taskId: string): Promise<TaskRow | null> {
+  for (const select of TASK_SELECT_CANDIDATES) {
+    const result = await supabase.from("tasks").select(select).eq("id", taskId).maybeSingle();
+    if (!result.error && result.data) {
+      const [task] = await hydrateAssigneeAndCreatorNames([
+        mapEmbeddedTask(result.data as unknown as NestedTask),
+      ]);
+      return task ?? null;
+    }
+    if (!result.error) return null;
+    if (!isRecoverableSelectError(result.error.message)) return null;
+  }
+  return null;
+}
+
 export async function fetchTasksBounded(
   maxRows = 300,
   options: Pick<FetchTasksPageOptions, "projectId" | "departmentId" | "status"> = {},
