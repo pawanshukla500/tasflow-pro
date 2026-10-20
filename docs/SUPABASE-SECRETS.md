@@ -15,6 +15,7 @@
 | Secret | Used for | Referenced in |
 |--------|----------|---------------|
 | `GOOGLE_AI_API_KEY` | AI polish notes, daily motivation (`gemma-4-31b-it`) | `supabase/functions/_shared/google-ai.ts`, `polish-note`, `daily-motivation` |
+| `META_MODEL_API_KEY` | Task writing help with Muse Spark (`muse-spark-1.3-contributor`). Contributor mode may use prompts to improve Meta models. | `supabase/functions/_shared/muse.ts`, `task-assist` |
 | `RESEND_API_KEY` | Transactional email via Resend | `supabase/functions/_shared/send-email.ts`, `_shared/env.ts` |
 | `EMAIL_FROM` / `EMAIL_FROM_NAME` | From address / display name | `_shared/send-email.ts`, `_shared/env.ts` |
 | `EMAIL_LOGO_URL` | Email header logo (**PNG**, not SVG) | `_shared/transactional-email-templates/_layout.tsx` |

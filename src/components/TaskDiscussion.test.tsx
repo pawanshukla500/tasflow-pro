@@ -114,6 +114,31 @@ describe("TaskDiscussion", () => {
     expect(sent[0].body).toContain(ada);
   });
 
+  it("clears an in-progress edit before starting a reply", () => {
+    const sent: { body: string; parentId: string | null }[] = [];
+    render(
+      <Harness
+        initial={[
+          message(),
+          message({ id: "mine", userId: me, authorName: "Pawan", body: "My draft note" }),
+        ]}
+        onSend={async (input) => {
+          sent.push({ body: input.body, parentId: input.parentId });
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const field = screen.getByRole("textbox", { name: "Message" });
+    expect((field as HTMLTextAreaElement).value).toBe("My draft note");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Reply" })[0]);
+    expect((field as HTMLTextAreaElement).value).toBe("");
+    fireEvent.change(field, { target: { value: "A real reply", selectionStart: "A real reply".length } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(sent).toEqual([{ body: "A real reply", parentId: "m1" }]);
+  });
+
   it("rejects an unsupported attachment before send", () => {
     render(<Harness />);
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;

@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Loader2, MessageSquare, Paperclip, Reply, Send, SquarePen, Trash2, X } from "lucide-react";
+import { Loader2, MessageSquare, Paperclip, Reply, Send, Sparkles, SquarePen, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
   type DiscussionComment,
   type DiscussionParticipant,
 } from "@/lib/taskDiscussion";
+import { assistTask } from "@/lib/taskAi";
 import { formatDateIST, formatDateTimeIST, formatTimeIST } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,8 @@ interface Props {
   currentUserId: string | null;
   currentUserName?: string | null;
   fallbackParticipants?: DiscussionParticipant[];
+  taskTitle?: string;
+  taskDescription?: string;
   /** Tests and the dev preview pass a controller so the panel can run without the network. */
   controller?: TaskDiscussionController;
 }
@@ -95,9 +98,13 @@ function AttachmentList({ comment }: { comment: DiscussionComment }) {
 export function TaskDiscussionView({
   controller,
   currentUserId,
+  taskTitle,
+  taskDescription,
 }: {
   controller: TaskDiscussionController;
   currentUserId: string | null;
+  taskTitle?: string;
+  taskDescription?: string;
 }) {
   const { comments, participants, loading, error, realtime, sending, mode, reload, send, edit, remove } = controller;
   const [draft, setDraft] = useState("");
@@ -108,6 +115,7 @@ export function TaskDiscussionView({
   const [editing, setEditing] = useState<DiscussionComment | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [drafting, setDrafting] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -207,9 +215,40 @@ export function TaskDiscussionView({
   };
 
   const startReply = (comment: DiscussionComment) => {
+    if (editing) {
+      setDraft("");
+      setCursor(0);
+      setFiles([]);
+      setFileError(null);
+    }
     setEditing(null);
     setReplyTo(comment);
     focusInput();
+  };
+
+  const fillDraft = async () => {
+    if (!taskTitle?.trim() && !taskDescription?.trim()) {
+      toast.error("Add a title or description first");
+      return;
+    }
+    setDrafting(true);
+    try {
+      const result = await assistTask({
+        action: "draft_update",
+        title: taskTitle || "Task",
+        description: taskDescription,
+        comments: comments.slice(-8).map((comment) => comment.body),
+      });
+      if (!result.message) throw new Error("AI returned an empty draft");
+      setEditing(null);
+      setReplyTo(null);
+      onDraftChange(result.message, result.message.length);
+      focusInput();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't draft an update");
+    } finally {
+      setDrafting(false);
+    }
   };
 
   const startEdit = (comment: DiscussionComment) => {
@@ -307,7 +346,7 @@ export function TaskDiscussionView({
   };
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-card" aria-label="Task discussion">
+    <section className="flex h-full min-h-0 flex-col bg-muted/30" aria-label="Task discussion">
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2.5">
         <div className="min-w-0">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
@@ -326,7 +365,7 @@ export function TaskDiscussionView({
 
       <div
         ref={listRef}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
+        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-3"
         onScroll={() => {
           const el = listRef.current;
           if (!el) return;
@@ -348,9 +387,11 @@ export function TaskDiscussionView({
           </div>
         )}
         {!loading && !error && thread.length === 0 && (
-          <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-            Start the conversation. Replies, @mentions, and files stay on this task.
-          </p>
+          <div className="flex flex-1 items-center justify-center px-4 py-8">
+            <p className="max-w-[16rem] text-center text-sm leading-relaxed text-muted-foreground">
+              No messages yet. Reply, mention a teammate, or attach a file. The thread stays on this task.
+            </p>
+          </div>
         )}
         {thread.map((item) => (
           <div key={item.comment.id} className="space-y-1">
@@ -371,7 +412,7 @@ export function TaskDiscussionView({
       )}
 
       <form
-        className="space-y-2 border-t p-3"
+        className="space-y-2 border-t bg-card p-3"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
@@ -452,6 +493,24 @@ export function TaskDiscussionView({
         )}
         {fileError && <p role="alert" className="text-xs text-destructive">{fileError}</p>}
 
+        {taskTitle !== undefined && !editing && (
+          <div className="space-y-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-11"
+              disabled={drafting || sending || !currentUserId}
+              onClick={() => void fillDraft()}
+            >
+              {drafting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+              Draft update
+            </Button>
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              Muse Spark may use this text to improve Meta models.
+            </p>
+          </div>
+        )}
         <div className="flex items-end gap-2">
           {mode === "full" && !editing && (
             <>
@@ -536,12 +595,26 @@ function TaskDiscussionLive(props: Omit<Props, "controller">) {
     props.currentUserName ?? null,
     props.fallbackParticipants ?? [],
   );
-  return <TaskDiscussionView controller={controller} currentUserId={props.currentUserId} />;
+  return (
+    <TaskDiscussionView
+      controller={controller}
+      currentUserId={props.currentUserId}
+      taskTitle={props.taskTitle}
+      taskDescription={props.taskDescription}
+    />
+  );
 }
 
 const TaskDiscussion = (props: Props) => {
   if (props.controller) {
-    return <TaskDiscussionView controller={props.controller} currentUserId={props.currentUserId} />;
+    return (
+      <TaskDiscussionView
+        controller={props.controller}
+        currentUserId={props.currentUserId}
+        taskTitle={props.taskTitle}
+        taskDescription={props.taskDescription}
+      />
+    );
   }
   return <TaskDiscussionLive {...props} />;
 };
