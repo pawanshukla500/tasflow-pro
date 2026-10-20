@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     const title = clip(body?.title, 300);
     const description = clip(body?.description, 8000);
     const comments = Array.isArray(body?.comments)
-      ? body.comments.map((item: unknown) => clip(item, 500)).filter(Boolean).slice(0, 12)
+      ? body.comments.slice(0, 12).map((item: unknown) => clip(item, 500)).filter(Boolean)
       : [];
 
     if (!title && !description) {

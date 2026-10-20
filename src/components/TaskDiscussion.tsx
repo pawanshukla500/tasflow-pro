@@ -154,7 +154,10 @@ export function TaskDiscussionView({
 
   const focusInput = () => inputRef.current?.focus();
 
+  const draftRef = useRef(draft);
+  const draftRequest = useRef(0);
   const onDraftChange = (value: string, nextCursor: number) => {
+    draftRef.current = value;
     setDraft(value);
     setCursor(nextCursor);
   };
@@ -231,6 +234,8 @@ export function TaskDiscussionView({
       toast.error("Add a title or description first");
       return;
     }
+    const request = ++draftRequest.current;
+    const started = draftRef.current;
     setDrafting(true);
     try {
       const result = await assistTask({
@@ -239,6 +244,7 @@ export function TaskDiscussionView({
         description: taskDescription,
         comments: comments.slice(-8).map((comment) => comment.body),
       });
+      if (request !== draftRequest.current || draftRef.current !== started) return;
       if (!result.message) throw new Error("AI returned an empty draft");
       setEditing(null);
       setReplyTo(null);
@@ -304,13 +310,13 @@ export function TaskDiscussionView({
           <AttachmentList comment={comment} />
           <div className="mt-1 flex flex-wrap gap-1">
             {mode === "full" && !nested && (
-              <Button type="button" variant="ghost" size="sm" className="h-11 px-2 text-xs" onClick={() => startReply(comment)}>
+              <Button type="button" variant="ghost" size="sm" className="h-11 px-2 text-xs" disabled={drafting} onClick={() => startReply(comment)}>
                 <Reply className="mr-1 h-3.5 w-3.5" aria-hidden />
                 Reply
               </Button>
             )}
             {modifiable && (
-              <Button type="button" variant="ghost" size="sm" className="h-11 px-2 text-xs" onClick={() => startEdit(comment)}>
+              <Button type="button" variant="ghost" size="sm" className="h-11 px-2 text-xs" disabled={drafting} onClick={() => startEdit(comment)}>
                 <SquarePen className="mr-1 h-3.5 w-3.5" aria-hidden />
                 Edit
               </Button>
@@ -521,7 +527,7 @@ export function TaskDiscussionView({
                 className="h-11 w-11 shrink-0"
                 aria-label="Attach files"
                 onClick={() => fileRef.current?.click()}
-                disabled={sending}
+                disabled={drafting || sending}
               >
                 <Paperclip className="h-4 w-4" />
               </Button>
@@ -546,7 +552,7 @@ export function TaskDiscussionView({
             aria-controls={mentionOpen ? listId : undefined}
             aria-activedescendant={mentionOpen && mentionChoices[mentionIndex] ? mentionChoices[mentionIndex].id : undefined}
             className="min-h-11 flex-1 resize-none"
-            disabled={sending || !currentUserId}
+            disabled={drafting || sending || !currentUserId}
             onChange={(event) => onDraftChange(event.target.value, event.target.selectionStart ?? event.target.value.length)}
             onSelect={(event) => setCursor(event.currentTarget.selectionStart ?? draft.length)}
             onKeyDown={(event) => {
@@ -578,7 +584,7 @@ export function TaskDiscussionView({
               }
             }}
           />
-          <Button type="submit" className="h-11 shrink-0" disabled={sending || !currentUserId || (!draft.trim() && files.length === 0 && !editing)}>
+          <Button type="submit" className="h-11 shrink-0" disabled={drafting || sending || !currentUserId || (!draft.trim() && files.length === 0 && !editing)}>
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             <span className="sr-only">{editing ? "Save message" : "Send message"}</span>
           </Button>

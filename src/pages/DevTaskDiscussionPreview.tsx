@@ -121,12 +121,7 @@ const DevTaskDiscussionPreview = () => {
           </p>
         </div>
         <div className="min-h-[32rem] lg:min-h-0">
-          <TaskDiscussionView
-            controller={controller}
-            currentUserId={me}
-            taskTitle="Refresh the launch brief"
-            taskDescription="Confirm the pricing logic and post an update."
-          />
+          <TaskDiscussionView controller={controller} currentUserId={me} />
         </div>
       </div>
     </div>

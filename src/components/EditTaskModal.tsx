@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { format } from "date-fns";
 import { X, CalendarIcon, ShieldCheck, Send, CheckCircle, XCircle, Clock, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -81,6 +81,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
   const [subtasks, setSubtasks] = useState<SubtaskDraft[]>([]);
   const [showExtendDue, setShowExtendDue] = useState(false);
   const [aiBusy, setAiBusy] = useState<"description" | "subtasks" | null>(null);
+  const subtasksDirty = useRef(false);
   const [displayDueDate, setDisplayDueDate] = useState(task.due_date);
   const [extensionHistory, setExtensionHistory] = useState<
     { old_due_date: string | null; new_due_date: string; reason: string; created_at: string }[]
@@ -102,6 +103,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
     setRequiresReview(!!task.requires_review);
     setReviewerUserId(task.reviewer_user_id || "");
     setDisplayDueDate(task.due_date);
+    subtasksDirty.current = false;
   }, [task.id]);
 
   useEffect(() => {
@@ -124,7 +126,9 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
         if (current) list.push(current as { id: string; name: string; icon: string });
       }
       setProjects(list);
-      setSubtasks((st.data || []).map((s) => ({ id: s.id, title: s.title, completed: s.completed })));
+      if (!subtasksDirty.current) {
+        setSubtasks((st.data || []).map((s) => ({ id: s.id, title: s.title, completed: s.completed })));
+      }
       setExtensionHistory(ext.data || []);
     });
   }, [task.id, displayDueDate, task.project_id]);
@@ -279,6 +283,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
       toast.error("Add a title or description first");
       return;
     }
+    const startedDescription = description;
     setAiBusy(kind);
     try {
       const result = await assistTask({
@@ -287,10 +292,16 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
         description,
       });
       if (kind === "description" && result.description) {
-        setDescription(result.description);
-        toast.success("Description updated. Save the task to keep it.");
+        let applied = false;
+        setDescription((current) => {
+          if (current !== startedDescription) return current;
+          applied = true;
+          return result.description!;
+        });
+        if (applied) toast.success("Description updated. Save the task to keep it.");
       }
       if (kind === "subtasks" && result.subtasks?.length) {
+        subtasksDirty.current = true;
         setSubtasks((current) => {
           const existing = new Set(current.map((item) => item.title.trim().toLowerCase()));
           const added = result.subtasks!
@@ -386,6 +397,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
                     onChange={setDescription}
                     rows={5}
                     excludeTaskId={task.id}
+                    disabled={aiBusy === "description"}
                   />
                   <p className="text-[10px] leading-snug text-muted-foreground">
                     Improve and subtask suggestions use Muse Spark. That text may be used to improve Meta models.
@@ -689,8 +701,11 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
 
             <SubtaskEditor
               subtasks={subtasks}
-              onChange={setSubtasks}
-              disabled={saving}
+              onChange={(next) => {
+                subtasksDirty.current = true;
+                setSubtasks(next);
+              }}
+              disabled={saving || aiBusy === "subtasks"}
               showCompleted
             />
 
