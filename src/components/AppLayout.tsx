@@ -54,7 +54,7 @@ const AppLayout = () => {
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Mobile top bar */}
-        <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-card/80 backdrop-blur-sm shrink-0">
+        <header className="md:hidden flex items-center gap-3 px-4 h-14 border-b bg-card shrink-0">
           <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" />
           </Button>

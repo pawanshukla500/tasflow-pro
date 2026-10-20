@@ -12,7 +12,7 @@ interface AuthShellProps {
 export function AuthShell({ title, subtitle, children }: AuthShellProps) {
   return (
     <div className="min-h-screen flex bg-background">
-      <aside className="hidden lg:flex lg:w-[48%] relative overflow-hidden text-primary-foreground p-10 xl:p-14 flex-col justify-between bg-primary">
+      <aside className="hidden lg:flex lg:w-[44%] relative overflow-hidden text-sidebar-foreground p-10 xl:p-14 flex-col justify-between bg-sidebar">
         <div
           aria-hidden
           className="absolute inset-0 opacity-[0.12]"
@@ -35,19 +35,19 @@ export function AuthShell({ title, subtitle, children }: AuthShellProps) {
         </div>
 
         <div className="relative z-10 space-y-6 max-w-lg">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-white/15 backdrop-blur text-sm font-medium ring-1 ring-white/20">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-white/10 text-sm font-medium ring-1 ring-white/15">
             <Shield className="w-4 h-4" aria-hidden />
             Protected reset flow
           </div>
-          <h2 className="font-display text-3xl xl:text-4xl font-bold leading-[1.15] tracking-tight text-balance">
+          <h2 className="font-display text-3xl xl:text-4xl font-bold leading-[1.15] tracking-tight text-balance text-sidebar-foreground">
             Your workspace, protected.
           </h2>
-          <p className="text-base text-primary-foreground/85 leading-relaxed">
+          <p className="text-base text-sidebar-foreground/75 leading-relaxed">
             Reset links open on TaskFlow Pro — the same branded experience as the rest of your app.
           </p>
         </div>
 
-        <p className="relative z-10 text-xs text-primary-foreground/55">
+        <p className="relative z-10 text-xs text-sidebar-foreground/45">
           © {new Date().getFullYear()} TaskFlow Pro
         </p>
       </aside>

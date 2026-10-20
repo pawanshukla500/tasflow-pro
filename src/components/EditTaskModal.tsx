@@ -320,9 +320,9 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
 
   return (
     <>
-      <div className="fixed inset-0 bg-foreground/20 z-50 animate-fade-in" onClick={onClose} />
+      <div className="modal-scrim" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-card rounded-lg border shadow-lg w-full max-w-6xl h-[min(92vh,52rem)] max-h-[92vh] flex flex-col animate-fade-in">
+        <div className="bg-card rounded-2xl border border-border/80 shadow-2xl w-full max-w-6xl h-[min(92vh,52rem)] max-h-[92vh] flex flex-col animate-fade-in overflow-hidden">
           <div className="flex items-start justify-between gap-3 border-b px-4 py-3">
             <div className="min-w-0">
               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">

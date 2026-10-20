@@ -78,29 +78,30 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
 
   return (
     <aside className={cn(
-      "h-full bg-sidebar border-r border-sidebar-border flex flex-col transition-all duration-200",
+      "h-full bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col transition-all duration-200",
       mobile ? "w-full" : "h-screen shrink-0",
-      !mobile && (isCollapsed ? "w-14" : "w-60"),
+      !mobile && (isCollapsed ? "w-16" : "w-64"),
     )}>
       <div className={cn(
-        "p-3 flex items-center gap-2 border-b border-sidebar-border",
-        isCollapsed && !mobile && "flex-col justify-center gap-1.5 p-2",
+        "px-3 py-4 flex items-center gap-2",
+        isCollapsed && !mobile && "flex-col justify-center gap-1.5 px-2 py-3",
       )}>
         {!isCollapsed ? (
           <BrandLockup
             size="md"
-            tone="auto"
+            tone="onDark"
+            invertedText
             className="flex-1 min-w-0"
-            subtitle={user?.organization?.name || "Enterprise Workspace"}
+            subtitle={user?.organization?.name || "Workspace"}
           />
         ) : (
-          !mobile && <BrandLogo size="sm" tone="auto" alt="TaskFlow Pro" />
+          !mobile && <BrandLogo size="sm" tone="onDark" alt="TaskFlow Pro" />
         )}
         {!mobile && (
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground cursor-pointer"
+            className="h-8 w-8 shrink-0 text-sidebar-foreground/70 hover:bg-white/10 hover:text-sidebar-foreground cursor-pointer"
             onClick={() => setCollapsed(!collapsed)}
             aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
@@ -112,7 +113,7 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
       {canCreateTask && (
         <div className="p-2">
           <Button
-            className="w-full justify-start gap-2 press-scale group/new bg-gradient-to-r from-primary to-primary/85 shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30"
+            className="w-full justify-start gap-2 press-scale group/new bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 shadow-none"
             size={isCollapsed ? "icon" : "sm"}
             onClick={onNewTask}
           >
@@ -125,7 +126,7 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
       <div className="px-2 mb-1">
         <Button
           variant="ghost"
-          className={cn("w-full justify-start gap-2 text-muted-foreground hover:text-foreground", isCollapsed && "justify-center")}
+          className={cn("w-full justify-start gap-2 text-sidebar-foreground/75 hover:bg-white/10 hover:text-sidebar-foreground", isCollapsed && "justify-center")}
           size="sm"
           onClick={onSearch}
         >
@@ -133,7 +134,7 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
           {!isCollapsed && (
             <>
               <span className="flex-1 text-left text-xs">Search tasks</span>
-              <kbd className="hidden lg:inline text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
+              <kbd className="hidden lg:inline text-[10px] bg-white/10 text-sidebar-foreground/80 px-1.5 py-0.5 rounded-md font-mono">⌘K</kbd>
             </>
           )}
         </Button>
@@ -143,7 +144,7 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
         {navItems.map((group, gi) => (
           <div key={gi}>
             {group.group && !isCollapsed && (
-              <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-widest px-2.5 mb-1.5">{group.group}</p>
+              <p className="text-[10px] font-semibold text-sidebar-foreground/40 uppercase tracking-widest px-2.5 mb-1.5">{group.group}</p>
             )}
             <div className="space-y-0.5 stagger-children">
               {group.items.filter((item) => {
@@ -160,20 +161,14 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
                     key={item.path}
                     onClick={() => go(item.path)}
                     className={cn(
-                      "relative w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm transition-all press-scale group/nav",
+                      "relative w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors group/nav",
                       active
-                        ? "bg-gradient-to-r from-primary to-primary/90 text-primary-foreground font-medium shadow-md shadow-primary/20 animate-pop"
-                        : "text-sidebar-foreground hover:bg-muted/80 hover:translate-x-0.5",
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                        : "text-sidebar-foreground/80 hover:bg-white/10 hover:text-sidebar-foreground",
                       isCollapsed && "justify-center px-2",
                     )}
                   >
-                    {active && !isCollapsed && (
-                      <span className="absolute -left-2 top-1/2 -translate-y-1/2 w-1 h-5 rounded-full bg-primary animate-pop" aria-hidden />
-                    )}
-                    <item.icon className={cn(
-                      "h-4 w-4 shrink-0 transition-transform group-hover/nav:scale-110",
-                      active && "text-primary-foreground",
-                    )} />
+                    <item.icon className="h-4 w-4 shrink-0" />
                     {!isCollapsed && <span className="truncate flex-1 text-left">{item.label}</span>}
                   </button>
                 );
@@ -184,15 +179,15 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
       </nav>
 
       <div className="px-2 pb-2">
-        <NotificationCenter collapsed={isCollapsed && !mobile} />
+        <NotificationCenter collapsed={isCollapsed && !mobile} className="text-sidebar-foreground/80 hover:bg-white/10 hover:text-sidebar-foreground" />
       </div>
 
       <div className="p-2 border-t border-sidebar-border">
         <div className={cn(
-          "flex items-center gap-2 p-2 rounded-xl bg-muted/40 hover:bg-muted/70 transition-colors border border-transparent hover:border-border",
+          "flex items-center gap-2 p-2 rounded-xl bg-white/5 border border-white/10",
           isCollapsed && !mobile && "justify-center p-1.5",
         )}>
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center text-xs font-semibold shrink-0 overflow-hidden ring-2 ring-background shadow-sm">
+          <div className="w-9 h-9 rounded-full bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center text-xs font-semibold shrink-0 overflow-hidden">
             {user?.profile?.avatar_url ? (
               <img src={user.profile.avatar_url} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
             ) : (
@@ -202,18 +197,18 @@ const AppSidebar = ({ onNewTask, onSearch, onNavigate, mobile = false }: AppSide
           {!isCollapsed && (
             <>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-foreground truncate">{user?.profile?.name || "User"}</p>
+                <p className="text-xs font-semibold text-sidebar-foreground truncate">{user?.profile?.name || "User"}</p>
                 {user?.roles[0] ? (
-                  <RoleBadge role={user.roles[0]} className="mt-0.5" />
+                  <RoleBadge role={user.roles[0]} className="mt-0.5 bg-white/10 text-sidebar-foreground border-white/15" />
                 ) : (
-                  <p className="text-[10px] text-muted-foreground truncate">Team Member</p>
+                  <p className="text-[10px] text-sidebar-foreground/60 truncate">Team Member</p>
                 )}
               </div>
               <div className="flex items-center gap-0.5 shrink-0">
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleTheme} aria-label="Toggle theme">
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground/70 hover:bg-white/10 hover:text-sidebar-foreground" onClick={toggleTheme} aria-label="Toggle theme">
                   {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={handleSignOut} aria-label="Sign out">
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground/70 hover:bg-white/10 hover:text-red-300" onClick={handleSignOut} aria-label="Sign out">
                   <LogOut className="h-3.5 w-3.5" />
                 </Button>
               </div>
