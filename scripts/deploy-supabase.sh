@@ -148,6 +148,14 @@ else
   echo "    npx supabase secrets set GOOGLE_AI_API_KEY=your-key --project-ref $PROJECT_REF"
 fi
 
+if [[ -n "${META_MODEL_API_KEY:-}" ]]; then
+  echo "==> Setting META_MODEL_API_KEY for task writing help (Muse Spark)..."
+  $SUPABASE_CLI secrets set "META_MODEL_API_KEY=${META_MODEL_API_KEY}" --project-ref "$PROJECT_REF"
+else
+  echo "==> META_MODEL_API_KEY not set — Improve, subtasks, and draft update stay unavailable."
+  echo "    npx supabase secrets set META_MODEL_API_KEY=your-key --project-ref $PROJECT_REF"
+fi
+
 # Bundling pulls public.ecr.aws/supabase/edge-runtime. GitHub runners sometimes
 # hit the registry data limit; a short retry usually clears it.
 deploy_function() {
@@ -173,7 +181,7 @@ GOOGLE_FUNCTIONS=(
 CORE_FUNCTIONS=(
   firebase-auth create-team-member delete-team-member register-organization
   manage-email-suppression email-system-smoke-test
-  firebase-upload daily-motivation notify-task-assigned notify-workflow-stage
+  firebase-upload daily-motivation task-assist notify-task-assigned notify-workflow-stage
   kwikengage-webhook
   process-email-queue send-daily-digest send-department-daily-summary
   send-weekly-pending-report send-admin-daily-overview send-due-reminders

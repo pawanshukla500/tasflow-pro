@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { format } from "date-fns";
-import { X, CalendarIcon, ShieldCheck, Send, CheckCircle, XCircle, Clock } from "lucide-react";
+import { X, CalendarIcon, ShieldCheck, Send, CheckCircle, XCircle, Clock, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +23,7 @@ import { EntityLookupField, EntityLinkPreview } from "@/components/EntityLookupF
 import { useProjectSections } from "@/hooks/useProjectSections";
 import { resolveTaskContainerAssignment, sectionIdForProject } from "@/lib/projectLookup";
 import { isUnknownColumnError, omitTaskHourColumns, parseNonNegativeNumber } from "@/lib/projectBudget";
+import { assistTask } from "@/lib/taskAi";
 import {
   allowedStatusesForUser,
   canApproveOrRejectReview,
@@ -79,6 +80,8 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
   const { sections, loading: sectionsLoading } = useProjectSections(projectId || undefined);
   const [subtasks, setSubtasks] = useState<SubtaskDraft[]>([]);
   const [showExtendDue, setShowExtendDue] = useState(false);
+  const [aiBusy, setAiBusy] = useState<"description" | "subtasks" | null>(null);
+  const subtasksDirty = useRef(false);
   const [displayDueDate, setDisplayDueDate] = useState(task.due_date);
   const [extensionHistory, setExtensionHistory] = useState<
     { old_due_date: string | null; new_due_date: string; reason: string; created_at: string }[]
@@ -100,6 +103,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
     setRequiresReview(!!task.requires_review);
     setReviewerUserId(task.reviewer_user_id || "");
     setDisplayDueDate(task.due_date);
+    subtasksDirty.current = false;
   }, [task.id]);
 
   useEffect(() => {
@@ -122,7 +126,9 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
         if (current) list.push(current as { id: string; name: string; icon: string });
       }
       setProjects(list);
-      setSubtasks((st.data || []).map((s) => ({ id: s.id, title: s.title, completed: s.completed })));
+      if (!subtasksDirty.current) {
+        setSubtasks((st.data || []).map((s) => ({ id: s.id, title: s.title, completed: s.completed })));
+      }
       setExtensionHistory(ext.data || []);
     });
   }, [task.id, displayDueDate, task.project_id]);
@@ -267,19 +273,67 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
     return people.filter((person) => person.id !== user?.id);
   }, [task.assignees, task.created_by, task.creator_name, task.reviewer_user_id, users, user?.id]);
 
+  const assigneeName = (id: string) =>
+    users.find((person) => person.id === id)?.name
+    || task.assignees.find((assignee) => assignee.user_id === id)?.name
+    || "Teammate";
+
+  const runAssist = async (kind: "description" | "subtasks") => {
+    if (!title.trim() && !description.trim()) {
+      toast.error("Add a title or description first");
+      return;
+    }
+    const startedDescription = description;
+    setAiBusy(kind);
+    try {
+      const result = await assistTask({
+        action: kind === "description" ? "improve_description" : "suggest_subtasks",
+        title: title.trim() || task.title,
+        description,
+      });
+      if (kind === "description" && result.description) {
+        let applied = false;
+        setDescription((current) => {
+          if (current !== startedDescription) return current;
+          applied = true;
+          return result.description!;
+        });
+        if (applied) toast.success("Description updated. Save the task to keep it.");
+      }
+      if (kind === "subtasks" && result.subtasks?.length) {
+        subtasksDirty.current = true;
+        setSubtasks((current) => {
+          const existing = new Set(current.map((item) => item.title.trim().toLowerCase()));
+          const added = result.subtasks!
+            .filter((item) => !existing.has(item.toLowerCase()))
+            .map((item) => ({ title: item, completed: false }));
+          return added.length ? [...current, ...added] : current;
+        });
+        toast.success("Subtasks added. Save the task to keep them.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "AI suggestion failed");
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
   return (
     <>
       <div className="fixed inset-0 bg-foreground/20 z-50 animate-fade-in" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-card rounded-lg border shadow-lg w-full max-w-6xl max-h-[min(92vh,56rem)] flex flex-col animate-fade-in">
-          <div className="flex items-center justify-between p-4 border-b">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">{canEdit ? "Edit Task" : "View Task"}</h2>
+        <div className="bg-card rounded-lg border shadow-lg w-full max-w-6xl h-[min(92vh,52rem)] max-h-[92vh] flex flex-col animate-fade-in">
+          <div className="flex items-start justify-between gap-3 border-b px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {canEdit ? "Edit task" : "View task"}
+              </p>
+              <h2 className="truncate text-lg font-semibold text-foreground">{title.trim() || "Untitled task"}</h2>
               {!canEdit && (
                 <p className="text-xs text-muted-foreground mt-0.5">You can update progress and status only.</p>
               )}
             </div>
-            <Button variant="ghost" size="icon" className="h-11 w-11" onClick={onClose} aria-label="Close"><X className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" onClick={onClose} aria-label="Close"><X className="h-4 w-4" /></Button>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(18.5rem,24rem)] lg:overflow-hidden">
@@ -307,14 +361,48 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
             </div>
 
             <div className="space-y-2">
-              <Label>Description</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label>Description</Label>
+                {canEdit && (
+                  <div className="flex flex-wrap gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-11"
+                      disabled={aiBusy !== null}
+                      onClick={() => void runAssist("description")}
+                    >
+                      {aiBusy === "description" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                      Improve
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-11"
+                      disabled={aiBusy !== null}
+                      onClick={() => void runAssist("subtasks")}
+                    >
+                      {aiBusy === "subtasks" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                      Suggest subtasks
+                    </Button>
+                  </div>
+                )}
+              </div>
               {canEdit ? (
-                <EntityLookupField
-                  value={description}
-                  onChange={setDescription}
-                  rows={3}
-                  excludeTaskId={task.id}
-                />
+                <>
+                  <EntityLookupField
+                    value={description}
+                    onChange={setDescription}
+                    rows={5}
+                    excludeTaskId={task.id}
+                    disabled={aiBusy === "description"}
+                  />
+                  <p className="text-[10px] leading-snug text-muted-foreground">
+                    Improve and subtask suggestions use Muse Spark. That text may be used to improve Meta models.
+                  </p>
+                </>
               ) : (
                 <>
                   <p className="text-sm whitespace-pre-wrap rounded-md border bg-muted/30 px-3 py-2 min-h-[4.5rem]">
@@ -338,7 +426,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
                           <div className="flex flex-wrap gap-1">
                             {assignees.map((id) => {
                               const u = users.find((x) => x.id === id);
-                              return <Badge key={id} variant="secondary" className="text-xs">{u?.name || "Unknown"}</Badge>;
+                              return <Badge key={id} variant="secondary" className="text-xs">{assigneeName(id)}</Badge>;
                             })}
                           </div>
                         )}
@@ -613,8 +701,11 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
 
             <SubtaskEditor
               subtasks={subtasks}
-              onChange={setSubtasks}
-              disabled={saving}
+              onChange={(next) => {
+                subtasksDirty.current = true;
+                setSubtasks(next);
+              }}
+              disabled={saving || aiBusy === "subtasks"}
               showCompleted
             />
 
@@ -628,14 +719,16 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
                 currentUserId={user?.id ?? null}
                 currentUserName={user?.profile?.name ?? null}
                 fallbackParticipants={fallbackParticipants}
+                taskTitle={title}
+                taskDescription={description}
               />
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 p-4 border-t">
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving || (canEdit && assignees.length === 0)}>
-              {saving ? "Saving…" : canEdit ? "Save Changes" : "Update Status"}
+          <div className="flex items-center justify-end gap-2 border-t bg-card px-4 py-3">
+            <Button variant="outline" className="h-11" onClick={onClose}>Cancel</Button>
+            <Button className="h-11" onClick={handleSave} disabled={saving || (canEdit && assignees.length === 0)}>
+              {saving ? "Saving…" : canEdit ? "Save changes" : "Update status"}
             </Button>
           </div>
         </div>
