@@ -31,16 +31,16 @@ describe("task assignment email policy", () => {
 });
 
 describe("email cron SQL", () => {
-  it("schedules send-daily-digest at 09:30 IST with Authorization and the Vault-key RPC", () => {
+  it("schedules send-daily-digest at 10:00 IST Mon–Sat with Authorization and the Vault-key RPC", () => {
     const sql = readFileSync(resolve(srcDir, "../scripts/fix-email-crons.sql"), "utf8");
     expect(sql).toMatch(/cron\.schedule\(\s*'send-daily-digest'[\s\S]*?Authorization/);
+    expect(sql).toMatch(/cron\.schedule\(\s*'send-daily-digest',\s*'30 4 \* \* 1-6'/);
     expect(sql).toContain("x-internal-service-key");
     expect(sql).toContain("timeout_milliseconds");
-    expect(sql).toContain("0 4 * * 1-6");
     expect(sql).toContain("internal_cron_key_matches");
   });
 
-  it("queues today's digest after functions deploy so merge recovers a missed 09:30 IST run", () => {
+  it("queues today's digest after functions deploy so merge recovers a missed 10:00 IST run", () => {
     const deploy = readFileSync(resolve(srcDir, "../scripts/deploy-supabase.sh"), "utf8");
     const nowSql = readFileSync(resolve(srcDir, "../scripts/send-daily-digest-now.sql"), "utf8");
     const migration = readFileSync(

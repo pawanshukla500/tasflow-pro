@@ -40,6 +40,8 @@ project_id = "nekdjoquirhecmejuoba"
     verify_jwt = true
   [functions.email-system-smoke-test]
     verify_jwt = true
+  [functions.trigger-daily-digest]
+    verify_jwt = true
   [functions.firebase-auth]
     verify_jwt = false
   [functions.register-organization]

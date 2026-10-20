@@ -1,4 +1,4 @@
--- Queue send-daily-digest once via pg_net (same headers as the 09:30 IST cron).
+-- Queue send-daily-digest once via pg_net (same headers as the 10:00 IST cron).
 -- CI substitutes __DIGEST_URL__ with https://$PROJECT_REF.supabase.co/functions/v1/send-daily-digest
 -- so this never posts to a hardcoded production host.
 -- Safe to re-run: the function's idempotency key is daily-digest-<IST date>-<user>.

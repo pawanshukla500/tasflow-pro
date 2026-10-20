@@ -1,5 +1,5 @@
 // Daily digest: consolidated pending / due / overdue tasks (+ workflow stages) per active user.
-// Schedule via pg_cron Mon–Sat at 09:30 IST (04:00 UTC). Skips users with nothing pending.
+// Schedule via pg_cron Mon–Sat at 10:00 IST (04:30 UTC). Skips users with nothing pending.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { istToday, istAddDays } from "../_shared/ist.ts";
 import { dispatchTransactionalEmail } from "../_shared/dispatch-transactional-email.ts";

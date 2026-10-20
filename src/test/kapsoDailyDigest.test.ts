@@ -9,7 +9,7 @@ import {
   buildKapsoDailyDigestPayload,
   sanitizeTemplateText,
 } from "../../supabase/functions/_shared/kapso";
-import { toWhatsAppDigits } from "../../supabase/functions/_shared/kwikengage";
+import { toWhatsAppDigits, isIndiaTeamMobile } from "../../supabase/functions/_shared/kwikengage";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -27,7 +27,7 @@ const TEAM_MOBILES = [
   "+91 9512196297",
   "+91 7984749725",
   "+91 9825149497",
-  "+91  6376573077",
+  "+91 6376573077",
   "+91 9426279142",
   "+91 8460803493",
   "+91 9913039677",
@@ -42,10 +42,12 @@ const TEAM_MOBILES = [
 
 describe("Kapso daily digest WhatsApp", () => {
   it("parses every active teammate mobile with country code to 12-digit WhatsApp ids", () => {
+    expect(toWhatsAppDigits("+91  6376573077")).toBe("916376573077");
     expect(TEAM_MOBILES).toHaveLength(24);
     for (const mobile of TEAM_MOBILES) {
       const digits = toWhatsAppDigits(mobile);
       expect(digits, mobile).toMatch(/^91\d{10}$/);
+      expect(isIndiaTeamMobile(mobile), mobile).toBe(true);
     }
   });
 
@@ -144,6 +146,38 @@ describe("Kapso daily digest WhatsApp", () => {
     expect(nowSql).toContain('{"smoke_admins": true}');
     expect(cronSql).toContain("body := '{}'::jsonb");
     expect(cronSql).not.toContain("smoke_admins");
+    expect(cronSql).toMatch(/cron\.schedule\(\s*'send-daily-digest',\s*'30 4 \* \* 1-6'/);
     expect(toWhatsAppDigits("+91 9426279142")).toBe("919426279142");
+  });
+
+  it("lets Admin Settings check names/numbers and send today's digest by hand", () => {
+    const panel = readFileSync(resolve(repoRoot, "src/components/AdminSettingsPanel.tsx"), "utf8");
+    const smoke = readFileSync(
+      resolve(repoRoot, "supabase/functions/email-system-smoke-test/index.ts"),
+      "utf8",
+    );
+    const trigger = readFileSync(
+      resolve(repoRoot, "supabase/functions/trigger-daily-digest/index.ts"),
+      "utf8",
+    );
+    const deploy = readFileSync(resolve(repoRoot, "scripts/deploy-supabase.sh"), "utf8");
+    const config = readFileSync(resolve(repoRoot, "supabase/config.toml"), "utf8");
+    const migration = readFileSync(
+      resolve(repoRoot, "supabase/migrations/20260918160000_daily_digest_10am_mon_sat.sql"),
+      "utf8",
+    );
+    expect(panel).toContain("Check who would get it");
+    expect(panel).toContain("Send today's digest");
+    expect(panel).toContain("trigger-daily-digest");
+    expect(panel).toContain("10:00 AM IST");
+    expect(smoke).toContain("whatsappDigits");
+    expect(smoke).toContain("phoneFormatOk");
+    expect(smoke).toContain("isIndiaTeamMobile");
+    expect(trigger).toContain("is_admin_or_md");
+    expect(trigger).toContain("send-daily-digest");
+    expect(trigger).toContain("daily_digest.manual_send");
+    expect(deploy).toContain("trigger-daily-digest");
+    expect(config).toContain("[functions.trigger-daily-digest]");
+    expect(migration).toContain("30 4 * * 1-6");
   });
 });

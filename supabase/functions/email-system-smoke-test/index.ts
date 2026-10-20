@@ -15,6 +15,8 @@
 // reset arrived, the digest to a teammate never did."
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { istToday } from "../_shared/ist.ts";
+import { loadKapsoConfig } from "../_shared/kapso.ts";
+import { formatIndiaMobileDisplay, isIndiaTeamMobile, toWhatsAppDigits } from "../_shared/kwikengage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -122,14 +124,16 @@ Deno.serve(async (req) => {
     { data: prefsRows },
     { data: orgs },
     { data: recentFailures },
+    { data: workflowStages },
+    kapso,
   ] = await Promise.all([
     checkResendDomain(),
-    admin.from("profiles").select("id, name, email, active, organization_id"),
+    admin.from("profiles").select("id, name, email, mobile_no, active, organization_id"),
     admin.from("user_roles").select("user_id, role"),
     admin.from("task_assignees").select("task_id, user_id"),
     admin.from("tasks").select("id, created_by, due_date, status").neq("status", "done"),
     admin.from("suppressed_emails").select("email, reason"),
-    admin.from("notification_preferences").select("user_id, daily_digest"),
+    admin.from("notification_preferences").select("user_id, daily_digest, whatsapp_alerts"),
     admin.from("organizations").select("id, settings"),
     admin
       .from("email_send_log")
@@ -138,6 +142,8 @@ Deno.serve(async (req) => {
       .gte("created_at", failureSince)
       .order("created_at", { ascending: false })
       .limit(30),
+    admin.from("workflow_stages").select("assignee_user_id").in("status", ["pending", "in_progress"]),
+    loadKapsoConfig(supabaseUrl, serviceRoleKey),
   ]);
 
   const roleByUser = new Map<string, string[]>();
@@ -149,6 +155,12 @@ Deno.serve(async (req) => {
 
   const suppressedSet = new Set((suppressedRows || []).map((s) => s.email.toLowerCase()));
   const prefByUser = new Map((prefsRows || []).map((p) => [p.user_id, p.daily_digest]));
+  const waPrefByUser = new Map((prefsRows || []).map((p) => [p.user_id, p.whatsapp_alerts]));
+  const stagesByUser = new Map<string, number>();
+  for (const s of workflowStages || []) {
+    if (!s.assignee_user_id) continue;
+    stagesByUser.set(s.assignee_user_id, (stagesByUser.get(s.assignee_user_id) || 0) + 1);
+  }
   const orgDigestEnabled = new Map<string, boolean>();
   for (const o of orgs || []) {
     const settings = (o.settings || {}) as { email?: { daily_digest_enabled?: boolean } };
@@ -175,7 +187,11 @@ Deno.serve(async (req) => {
   const members = (profiles || []).map((p) => {
     const roles = roleByUser.get(p.id) || ["employee"];
     const email = (p.email || "").toLowerCase();
-    const pendingCount = tasksByUser.get(p.id) || 0;
+    const pendingCount = (tasksByUser.get(p.id) || 0) + (stagesByUser.get(p.id) || 0);
+    const mobileNo = (p.mobile_no || "").trim() || null;
+    const whatsappDigits = toWhatsAppDigits(mobileNo);
+    const phoneFormatOk = isIndiaTeamMobile(mobileNo);
+    const displayMobile = formatIndiaMobileDisplay(mobileNo);
 
     let verdict: string;
     if (!p.email) verdict = "skipped_no_email";
@@ -186,13 +202,26 @@ Deno.serve(async (req) => {
     else if (pendingCount === 0) verdict = "skipped_no_pending_tasks";
     else verdict = "would_send";
 
+    let whatsappVerdict: string;
+    if (p.active === false) whatsappVerdict = "skipped_inactive";
+    else if (waPrefByUser.get(p.id) === false) whatsappVerdict = "skipped_pref";
+    else if (!whatsappDigits) whatsappVerdict = "skipped_no_phone";
+    else if (!kapso) whatsappVerdict = "skipped_no_kapso_key";
+    else if (pendingCount === 0) whatsappVerdict = "skipped_no_pending_tasks";
+    else whatsappVerdict = "would_send";
+
     return {
-      name: p.name,
+      name: (p.name || "").trim() || "(no name)",
       email: p.email,
       roles,
       active: p.active !== false,
       pendingTaskCount: pendingCount,
+      mobileNo,
+      displayMobile,
+      whatsappDigits,
+      phoneFormatOk,
       verdict,
+      whatsappVerdict,
     };
   });
 
@@ -216,11 +245,17 @@ Deno.serve(async (req) => {
           : undefined,
       recipients: adminRecipients.map((m) => ({ name: m.name, email: m.email, roles: m.roles })),
     },
+    kapso: {
+      configured: Boolean(kapso),
+      schedule: "Mon–Sat 10:00 AM IST (no Sunday)",
+    },
     recentFailures: recentFailures || [],
     members: members.sort((a, b) => {
       // Surface problems first: would_send and real skips before healthy no-task skips.
       const order = (v: string) => (v === "would_send" ? 0 : v === "skipped_no_pending_tasks" ? 3 : 1);
-      return order(a.verdict) - order(b.verdict);
+      const phoneIssue = a.phoneFormatOk === false && a.active ? -1 : 0;
+      const phoneIssueB = b.phoneFormatOk === false && b.active ? -1 : 0;
+      return (phoneIssue - phoneIssueB) || (order(a.verdict) - order(b.verdict));
     }),
   });
 });

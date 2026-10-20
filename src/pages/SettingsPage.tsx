@@ -30,6 +30,7 @@ import { todayIST } from "@/lib/time";
 import { PageHeader } from "@/components/PageHeader";
 import { AdminSettingsPanel } from "@/components/AdminSettingsPanel";
 import { McpTokensPanel } from "@/components/McpTokensPanel";
+import { formatIndiaMobileDisplay } from "../../supabase/functions/_shared/kwikengage";
 import {
   type GoogleConnection,
   connectGoogle,
@@ -64,7 +65,7 @@ const GmailLogo = ({ className = "h-6 w-6" }: { className?: string }) => (
 const notificationEvents = [
   { label: "Task assignment emails", dbKey: "task_assigned" as const },
   { label: "Monthly report email", dbKey: "monthly_report" as const },
-  { label: "Daily pending briefing (9:30 AM IST, Mon–Sat)", dbKey: "daily_digest" as const },
+  { label: "Daily pending briefing (10:00 AM IST, Mon–Sat)", dbKey: "daily_digest" as const },
 ];
 
 const SettingsPage = () => {
@@ -180,9 +181,15 @@ const SettingsPage = () => {
     if (!user) return;
     setSaving(true);
     try {
+      const formattedMobile = formatIndiaMobileDisplay(mobileNo);
+      if (mobileNo.trim() && mobileNo.trim() !== "+91" && !formattedMobile) {
+        toast.error("Mobile must be +91 followed by 10 digits");
+        setSaving(false);
+        return;
+      }
       const { error } = await supabase
         .from("profiles")
-        .update({ name, position, mobile_no: mobileNo })
+        .update({ name: name.trim(), position, mobile_no: formattedMobile || null })
         .eq("id", user.id);
       if (error) throw error;
       await refetchProfile();
@@ -418,7 +425,7 @@ const SettingsPage = () => {
                   if (!v.startsWith("+91")) setMobileNo("+91 " + v.replace(/^\+?91\s?/, ""));
                   else setMobileNo(v);
                 }}
-                placeholder="+91 XXXXX XXXXX"
+                placeholder="+91 XXXXXXXXXX"
               />
               <p className="text-xs text-muted-foreground">
                 WhatsApp task alerts are sent to this number.

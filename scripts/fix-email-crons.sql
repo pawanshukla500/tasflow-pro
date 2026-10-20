@@ -2,7 +2,7 @@
 -- Safe to re-run via SQL Editor or `supabase db query -f` (single statement).
 -- Canonical file — CI runs this on every deploy (scripts/deploy-supabase.sh).
 --
--- Daily digest: Mon–Sat 09:30 IST = 04:00 UTC (no Sunday)
+-- Daily digest: Mon–Sat 10:00 IST = 04:30 UTC (no Sunday)
 -- Dept manager summary: daily 08:30 IST = 03:00 UTC
 -- Admin daily overview: Mon–Sat 09:30 IST = 04:00 UTC
 -- Weekly leadership (Admin/MD): Friday 09:00 IST = 03:30 UTC
@@ -76,7 +76,7 @@ BEGIN
 
   PERFORM cron.schedule(
     'send-daily-digest',
-    '0 4 * * 1-6', -- Mon–Sat 09:30 IST
+    '30 4 * * 1-6', -- Mon–Sat 10:00 IST
     $cron$
     SELECT net.http_post(
       url := 'https://nekdjoquirhecmejuoba.supabase.co/functions/v1/send-daily-digest',
@@ -236,5 +236,5 @@ BEGIN
     $cron$
   );
 
-  RAISE NOTICE 'Email crons set: daily digest + admin overview Mon–Sat 09:30 IST; dept summary daily 08:30 IST; weekly leadership Friday 09:00 IST; monthly on the 1st; queue flush every minute. All jobs send Authorization + x-internal-service-key.';
+  RAISE NOTICE 'Email crons set: daily digest Mon–Sat 10:00 IST; admin overview Mon–Sat 09:30 IST; dept summary daily 08:30 IST; weekly leadership Friday 09:00 IST; monthly on the 1st; queue flush every minute. All jobs send Authorization + x-internal-service-key.';
 END $$;

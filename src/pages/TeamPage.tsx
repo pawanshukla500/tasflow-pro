@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { shouldShowInPerformanceLeaderboard } from "@/lib/performanceVisibility";
 import { todayIST } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { formatIndiaMobileDisplay } from "../../supabase/functions/_shared/kwikengage";
 
 interface ProfileWithRole {
   id: string;
@@ -216,7 +217,13 @@ const TeamPage = () => {
     }
     setFormLoading(true);
     try {
-      const cleanedMobile = formMobile && formMobile.trim() !== "+91" ? formMobile.trim() : null;
+      const formattedMobile = formatIndiaMobileDisplay(formMobile);
+      if (formMobile && formMobile.trim() !== "+91" && !formattedMobile) {
+        toast({ title: "Invalid mobile", description: "Use +91 followed by 10 digits.", variant: "destructive" });
+        setFormLoading(false);
+        return;
+      }
+      const cleanedMobile = formattedMobile;
       const managedDepts =
         formRole === "department_manager" && formDept
           ? [formDept]
@@ -270,9 +277,15 @@ const TeamPage = () => {
     if (!editMember) return;
     setFormLoading(true);
     try {
+      const formattedMobile = formatIndiaMobileDisplay(formMobile);
+      if (formMobile && formMobile.trim() !== "+91" && !formattedMobile) {
+        toast({ title: "Invalid mobile", description: "Use +91 followed by 10 digits.", variant: "destructive" });
+        setFormLoading(false);
+        return;
+      }
       await supabase.from("profiles").update({
-        name: formName,
-        mobile_no: formMobile || null,
+        name: formName.trim(),
+        mobile_no: formattedMobile,
         position: formPosition || null,
         department_id: formDept || null,
       }).eq("id", editMember.id);
@@ -357,7 +370,7 @@ const TeamPage = () => {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Mobile No</Label>
-          <Input value={formMobile} onChange={(e) => handleMobileChange(e.target.value)} placeholder="+91 XXXXX XXXXX" />
+          <Input value={formMobile} onChange={(e) => handleMobileChange(e.target.value)} placeholder="+91 XXXXXXXXXX" />
         </div>
         {!isEdit ? (
           <div className="space-y-2">
