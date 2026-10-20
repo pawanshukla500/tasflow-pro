@@ -207,6 +207,12 @@ export function TaskDiscussionView({
   };
 
   const startReply = (comment: DiscussionComment) => {
+    if (editing) {
+      setDraft("");
+      setCursor(0);
+      setFiles([]);
+      setFileError(null);
+    }
     setEditing(null);
     setReplyTo(comment);
     focusInput();
