@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Loader2, MessageSquare, Paperclip, Reply, Send, SquarePen, Trash2, X } from "lucide-react";
+import { Loader2, MessageSquare, Paperclip, Reply, Send, Sparkles, SquarePen, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
   type DiscussionComment,
   type DiscussionParticipant,
 } from "@/lib/taskDiscussion";
+import { assistTask } from "@/lib/taskAi";
 import { formatDateIST, formatDateTimeIST, formatTimeIST } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,8 @@ interface Props {
   currentUserId: string | null;
   currentUserName?: string | null;
   fallbackParticipants?: DiscussionParticipant[];
+  taskTitle?: string;
+  taskDescription?: string;
   /** Tests and the dev preview pass a controller so the panel can run without the network. */
   controller?: TaskDiscussionController;
 }
@@ -95,9 +98,13 @@ function AttachmentList({ comment }: { comment: DiscussionComment }) {
 export function TaskDiscussionView({
   controller,
   currentUserId,
+  taskTitle,
+  taskDescription,
 }: {
   controller: TaskDiscussionController;
   currentUserId: string | null;
+  taskTitle?: string;
+  taskDescription?: string;
 }) {
   const { comments, participants, loading, error, realtime, sending, mode, reload, send, edit, remove } = controller;
   const [draft, setDraft] = useState("");
@@ -108,6 +115,7 @@ export function TaskDiscussionView({
   const [editing, setEditing] = useState<DiscussionComment | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [drafting, setDrafting] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -146,7 +154,10 @@ export function TaskDiscussionView({
 
   const focusInput = () => inputRef.current?.focus();
 
+  const draftRef = useRef(draft);
+  const draftRequest = useRef(0);
   const onDraftChange = (value: string, nextCursor: number) => {
+    draftRef.current = value;
     setDraft(value);
     setCursor(nextCursor);
   };
@@ -218,6 +229,34 @@ export function TaskDiscussionView({
     focusInput();
   };
 
+  const fillDraft = async () => {
+    if (!taskTitle?.trim() && !taskDescription?.trim()) {
+      toast.error("Add a title or description first");
+      return;
+    }
+    const request = ++draftRequest.current;
+    const started = draftRef.current;
+    setDrafting(true);
+    try {
+      const result = await assistTask({
+        action: "draft_update",
+        title: taskTitle || "Task",
+        description: taskDescription,
+        comments: comments.slice(-8).map((comment) => comment.body),
+      });
+      if (request !== draftRequest.current || draftRef.current !== started) return;
+      if (!result.message) throw new Error("AI returned an empty draft");
+      setEditing(null);
+      setReplyTo(null);
+      onDraftChange(result.message, result.message.length);
+      focusInput();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't draft an update");
+    } finally {
+      setDrafting(false);
+    }
+  };
+
   const startEdit = (comment: DiscussionComment) => {
     setReplyTo(null);
     setFiles([]);
@@ -271,13 +310,13 @@ export function TaskDiscussionView({
           <AttachmentList comment={comment} />
           <div className="mt-1 flex flex-wrap gap-1">
             {mode === "full" && !nested && (
-              <Button type="button" variant="ghost" size="sm" className="h-11 px-2 text-xs" onClick={() => startReply(comment)}>
+              <Button type="button" variant="ghost" size="sm" className="h-11 px-2 text-xs" disabled={drafting} onClick={() => startReply(comment)}>
                 <Reply className="mr-1 h-3.5 w-3.5" aria-hidden />
                 Reply
               </Button>
             )}
             {modifiable && (
-              <Button type="button" variant="ghost" size="sm" className="h-11 px-2 text-xs" onClick={() => startEdit(comment)}>
+              <Button type="button" variant="ghost" size="sm" className="h-11 px-2 text-xs" disabled={drafting} onClick={() => startEdit(comment)}>
                 <SquarePen className="mr-1 h-3.5 w-3.5" aria-hidden />
                 Edit
               </Button>
@@ -313,7 +352,7 @@ export function TaskDiscussionView({
   };
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-card" aria-label="Task discussion">
+    <section className="flex h-full min-h-0 flex-col bg-muted/30" aria-label="Task discussion">
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2.5">
         <div className="min-w-0">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
@@ -332,7 +371,7 @@ export function TaskDiscussionView({
 
       <div
         ref={listRef}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
+        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-3"
         onScroll={() => {
           const el = listRef.current;
           if (!el) return;
@@ -354,9 +393,11 @@ export function TaskDiscussionView({
           </div>
         )}
         {!loading && !error && thread.length === 0 && (
-          <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-            Start the conversation. Replies, @mentions, and files stay on this task.
-          </p>
+          <div className="flex flex-1 items-center justify-center px-4 py-8">
+            <p className="max-w-[16rem] text-center text-sm leading-relaxed text-muted-foreground">
+              No messages yet. Reply, mention a teammate, or attach a file. The thread stays on this task.
+            </p>
+          </div>
         )}
         {thread.map((item) => (
           <div key={item.comment.id} className="space-y-1">
@@ -377,7 +418,7 @@ export function TaskDiscussionView({
       )}
 
       <form
-        className="space-y-2 border-t p-3"
+        className="space-y-2 border-t bg-card p-3"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
@@ -458,6 +499,24 @@ export function TaskDiscussionView({
         )}
         {fileError && <p role="alert" className="text-xs text-destructive">{fileError}</p>}
 
+        {taskTitle !== undefined && !editing && (
+          <div className="space-y-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-11"
+              disabled={drafting || sending || !currentUserId}
+              onClick={() => void fillDraft()}
+            >
+              {drafting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+              Draft update
+            </Button>
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              Muse Spark may use this text to improve Meta models.
+            </p>
+          </div>
+        )}
         <div className="flex items-end gap-2">
           {mode === "full" && !editing && (
             <>
@@ -468,7 +527,7 @@ export function TaskDiscussionView({
                 className="h-11 w-11 shrink-0"
                 aria-label="Attach files"
                 onClick={() => fileRef.current?.click()}
-                disabled={sending}
+                disabled={drafting || sending}
               >
                 <Paperclip className="h-4 w-4" />
               </Button>
@@ -493,7 +552,7 @@ export function TaskDiscussionView({
             aria-controls={mentionOpen ? listId : undefined}
             aria-activedescendant={mentionOpen && mentionChoices[mentionIndex] ? mentionChoices[mentionIndex].id : undefined}
             className="min-h-11 flex-1 resize-none"
-            disabled={sending || !currentUserId}
+            disabled={drafting || sending || !currentUserId}
             onChange={(event) => onDraftChange(event.target.value, event.target.selectionStart ?? event.target.value.length)}
             onSelect={(event) => setCursor(event.currentTarget.selectionStart ?? draft.length)}
             onKeyDown={(event) => {
@@ -525,7 +584,7 @@ export function TaskDiscussionView({
               }
             }}
           />
-          <Button type="submit" className="h-11 shrink-0" disabled={sending || !currentUserId || (!draft.trim() && files.length === 0 && !editing)}>
+          <Button type="submit" className="h-11 shrink-0" disabled={drafting || sending || !currentUserId || (!draft.trim() && files.length === 0 && !editing)}>
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             <span className="sr-only">{editing ? "Save message" : "Send message"}</span>
           </Button>
@@ -542,12 +601,26 @@ function TaskDiscussionLive(props: Omit<Props, "controller">) {
     props.currentUserName ?? null,
     props.fallbackParticipants ?? [],
   );
-  return <TaskDiscussionView controller={controller} currentUserId={props.currentUserId} />;
+  return (
+    <TaskDiscussionView
+      controller={controller}
+      currentUserId={props.currentUserId}
+      taskTitle={props.taskTitle}
+      taskDescription={props.taskDescription}
+    />
+  );
 }
 
 const TaskDiscussion = (props: Props) => {
   if (props.controller) {
-    return <TaskDiscussionView controller={props.controller} currentUserId={props.currentUserId} />;
+    return (
+      <TaskDiscussionView
+        controller={props.controller}
+        currentUserId={props.currentUserId}
+        taskTitle={props.taskTitle}
+        taskDescription={props.taskDescription}
+      />
+    );
   }
   return <TaskDiscussionLive {...props} />;
 };
