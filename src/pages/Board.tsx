@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Plus, MoreHorizontal, Calendar, ArrowRight, Trash2, User, Building2,
-  Circle, Loader, Eye, CheckCircle2, Ban, LayoutGrid,
+  Circle, Loader, Eye, CheckCircle2, Ban, LayoutGrid, MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useTasks, TaskRow } from "@/hooks/useTasks";
 import CreateTaskModal from "@/components/CreateTaskModal";
+import EditTaskModal from "@/components/EditTaskModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAccessScope } from "@/hooks/useAccessScope";
 import { ScopeBanner } from "@/components/ScopeBanner";
@@ -106,6 +107,7 @@ const Board = () => {
   const { user, isAdminOrMD, managedDepartments, accessScope } = useAuth();
   const { filterBoardTasks, filterDepartments, filterProfiles } = useAccessScope();
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<TaskRow | null>(null);
   const [dragOverCol, setDragOverCol] = useState<TaskStatus | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [createStatus, setCreateStatus] = useState<string>("todo");
@@ -408,9 +410,13 @@ const Board = () => {
                       )}
                     >
                       <div className="flex items-start gap-2 mb-1.5">
-                        <p className="flex-1 text-sm font-semibold text-foreground leading-snug line-clamp-2 min-w-0">
+                        <button
+                          type="button"
+                          className="flex-1 text-left text-sm font-semibold text-foreground leading-snug line-clamp-2 min-w-0 min-h-11 rounded-sm hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={() => setEditingTask(task)}
+                        >
                           {task.title}
-                        </p>
+                        </button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -424,6 +430,9 @@ const Board = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setEditingTask(task)}>
+                              <MessageSquare className="h-3.5 w-3.5 mr-2" />Open discussion
+                            </DropdownMenuItem>
                             {allowed.filter((s) => s !== task.status).length > 0 && (
                               <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
@@ -494,6 +503,12 @@ const Board = () => {
                             <span className="text-[10px] text-muted-foreground">Unassigned</span>
                           )}
                         </div>
+                        {(task.comment_count ?? 0) > 0 && (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground" title="Discussion messages">
+                            <MessageSquare className="h-3 w-3" aria-hidden />
+                            <span className="font-mono-num">{task.comment_count}</span>
+                          </span>
+                        )}
                         {task.due_date && (
                           <div
                             className={cn(
@@ -530,6 +545,9 @@ const Board = () => {
       </div>
 
       {showCreate && <CreateTaskModal onClose={() => setShowCreate(false)} onCreated={fetchTasks} initialStatus={createStatus} />}
+      {editingTask && (
+        <EditTaskModal task={editingTask} onClose={() => setEditingTask(null)} onSaved={fetchTasks} />
+      )}
     </div>
   );
 };

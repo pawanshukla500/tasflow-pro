@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarClock, ChevronLeft, ChevronRight, RefreshCw, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useTasks } from "@/hooks/useTasks";
+import { useTasks, type TaskRow } from "@/hooks/useTasks";
+import EditTaskModal from "@/components/EditTaskModal";
 import { todayIST, formatDateIST } from "@/lib/time";
 import {
   calendarRangeForMonth,
@@ -17,7 +18,8 @@ const priorityColors: Record<string, string> = {
 };
 
 const CalendarPage = () => {
-  const { tasks, loading } = useTasks();
+  const { tasks, loading, fetchTasks } = useTasks();
+  const [openTask, setOpenTask] = useState<TaskRow | null>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [googleConnected, setGoogleConnected] = useState(false);
   const [googleEvents, setGoogleEvents] = useState<GoogleCalendarEvent[]>([]);
@@ -128,13 +130,16 @@ const CalendarPage = () => {
                       </button>
                     ))}
                     {dayTasks.slice(0, 3).map(t => (
-                      <div
+                      <button
                         key={t.id}
-                        className="w-full text-left text-[10px] px-1.5 py-0.5 rounded truncate text-primary-foreground"
+                        type="button"
+                        onClick={() => setOpenTask(t)}
+                        className="w-full text-left text-[10px] px-1.5 py-0.5 rounded truncate text-primary-foreground min-h-6"
                         style={{ backgroundColor: priorityColors[t.priority] || priorityColors.medium }}
+                        title={`Open ${t.title}`}
                       >
                         {t.title}
-                      </div>
+                      </button>
                     ))}
                     {dayMeetings.length + dayTasks.length > 5 && (
                       <p className="text-[10px] text-muted-foreground px-1">
@@ -147,6 +152,9 @@ const CalendarPage = () => {
             })}
           </div>
         </div>
+      )}
+      {openTask && (
+        <EditTaskModal task={openTask} onClose={() => setOpenTask(null)} onSaved={fetchTasks} />
       )}
     </div>
   );

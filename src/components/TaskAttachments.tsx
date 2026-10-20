@@ -3,6 +3,7 @@ import { Paperclip, X, FileIcon, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { isUnknownColumnError } from "@/lib/projectBudget";
 import { toast } from "sonner";
 
 interface AttachmentRow {
@@ -31,12 +32,23 @@ const TaskAttachments = ({ taskId }: Props) => {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
-    const { data } = await supabase
+    const columns = "id, file_name, file_url, size_bytes, uploaded_by";
+    const filtered = await supabase
       .from("task_attachments")
-      .select("id, file_name, file_url, size_bytes, uploaded_by")
+      .select(columns)
       .eq("task_id", taskId)
+      .is("comment_id", null)
       .order("created_at", { ascending: false });
-    setItems((data as AttachmentRow[]) || []);
+    if (filtered.error && isUnknownColumnError(filtered.error.message)) {
+      const plain = await supabase
+        .from("task_attachments")
+        .select(columns)
+        .eq("task_id", taskId)
+        .order("created_at", { ascending: false });
+      setItems((plain.data as AttachmentRow[]) || []);
+      return;
+    }
+    setItems((filtered.data as AttachmentRow[]) || []);
   };
 
   useEffect(() => {

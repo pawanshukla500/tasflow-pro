@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { X, CalendarIcon, ShieldCheck, Send, CheckCircle, XCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import type { TaskRow } from "@/hooks/useTasks";
 import TaskAttachments from "@/components/TaskAttachments";
+import TaskDiscussion from "@/components/TaskDiscussion";
 import SubtaskEditor, { type SubtaskDraft } from "@/components/SubtaskEditor";
 import TaskReviewDialog from "@/components/TaskReviewDialog";
 import { ExtendTaskDueDateDialog } from "@/components/ExtendTaskDueDateDialog";
@@ -250,12 +251,27 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
 
   const showSubmitReview = canSubmitForReview(task, user?.id);
   const showReviewActions = canApproveOrRejectReview(task, user?.id, isAdminOrMD, managedDepartments || []);
+  const fallbackParticipants = useMemo(() => {
+    const people: { id: string; name: string; avatarUrl: string | null }[] = task.assignees.map((assignee) => ({
+      id: assignee.user_id,
+      name: assignee.name,
+      avatarUrl: null,
+    }));
+    if (task.created_by && task.creator_name) {
+      people.push({ id: task.created_by, name: task.creator_name, avatarUrl: null });
+    }
+    if (task.reviewer_user_id) {
+      const reviewer = users.find((person) => person.id === task.reviewer_user_id);
+      people.push({ id: task.reviewer_user_id, name: reviewer?.name || "Reviewer", avatarUrl: null });
+    }
+    return people.filter((person) => person.id !== user?.id);
+  }, [task.assignees, task.created_by, task.creator_name, task.reviewer_user_id, users, user?.id]);
 
   return (
     <>
       <div className="fixed inset-0 bg-foreground/20 z-50 animate-fade-in" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-card rounded-lg border shadow-lg w-full max-w-2xl max-h-[90vh] flex flex-col animate-fade-in">
+        <div className="bg-card rounded-lg border shadow-lg w-full max-w-6xl max-h-[min(92vh,56rem)] flex flex-col animate-fade-in">
           <div className="flex items-center justify-between p-4 border-b">
             <div>
               <h2 className="text-lg font-semibold text-foreground">{canEdit ? "Edit Task" : "View Task"}</h2>
@@ -263,10 +279,11 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
                 <p className="text-xs text-muted-foreground mt-0.5">You can update progress and status only.</p>
               )}
             </div>
-            <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" className="h-11 w-11" onClick={onClose} aria-label="Close"><X className="h-4 w-4" /></Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(18.5rem,24rem)] lg:overflow-hidden">
+          <div className="space-y-4 p-4 lg:min-h-0 lg:overflow-y-auto">
             {task.requires_review && (
               <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
                 <ShieldCheck className="h-4 w-4 shrink-0" />
@@ -603,6 +620,15 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
 
             <div className="pt-2 border-t">
               <TaskAttachments taskId={task.id} />
+            </div>
+          </div>
+            <div className="flex min-h-[28rem] max-h-[32rem] flex-col border-t lg:max-h-none lg:min-h-0 lg:border-l lg:border-t-0">
+              <TaskDiscussion
+                taskId={task.id}
+                currentUserId={user?.id ?? null}
+                currentUserName={user?.profile?.name ?? null}
+                fallbackParticipants={fallbackParticipants}
+              />
             </div>
           </div>
 
