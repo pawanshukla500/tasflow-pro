@@ -278,7 +278,7 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
 
   return (
     <>
-      <div className="fixed inset-0 bg-foreground/25 backdrop-blur-[2px] z-50 animate-fade-in" onClick={onClose} />
+      <div className="modal-scrim" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
         <div
           className="bg-card rounded-2xl border shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col animate-fade-in overflow-hidden"

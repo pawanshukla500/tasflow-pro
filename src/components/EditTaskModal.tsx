@@ -269,9 +269,9 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
 
   return (
     <>
-      <div className="fixed inset-0 bg-foreground/20 z-50 animate-fade-in" onClick={onClose} />
+      <div className="modal-scrim" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-card rounded-lg border shadow-lg w-full max-w-6xl max-h-[min(92vh,56rem)] flex flex-col animate-fade-in">
+        <div className="bg-card rounded-2xl border border-border/80 shadow-2xl w-full max-w-6xl max-h-[min(92vh,56rem)] flex flex-col animate-fade-in overflow-hidden">
           <div className="flex items-center justify-between p-4 border-b">
             <div>
               <h2 className="text-lg font-semibold text-foreground">{canEdit ? "Edit Task" : "View Task"}</h2>

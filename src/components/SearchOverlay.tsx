@@ -56,9 +56,9 @@ const SearchOverlay = ({ onClose, onSelectTask }: SearchOverlayProps) => {
 
   return (
     <>
-      <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm z-50 animate-fade-in" onClick={onClose} />
+      <div className="modal-scrim" onClick={onClose} />
       <div className="fixed inset-x-0 top-[15%] z-50 flex justify-center px-4">
-        <div className="bg-card rounded-xl border shadow-2xl w-full max-w-xl animate-fade-in">
+        <div className="bg-card rounded-2xl border border-border/80 shadow-2xl w-full max-w-xl animate-fade-in overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b">
             <Search className="h-4 w-4 text-muted-foreground" />
             <input autoFocus className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground" placeholder="Search tasks, projects, and people…" value={query} onChange={e => setQuery(e.target.value)} />

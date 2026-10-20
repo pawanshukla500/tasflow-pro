@@ -105,7 +105,7 @@ const Login = () => {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Brand panel — Soft UI teal, product story only */}
-      <aside className="hidden lg:flex lg:w-[48%] relative overflow-hidden text-primary-foreground p-10 xl:p-14 flex-col justify-between bg-primary">
+      <aside className="hidden lg:flex lg:w-[44%] relative overflow-hidden text-sidebar-foreground p-10 xl:p-14 flex-col justify-between bg-sidebar">
         <div
           aria-hidden
           className="absolute inset-0 opacity-[0.12]"
@@ -129,17 +129,17 @@ const Login = () => {
 
         <div className="relative z-10 space-y-8 max-w-md">
           <div>
-            <h1 className="font-display text-3xl xl:text-4xl font-bold leading-[1.15] tracking-tight text-balance">
+            <h1 className="font-display text-3xl xl:text-4xl font-bold leading-[1.15] tracking-tight text-balance text-sidebar-foreground">
               Clarity for every task, workflow, and handoff.
             </h1>
-            <p className="mt-4 text-base text-primary-foreground/85 leading-relaxed">
+            <p className="mt-4 text-base text-sidebar-foreground/75 leading-relaxed">
               Keep your organization aligned — from daily tasks to cross-department workflows.
             </p>
           </div>
           <ul className="space-y-3">
             {BENEFITS.map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-center gap-3 text-sm text-primary-foreground/90">
-                <span className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+              <li key={text} className="flex items-center gap-3 text-sm text-sidebar-foreground/90">
+                <span className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center shrink-0 text-sidebar-accent-foreground">
                   <Icon className="w-4 h-4" aria-hidden />
                 </span>
                 {text}
@@ -148,7 +148,7 @@ const Login = () => {
           </ul>
         </div>
 
-        <p className="relative z-10 text-xs text-primary-foreground/55">
+        <p className="relative z-10 text-xs text-sidebar-foreground/45">
           © {new Date().getFullYear()} TaskFlow Pro
         </p>
       </aside>

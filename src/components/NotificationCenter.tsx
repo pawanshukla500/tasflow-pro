@@ -9,9 +9,10 @@ import { notificationActionToPath } from "@/lib/notificationNavigation";
 
 interface NotificationCenterProps {
   collapsed?: boolean;
+  className?: string;
 }
 
-export function NotificationCenter({ collapsed }: NotificationCenterProps) {
+export function NotificationCenter({ collapsed, className }: NotificationCenterProps) {
   const navigate = useNavigate();
   const { notifications, unreadCount, markRead, markAllRead } = useInAppNotifications();
 
@@ -28,6 +29,7 @@ export function NotificationCenter({ collapsed }: NotificationCenterProps) {
           size={collapsed ? "icon" : "sm"}
           className={cn(
             "relative text-muted-foreground hover:text-foreground",
+            className,
             !collapsed && "w-full justify-start gap-2",
           )}
           aria-label="Notifications"

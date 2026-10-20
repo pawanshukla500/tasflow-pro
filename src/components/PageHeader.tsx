@@ -10,8 +10,8 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, actions, className }: PageHeaderProps) {
   return (
-    <div className={cn("flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6", className)}>
-      <div className="space-y-1.5 min-w-0 animate-blur-in">
+    <div className={cn("flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6", className)}>
+      <div className="space-y-1 min-w-0">
         <h1 className="text-page-title truncate">{title}</h1>
         {description && (
           <p className="text-page-desc max-w-2xl">{description}</p>

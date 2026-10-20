@@ -349,7 +349,7 @@ const SettingsPage = () => {
     : [...baseTabs];
 
   return (
-    <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-5 page-enter">
+    <div className="p-4 md:p-8 max-w-5xl mx-auto page-enter">
       <PageHeader
         title="Settings"
         description="Manage your profile, notifications, and preferences."
@@ -360,20 +360,22 @@ const SettingsPage = () => {
         }
       />
 
-      <div className="flex gap-1 flex-wrap">
+      <div className="flex flex-col md:flex-row gap-6 items-start">
+      <nav aria-label="Settings sections" className="w-full md:w-56 shrink-0 flex md:flex-col gap-1 overflow-x-auto rounded-2xl border border-border/80 bg-card p-1.5 shadow-sm">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
-              activeTab === tab.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+            className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap min-h-11 ${
+              activeTab === tab.id ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
-            <tab.icon className="h-3.5 w-3.5" />
+            <tab.icon className="h-4 w-4" />
             {tab.label}
           </button>
         ))}
-      </div>
+      </nav>
+      <div className="flex-1 min-w-0 w-full space-y-5">
 
       {activeTab === "profile" && (
         <div className="glass-card rounded-xl p-6 space-y-6 animate-fade-in">
@@ -669,10 +671,12 @@ const SettingsPage = () => {
       )}
 
       {activeTab === "admin" && isAdminOrMD && (
-        <div className="bg-card rounded-xl border p-6">
+        <div className="bg-card rounded-2xl border border-border/80 p-6 shadow-sm">
           <AdminSettingsPanel />
         </div>
       )}
+      </div>
+      </div>
     </div>
   );
 };
