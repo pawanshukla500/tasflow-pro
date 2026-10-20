@@ -64,6 +64,15 @@ if [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
     20260622143347
     20260713070615
     20260713071104
+    # Same SQL as the local 20260906*/20260909180000 files, applied from the dashboard
+    # under these versions. They are not in the repo, so they block db push.
+    20260906075308
+    20260906080146
+    20260906093021
+    20260906093647
+    20260906094422
+    20260906135409
+    20260909163215
   )
   echo "==> Repairing known orphan remote migration history (if present)..."
   $SUPABASE_CLI migration repair --status reverted "${ORPHAN_REMOTE_MIGRATIONS[@]}" --yes 2>/dev/null \
@@ -81,6 +90,13 @@ if [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
     20260720140000
     20260729150000
     20260729170000
+    20260906120000
+    20260906130000
+    20260906140000
+    20260906150000
+    20260906160000
+    20260906180000
+    20260909180000
   )
   echo "==> Marking already-applied local migrations in remote history..."
   $SUPABASE_CLI migration repair --status applied "${PREAPPLIED_LOCAL_MIGRATIONS[@]}" --yes 2>/dev/null \
@@ -140,6 +156,23 @@ else
   echo "    npx supabase secrets set META_MODEL_API_KEY=your-key --project-ref $PROJECT_REF"
 fi
 
+# Bundling pulls public.ecr.aws/supabase/edge-runtime. GitHub runners sometimes
+# hit the registry data limit; a short retry usually clears it.
+deploy_function() {
+  local fn="$1"
+  shift
+  local attempt delay
+  for attempt in 1 2 3 4; do
+    if $SUPABASE_CLI functions deploy "$fn" --project-ref "$PROJECT_REF" "$@"; then
+      return 0
+    fi
+    delay=$((attempt * 20))
+    echo "    WARNING: $fn deploy attempt ${attempt} failed; retrying in ${delay}s" >&2
+    sleep "$delay"
+  done
+  return 1
+}
+
 echo "==> Deploying edge functions..."
 MCP_FUNCTIONS=(mcp-server issue-mcp-token)
 GOOGLE_FUNCTIONS=(
@@ -158,22 +191,22 @@ CORE_FUNCTIONS=(
 for fn in "${MCP_FUNCTIONS[@]}"; do
   echo "  - $fn"
   if [[ "$fn" == "mcp-server" ]]; then
-    $SUPABASE_CLI functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt
+    deploy_function "$fn" --no-verify-jwt
   else
-    $SUPABASE_CLI functions deploy "$fn" --project-ref "$PROJECT_REF"
+    deploy_function "$fn"
   fi
 done
 
 for fn in "${GOOGLE_FUNCTIONS[@]}"; do
   echo "  - $fn"
-  $SUPABASE_CLI functions deploy "$fn" --project-ref "$PROJECT_REF" || \
+  deploy_function "$fn" || \
     echo "    WARNING: $fn deploy failed (continuing)"
 done
 
 DIGEST_FN_OK=1
 for fn in "${CORE_FUNCTIONS[@]}"; do
   echo "  - $fn"
-  if $SUPABASE_CLI functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt; then
+  if deploy_function "$fn" --no-verify-jwt; then
     :
   else
     echo "    WARNING: $fn deploy failed (continuing)"

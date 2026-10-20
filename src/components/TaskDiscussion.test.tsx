@@ -131,9 +131,12 @@ describe("TaskDiscussion", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     const field = screen.getByRole("textbox", { name: "Message" });
     expect((field as HTMLTextAreaElement).value).toBe("My draft note");
+    expect(screen.getByText("Editing your message")).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Reply" })[0]);
+    expect(screen.getByText("Replying to Ada Lovelace")).toBeInTheDocument();
     expect((field as HTMLTextAreaElement).value).toBe("");
+
     fireEvent.change(field, { target: { value: "A real reply", selectionStart: "A real reply".length } });
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
     expect(sent).toEqual([{ body: "A real reply", parentId: "m1" }]);
