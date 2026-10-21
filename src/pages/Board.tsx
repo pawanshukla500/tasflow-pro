@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, MoreHorizontal, Calendar, ArrowRight, Trash2, User, Building2,
   Circle, Loader, Eye, CheckCircle2, Ban, LayoutGrid, MessageSquare,
@@ -107,6 +107,7 @@ const Board = () => {
   const { user, isAdminOrMD, managedDepartments, accessScope } = useAuth();
   const { filterBoardTasks, filterDepartments, filterProfiles } = useAccessScope();
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const draggedIdRef = useRef<string | null>(null);
   const [editingTask, setEditingTask] = useState<TaskRow | null>(null);
   const [dragOverCol, setDragOverCol] = useState<TaskStatus | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -158,6 +159,7 @@ const Board = () => {
     allowedStatusesForUser(task, user?.id, isAdminOrMD, managedDepartments || []).includes(newStatus);
 
   const handleDragStart = (e: React.DragEvent, task: TaskRow) => {
+    draggedIdRef.current = task.id;
     setDraggedTaskId(task.id);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", task.id);
@@ -170,11 +172,15 @@ const Board = () => {
     if (e.currentTarget instanceof HTMLElement) e.currentTarget.style.opacity = "1";
     setDraggedTaskId(null);
     setDragOverCol(null);
+    window.setTimeout(() => {
+      draggedIdRef.current = null;
+    }, 0);
   };
 
   const handleDrop = async (e: React.DragEvent, newStatus: TaskStatus) => {
     e.preventDefault();
-    const taskId = e.dataTransfer.getData("text/plain");
+    const taskId = e.dataTransfer.getData("text/plain") || draggedIdRef.current || "";
+    draggedIdRef.current = null;
     if (!taskId) return;
     const task = getTask(taskId);
     if (!task) return;
