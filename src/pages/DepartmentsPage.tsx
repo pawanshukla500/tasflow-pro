@@ -11,6 +11,7 @@ import { useAccessScope } from "@/hooks/useAccessScope";
 import { ScopeBanner } from "@/components/ScopeBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -28,6 +29,7 @@ const DepartmentsPage = () => {
   const { accessScope, user } = useAuth();
   const { filterDepartments } = useAccessScope();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [allDepartments, setAllDepartments] = useState<DeptWithStats[]>([]);
   const departments = useMemo(() => filterDepartments(allDepartments), [allDepartments, filterDepartments]);
   const [loading, setLoading] = useState(true);
@@ -155,7 +157,7 @@ const DepartmentsPage = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {departments.map((dept) => (
-            <div key={dept.id} className="bg-card rounded-lg border overflow-hidden hover:shadow-md transition-shadow">
+            <div key={dept.id} className="bg-card rounded-2xl border border-border/80 overflow-hidden shadow-sm">
               <div className="h-1" style={{ backgroundColor: dept.color }} />
               <div className="p-4">
                 <div className="flex items-start justify-between">
@@ -163,7 +165,7 @@ const DepartmentsPage = () => {
                   {accessScope.canManageDepartments && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={`Actions for ${dept.name}`}><MoreHorizontal className="h-3.5 w-3.5" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => openEdit(dept)}><Edit className="h-3.5 w-3.5 mr-2" />Edit</DropdownMenuItem>
@@ -177,15 +179,23 @@ const DepartmentsPage = () => {
                   <p className="text-xs text-muted-foreground mt-2">Manager: <span className="text-foreground font-medium">{dept.managerName}</span></p>
                 )}
                 <div className="grid grid-cols-2 gap-2 mt-3">
-                  <div className="text-center p-2 bg-muted/50 rounded">
+                  <div className="text-center p-2 bg-muted/50 rounded-xl">
                     <p className="text-lg font-mono-num font-bold text-foreground">{dept.memberCount}</p>
                     <p className="text-[10px] text-muted-foreground uppercase">Members</p>
                   </div>
-                  <div className="text-center p-2 bg-muted/50 rounded">
+                  <div className="text-center p-2 bg-muted/50 rounded-xl">
                     <p className="text-lg font-mono-num font-bold text-foreground">{dept.openTaskCount}</p>
                     <p className="text-[10px] text-muted-foreground uppercase">Open Tasks</p>
                   </div>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 w-full h-11"
+                  onClick={() => navigate(`/team?dept=${dept.id}`)}
+                >
+                  View team
+                </Button>
               </div>
             </div>
           ))}
