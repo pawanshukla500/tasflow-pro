@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Sparkles, Trash2, StickyNote, Loader2 } from "lucide-react";
+import { Plus, Sparkles, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
@@ -161,16 +161,12 @@ export function ScratchNotesPanel({ compact = false }: { compact?: boolean }) {
   };
 
   return (
-    <div className={compact ? "space-y-3" : "p-6 max-w-3xl mx-auto space-y-4"}>
-      {!compact && (
-        <div className="flex items-center gap-2">
-          <StickyNote className="h-5 w-5 text-primary" />
-          <h1 className="text-xl font-bold text-foreground">Quick Notes</h1>
-        </div>
+    <div className={compact ? "space-y-3" : "max-w-3xl space-y-4"}>
+      {compact && (
+        <p className="text-xs text-muted-foreground">
+          Only your notes appear here. Each one lasts 7 days, then it is removed.
+        </p>
       )}
-      <p className="text-xs text-muted-foreground">
-        Only your notes appear here. Each one lasts 7 days, then it is removed.
-      </p>
       {loadError && (
         <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
           {loadError}
@@ -186,7 +182,7 @@ export function ScratchNotesPanel({ compact = false }: { compact?: boolean }) {
             if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) addNote();
           }}
         />
-        <Button size="sm" className="shrink-0 self-end" onClick={addNote} disabled={saving || !draft.trim()}>
+        <Button size="sm" className="shrink-0 self-end h-11" onClick={addNote} disabled={saving || !draft.trim()} aria-label="Add note">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         </Button>
       </div>
