@@ -16,6 +16,7 @@ import { ScopeBanner } from "@/components/ScopeBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { toast } from "sonner";
 import { formatDateIST } from "@/lib/time";
+import { goalPercent } from "@/lib/goalProgress";
 import { usePerformance } from "@/hooks/usePerformance";
 import { useTasks } from "@/hooks/useTasks";
 import { PerformanceBreakdown } from "@/components/PerformanceBreakdown";
@@ -55,6 +56,7 @@ const PerformancePage = () => {
   const { filterProfiles, filterDepartments, scopeLabel } = useAccessScope();
   const { tasks } = useTasks();
   const [scope, setScope] = useState<string>("me");
+  const [tab, setTab] = useState("analytics");
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [workflows, setWorkflows] = useState<{ raised_by_department_id?: string | null; status: string; completed_at?: string | null }[]>([]);
   const [allProfiles, setAllProfiles] = useState<ProfileRow[]>([]);
@@ -154,7 +156,10 @@ const PerformancePage = () => {
       target_date: kraTargetDate || null,
     });
     if (error) return toast.error(error.message);
-    toast.success("KRA added");
+    const viewingOther = scope !== "me" && scope !== "all";
+    if (viewingOther) setScope("me");
+    setTab("kra");
+    toast.success(viewingOther ? "KRA added to your record" : "KRA added");
     setShowKra(false); resetKra(); fetchData();
   };
 
@@ -168,7 +173,10 @@ const PerformancePage = () => {
       unit: kpiUnit || "", period: kpiPeriod, status: kpiStatus,
     });
     if (error) return toast.error(error.message);
-    toast.success("KPI added");
+    const viewingOther = scope !== "me" && scope !== "all";
+    if (viewingOther) setScope("me");
+    setTab("kpi");
+    toast.success(viewingOther ? "KPI added to your record" : "KPI added");
     setShowKpi(false); resetKpi(); fetchData();
   };
 
@@ -246,7 +254,7 @@ const PerformancePage = () => {
           <div className="flex items-center gap-2 flex-wrap">
           {canSeeOthers && (
             <Select value={scope} onValueChange={setScope}>
-              <SelectTrigger className="h-9 w-56 text-sm"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-11 w-56 text-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="me">My KRA & KPI</SelectItem>
                 {accessScope.hasFullAccess && <SelectItem value="all">All employees</SelectItem>}
@@ -259,18 +267,18 @@ const PerformancePage = () => {
               </SelectContent>
             </Select>
           )}
-          <Button size="sm" variant="outline" onClick={() => setShowKra(true)}><Plus className="h-3.5 w-3.5 mr-1" />Add KRA</Button>
-          <Button size="sm" onClick={() => setShowKpi(true)}><Plus className="h-3.5 w-3.5 mr-1" />Add KPI</Button>
+          <Button size="sm" className="h-11" variant="outline" onClick={() => setShowKra(true)}><Plus className="h-3.5 w-3.5 mr-1" />Add KRA</Button>
+          <Button size="sm" className="h-11" onClick={() => setShowKpi(true)}><Plus className="h-3.5 w-3.5 mr-1" />Add KPI</Button>
           </div>
         }
       />
       <ScopeBanner scope={accessScope} />
 
-      <Tabs defaultValue={canSeeOthers ? "analytics" : "kra"}>
-        <TabsList className="h-11 rounded-xl bg-muted/70 p-1">
-          <TabsTrigger value="analytics" className="rounded-lg"><BarChart3 className="h-3.5 w-3.5 mr-1.5" />Score & Analytics</TabsTrigger>
-          <TabsTrigger value="kra" className="rounded-lg"><Target className="h-3.5 w-3.5 mr-1.5" />KRAs ({visibleKras.length})</TabsTrigger>
-          <TabsTrigger value="kpi" className="rounded-lg"><TrendingUp className="h-3.5 w-3.5 mr-1.5" />KPIs ({visibleKpis.length})</TabsTrigger>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="h-auto rounded-xl bg-muted/70 p-1">
+          <TabsTrigger value="analytics" className="min-h-11 rounded-lg"><BarChart3 className="h-3.5 w-3.5 mr-1.5" />Score & Analytics</TabsTrigger>
+          <TabsTrigger value="kra" className="min-h-11 rounded-lg"><Target className="h-3.5 w-3.5 mr-1.5" />KRAs ({visibleKras.length})</TabsTrigger>
+          <TabsTrigger value="kpi" className="min-h-11 rounded-lg"><TrendingUp className="h-3.5 w-3.5 mr-1.5" />KPIs ({visibleKpis.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="analytics" className="space-y-4 mt-4">
@@ -342,8 +350,8 @@ const PerformancePage = () => {
                         <button
                           key={m.user_id}
                           type="button"
-                          onClick={() => setScope(m.user_id)}
-                          className="border border-border/80 rounded-2xl p-3 text-left hover:bg-muted/40"
+                          onClick={() => { setScope(m.user_id); setTab("analytics"); }}
+                          className="min-h-11 border border-border/80 rounded-2xl p-3 text-left hover:bg-muted/40"
                         >
                           <p className="text-sm font-medium mb-2">{member?.name || "Unknown"}</p>
                           <PerformanceBreakdown metrics={m} compact showReasons />
@@ -404,7 +412,8 @@ const PerformancePage = () => {
               <p className="text-sm text-muted-foreground">No KPIs yet. Add your first Key Performance Indicator.</p>
             </div>
           ) : visibleKpis.map(k => {
-            const pct = k.target_value > 0 ? Math.min(100, Math.round((k.current_value / k.target_value) * 100)) : 0;
+            const pct = goalPercent(k.current_value, k.target_value);
+            const bar = pct === null ? 0 : Math.min(100, Math.max(0, pct));
             const owner = members.find(m => m.id === k.user_id);
             const ownsThis = k.user_id === user?.id;
             const linkedKra = kras.find(x => x.id === k.kra_id);
@@ -426,10 +435,10 @@ const PerformancePage = () => {
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-muted-foreground">Progress</span>
                         <span className="font-mono-num text-foreground">
-                          {k.current_value}{k.unit} / {k.target_value}{k.unit} ({pct}%)
+                          {k.current_value}{k.unit} / {k.target_value}{k.unit} ({pct === null ? "—" : `${bar}%`})
                         </span>
                       </div>
-                      <Progress value={pct} className="h-2" />
+                      <Progress value={bar} className="h-2" />
                       {ownsThis && (
                         <div className="flex items-center gap-2 mt-2">
                           <Label className="text-xs text-muted-foreground">Update current:</Label>
@@ -440,14 +449,14 @@ const PerformancePage = () => {
                               const v = Number(e.target.value);
                               if (v !== k.current_value) updateKpiCurrent(k.id, v);
                             }}
-                            className="h-7 w-28 text-xs"
+                            className="h-11 w-28 text-sm"
                           />
                         </div>
                       )}
                     </div>
                   </div>
                   {ownsThis && (
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={() => deleteKpi(k.id)}>
+                    <Button variant="ghost" size="icon" className="h-11 w-11 text-destructive shrink-0" onClick={() => deleteKpi(k.id)} aria-label={`Delete ${k.title}`}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
