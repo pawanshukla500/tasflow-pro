@@ -173,12 +173,15 @@ const ReportsPage = () => {
       />
       <ScopeBanner scope={accessScope} departmentNames={deptNames} />
 
-      <div className="flex gap-1 mb-2">
+      <div className="flex flex-wrap gap-1 mb-2 rounded-xl bg-muted/70 p-1 w-fit" role="tablist" aria-label="Report views">
         {["Overview", "Workflows", "Performance", "Tasks"].map(tab => (
           <button
             key={tab}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === tab ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+            className={`min-h-11 px-3 rounded-lg text-sm font-semibold transition-colors ${activeTab === tab ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
           >
             {tab}
           </button>
@@ -187,7 +190,7 @@ const ReportsPage = () => {
 
       {activeTab === "Overview" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-card rounded-lg border p-4">
+          <div className="bg-card rounded-2xl border border-border/80 shadow-sm p-4">
             <h3 className="text-sm font-semibold text-foreground mb-4">Department Performance</h3>
             {deptData.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">No departments yet</p>
@@ -197,13 +200,13 @@ const ReportsPage = () => {
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(var(--border))" }} />
-                  <Bar dataKey="completion" fill="hsl(239,84%,67%)" radius={[4, 4, 0, 0]} name="Completion %" />
+                  <Bar dataKey="completion" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Completion %" />
                 </BarChart>
               </ResponsiveContainer>
             )}
           </div>
 
-          <div className="bg-card rounded-lg border p-4">
+          <div className="bg-card rounded-2xl border border-border/80 shadow-sm p-4">
             <h3 className="text-sm font-semibold text-foreground mb-4">Priority Distribution</h3>
             {tasks.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">No tasks yet</p>
@@ -234,17 +237,17 @@ const ReportsPage = () => {
       {activeTab === "Workflows" && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="bg-card rounded-lg border p-3">
+            <div className="bg-card rounded-2xl border border-border/80 shadow-sm p-3">
               <div className="text-xs text-muted-foreground">Stages tracked (30d)</div>
               <div className="text-2xl font-semibold text-foreground tabular-nums mt-1">{stageRows.length}</div>
             </div>
-            <div className="bg-card rounded-lg border p-3">
+            <div className="bg-card rounded-2xl border border-border/80 shadow-sm p-3">
               <div className="text-xs text-muted-foreground flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-destructive" />Breached</div>
               <div className="text-2xl font-semibold text-destructive tabular-nums mt-1">
                 {stageAnalytics.reduce((a, b) => a + b.breaches, 0)}
               </div>
             </div>
-            <div className="bg-card rounded-lg border p-3">
+            <div className="bg-card rounded-2xl border border-border/80 shadow-sm p-3">
               <div className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3 text-primary" />Avg cycle</div>
               <div className="text-2xl font-semibold text-foreground tabular-nums mt-1">
                 {stageAnalytics.length
@@ -254,7 +257,7 @@ const ReportsPage = () => {
             </div>
           </div>
 
-          <div className="bg-card rounded-lg border p-4">
+          <div className="bg-card rounded-2xl border border-border/80 shadow-sm p-4">
             <h3 className="text-sm font-semibold text-foreground mb-1">Stage performance</h3>
             <p className="text-xs text-muted-foreground mb-3">Sorted by breach rate — your biggest bottlenecks first.</p>
             {stageAnalytics.length === 0 ? (
@@ -296,7 +299,7 @@ const ReportsPage = () => {
           </div>
 
           {slowAssignees.length > 0 && (
-            <div className="bg-card rounded-lg border p-4">
+            <div className="bg-card rounded-2xl border border-border/80 shadow-sm p-4">
               <h3 className="text-sm font-semibold text-foreground mb-1">Slowest assignees</h3>
               <p className="text-xs text-muted-foreground mb-3">Average time to complete a stage (min 2 stages).</p>
               <table className="w-full text-sm">
@@ -316,7 +319,7 @@ const ReportsPage = () => {
       )}
 
       {(activeTab === "Performance" || activeTab === "Overview") && (
-        <div className="bg-card rounded-lg border p-4">
+        <div className="bg-card rounded-2xl border border-border/80 shadow-sm p-4">
           <h3 className="text-sm font-semibold text-foreground mb-3">Employee Performance</h3>
           {rankedProfiles.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No team members yet</p>
@@ -369,7 +372,7 @@ const ReportsPage = () => {
       )}
 
       {activeTab === "Tasks" && (
-        <div className="bg-card rounded-lg border p-4">
+        <div className="bg-card rounded-2xl border border-border/80 shadow-sm p-4">
           <h3 className="text-sm font-semibold text-foreground mb-3">All Tasks</h3>
           {tasks.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No tasks yet</p>
