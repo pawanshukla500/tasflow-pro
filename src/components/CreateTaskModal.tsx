@@ -437,9 +437,10 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
                     <button
                       key={preset.id}
                       type="button"
+                      aria-pressed={duePreset === preset.id}
                       onClick={() => setDueDate(duePreset === preset.id ? undefined : preset.date)}
                       className={cn(
-                        "px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors",
+                        "min-h-11 px-3 rounded-lg text-xs font-medium border transition-colors",
                         duePreset === preset.id
                           ? "bg-primary text-primary-foreground border-primary"
                           : "bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground",
@@ -452,8 +453,9 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
                     <PopoverTrigger asChild>
                       <button
                         type="button"
+                        aria-pressed={duePreset === "custom"}
                         className={cn(
-                          "inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors",
+                          "inline-flex min-h-11 items-center gap-1 px-3 rounded-lg text-xs font-medium border transition-colors",
                           duePreset === "custom"
                             ? "bg-primary text-primary-foreground border-primary"
                             : "bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground",
@@ -490,9 +492,10 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
                     <button
                       key={p}
                       type="button"
+                      aria-pressed={priority === p}
                       onClick={() => setPriority(p)}
                       className={cn(
-                        "px-2.5 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all",
+                        "min-h-11 px-3 rounded-lg text-xs font-semibold capitalize transition-all",
                         priority === p ? priorityColorMap[p] : "bg-background border text-muted-foreground hover:border-primary/30",
                       )}
                     >{p}</button>
@@ -506,7 +509,7 @@ const CreateTaskModal = ({ onClose, onCreated, initialStatus, initialProjectId }
               <CollapsibleTrigger asChild>
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between rounded-xl border bg-muted/20 px-3.5 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                  className="flex min-h-11 w-full items-center justify-between rounded-xl border bg-muted/20 px-3.5 text-left hover:bg-muted/40 transition-colors"
                 >
                   <span className="flex items-center gap-2 text-sm font-medium text-foreground">
                     More options
