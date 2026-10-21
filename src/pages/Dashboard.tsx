@@ -252,10 +252,10 @@ const Dashboard = () => {
   [tasks]);
 
   const kpis = [
-    { label: "Due Today", value: dueTodayCount, icon: Clock, tone: "warning" as const, caption: `${dueTomorrow} due tomorrow`, spark: createdSpark },
-    { label: "Overdue", value: overdueCount, icon: AlertTriangle, tone: "danger" as const, caption: overdueHigh > 0 ? `${overdueHigh} high priority` : "none high priority", spark: null },
-    { label: "In Progress", value: inProgressCount, icon: Loader2, tone: "primary" as const, caption: `${inReviewCount} in review`, spark: createdSpark },
-    { label: "Completed", value: doneCount, icon: CheckCircle2, tone: "success" as const, caption: `${completedThisWeek} this week`, spark: completedSpark, trend: { current: completedThisWeek, previous: completedLastWeek } },
+    { label: "Due Today", value: dueTodayCount, icon: Clock, tone: "warning" as const, caption: `${dueTomorrow} due tomorrow`, spark: createdSpark, focus: "today" },
+    { label: "Overdue", value: overdueCount, icon: AlertTriangle, tone: "danger" as const, caption: overdueHigh > 0 ? `${overdueHigh} high priority` : "none high priority", spark: null, focus: "overdue" },
+    { label: "In Progress", value: inProgressCount, icon: Loader2, tone: "primary" as const, caption: `${inReviewCount} in review`, spark: createdSpark, focus: null },
+    { label: "Completed", value: doneCount, icon: CheckCircle2, tone: "success" as const, caption: `${completedThisWeek} this week`, spark: completedSpark, trend: { current: completedThisWeek, previous: completedLastWeek }, focus: "completed" },
   ];
 
   const activeWorkflows = workflows.filter(w => w.status === "active");
@@ -356,7 +356,7 @@ const Dashboard = () => {
           </div>
           {accessScope.canViewDeptPerformance && (
             <Select value={userFilter} onValueChange={setUserFilter}>
-              <SelectTrigger className="h-9 w-full sm:w-[200px] text-xs cursor-pointer">
+              <SelectTrigger className="h-11 w-full sm:w-[200px] text-sm cursor-pointer">
                 <SelectValue placeholder="Filter by user…" />
               </SelectTrigger>
               <SelectContent>
@@ -382,7 +382,7 @@ const Dashboard = () => {
               caption={kpi.caption}
               icon={kpi.icon}
               tone={kpi.tone}
-              onClick={() => navigate("/my-tasks")}
+              onClick={() => navigate(kpi.focus ? `/my-tasks?focus=${kpi.focus}` : "/my-tasks")}
               trendSlot={
                 kpi.trend ? (
                   <TrendChip current={kpi.trend.current} previous={kpi.trend.previous} />
@@ -497,7 +497,7 @@ const Dashboard = () => {
                   <GitBranch className="h-4 w-4 text-primary" />Workflows
                 </h2>
               </div>
-              <Button variant="ghost" size="sm" className="cursor-pointer text-xs text-muted-foreground hover:text-primary" onClick={() => navigate("/workflows")}>
+              <Button variant="ghost" size="sm" className="h-11 cursor-pointer text-xs text-muted-foreground hover:text-primary" onClick={() => navigate("/workflows")}>
                 View all<ArrowRight className="h-3 w-3 ml-1" />
               </Button>
             </div>
@@ -516,8 +516,8 @@ const Dashboard = () => {
                     <button
                       key={wf.id}
                       type="button"
-                      onClick={() => navigate("/workflows")}
-                      className="cursor-pointer w-full text-left p-3 rounded-lg border border-border/70 bg-background/50 hover:border-primary/25 hover:bg-muted/30 transition-colors duration-150 group"
+                      onClick={() => navigate(`/workflows?wf=${wf.id}`)}
+                      className="cursor-pointer w-full min-h-11 text-left p-3 rounded-lg border border-border/70 bg-background/50 hover:border-primary/25 hover:bg-muted/30 transition-colors duration-150 group"
                     >
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <span className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{wf.title}</span>

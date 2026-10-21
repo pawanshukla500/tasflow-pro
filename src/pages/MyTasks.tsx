@@ -120,6 +120,16 @@ const MyTasks = () => {
   }, [searchParams, tasks, loading]);
 
   useEffect(() => {
+    const focus = searchParams.get("focus");
+    if (!focus || loading) return;
+    setCollapsedSections((prev) => prev.filter((id) => id !== focus));
+    const timer = window.setTimeout(() => {
+      document.getElementById(`my-tasks-${focus}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [searchParams, loading]);
+
+  useEffect(() => {
     if (!canFilterByUser || !user) return;
     (async () => {
       let q = supabase.from("profiles").select("id, name, department_id").eq("active", true).order("name");
@@ -591,11 +601,12 @@ const MyTasks = () => {
               return (
                 <section
                   key={section.id}
+                  id={`my-tasks-${section.id}`}
                   className="bg-card rounded-2xl border border-border/80 overflow-hidden shadow-sm"
                 >
                   <button
                     type="button"
-                    className="w-full flex items-center justify-between px-3.5 py-2 bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
+                    className="w-full min-h-11 flex items-center justify-between px-3.5 py-2 bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
                     onClick={() => toggle(section.id)}
                     aria-expanded={!isCollapsed}
                   >
