@@ -298,14 +298,14 @@ const MyTasks = () => {
       <div
         id={`task-${task.id}`}
         className={cn(
-          "flex items-center gap-2.5 px-3 sm:px-3.5 py-2 transition-colors group",
+          "flex items-center gap-2.5 px-3 sm:px-3.5 py-2 transition-colors",
           "hover:bg-muted/40",
           highlightTaskId === task.id && "bg-muted ring-1 ring-inset ring-border",
         )}
       >
         <button
           type="button"
-          className="text-muted-foreground hover:text-success transition-colors shrink-0 p-1 -ml-0.5 cursor-pointer rounded-md hover:bg-success/10"
+          className="inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-success transition-colors shrink-0 cursor-pointer rounded-lg hover:bg-success/10"
           onClick={() => handleCompleteClick(task)}
           aria-label={task.status === "done" ? "Mark incomplete" : "Mark complete"}
         >
@@ -320,7 +320,7 @@ const MyTasks = () => {
           <button
             type="button"
             className={cn(
-              "block w-full text-[13px] text-left truncate transition-colors hover:text-foreground cursor-pointer leading-snug",
+              "flex min-h-11 w-full items-center text-[13px] text-left truncate transition-colors hover:text-foreground cursor-pointer leading-snug",
               task.status === "done" ? "text-muted-foreground line-through decoration-muted-foreground/40" : "font-medium text-foreground",
             )}
             onClick={() => setEditingTask(task)}
@@ -393,7 +393,8 @@ const MyTasks = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 cursor-pointer"
+              className="h-11 w-11 shrink-0"
+              aria-label={`Actions for ${task.title}`}
             >
               <MoreHorizontal className="h-3.5 w-3.5" />
             </Button>
