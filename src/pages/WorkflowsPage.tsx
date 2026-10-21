@@ -137,6 +137,7 @@ const WorkflowsPage = () => {
   const [wfPriority, setWfPriority] = useState("medium");
   const [wfProjectId, setWfProjectId] = useState("");
   const [filterProjectId, setFilterProjectId] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"active" | "completed" | "all">("active");
   const [launchStages, setLaunchStages] = useState<Array<TemplateStage & { assignee_user_id: string | null }>>([]);
   const [launchFieldValues, setLaunchFieldValues] = useState<Record<string, string>>({});
   const [launchRefId, setLaunchRefId] = useState("");
@@ -580,7 +581,7 @@ const WorkflowsPage = () => {
   };
 
   const workflowsForTab = activeTab === "workflows"
-    ? visibleWorkflows.filter((w) => w.status === "active")
+    ? visibleWorkflows.filter((w) => statusFilter === "all" || w.status === statusFilter)
     : visibleWorkflows;
 
   useEffect(() => {
@@ -821,6 +822,27 @@ const WorkflowsPage = () => {
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex flex-wrap gap-1 rounded-xl bg-muted/70 p-1 w-fit" role="tablist" aria-label="Workflow status">
+              {([
+                ["active", "Active"],
+                ["completed", "Completed"],
+                ["all", "All"],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={statusFilter === id}
+                  onClick={() => setStatusFilter(id)}
+                  className={cn(
+                    "min-h-11 rounded-lg px-3 text-sm font-semibold",
+                    statusFilter === id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {bottleneckStages.length > 0 && (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
                 <div className="flex items-center gap-2 text-xs font-medium text-destructive">
@@ -833,8 +855,8 @@ const WorkflowsPage = () => {
                     return (
                       <button
                         key={stage.id}
-                        onClick={() => { setExpandedWf(wf.id); setWfSearch(""); }}
-                        className="text-[11px] px-2 py-0.5 rounded bg-background border hover:bg-muted transition-colors"
+                        onClick={() => { setStatusFilter("active"); setExpandedWf(wf.id); setWfSearch(""); }}
+                        className="min-h-11 text-[11px] px-2.5 rounded-lg bg-background border hover:bg-muted transition-colors"
                         title={`${wf.title} · ${stage.name}`}
                       >
                         <span className="font-medium">{ref ? `${ref.value}` : wf.title}</span>
