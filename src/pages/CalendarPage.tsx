@@ -11,10 +11,14 @@ import {
   syncGoogleCalendar,
   type GoogleCalendarEvent,
 } from "@/lib/googleIntegration";
+import { PageHeader } from "@/components/PageHeader";
 import { toast } from "sonner";
 
 const priorityColors: Record<string, string> = {
-  critical: "hsl(0,72%,51%)", high: "hsl(38,92%,50%)", medium: "hsl(239,84%,67%)", low: "hsl(142,71%,45%)",
+  critical: "hsl(var(--destructive))",
+  high: "hsl(var(--warning))",
+  medium: "hsl(var(--primary))",
+  low: "hsl(var(--success))",
 };
 
 const CalendarPage = () => {
@@ -24,12 +28,12 @@ const CalendarPage = () => {
   const [googleConnected, setGoogleConnected] = useState(false);
   const [googleEvents, setGoogleEvents] = useState<GoogleCalendarEvent[]>([]);
   const [googleLoading, setGoogleLoading] = useState(false);
-
+  const today = todayIST();
+  const [selectedDate, setSelectedDate] = useState(today);
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = todayIST();
 
   const prev = () => setCurrentDate(new Date(year, month - 1, 1));
   const next = () => setCurrentDate(new Date(year, month + 1, 1));
@@ -71,86 +75,126 @@ const CalendarPage = () => {
   });
 
   return (
-    <div className="p-6 space-y-4 max-w-5xl">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-foreground">Calendar</h1>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={prev}><ChevronLeft className="h-4 w-4" /></Button>
-          <span className="text-sm font-medium text-foreground min-w-[140px] text-center">
-            {formatDateIST(currentDate, { month: "long", year: "numeric" })}
-          </span>
-          <Button variant="ghost" size="icon" onClick={next}><ChevronRight className="h-4 w-4" /></Button>
-          {googleConnected && (
-            <Button variant="outline" size="sm" onClick={handleSyncGoogle} disabled={googleLoading}>
-              <RefreshCw className={`h-3.5 w-3.5 mr-1 ${googleLoading ? "animate-spin" : ""}`} />
-              Sync
+    <div className="p-4 md:p-6 space-y-4 max-w-6xl page-enter">
+      <PageHeader
+        title="Calendar"
+        description="Due tasks and Google meetings. Choose a day, then open the task."
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" className="h-11 w-11" onClick={prev} aria-label="Previous month">
+              <ChevronLeft className="h-4 w-4" />
             </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={goToday}>Today</Button>
-        </div>
-      </div>
+            <span className="text-sm font-semibold text-foreground min-w-[9rem] text-center">
+              {formatDateIST(currentDate, { month: "long", year: "numeric" })}
+            </span>
+            <Button variant="outline" size="icon" className="h-11 w-11" onClick={next} aria-label="Next month">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" className="h-11" onClick={goToday}>Today</Button>
+            {googleConnected && (
+              <Button variant="outline" size="sm" className="h-11" onClick={handleSyncGoogle} disabled={googleLoading}>
+                <RefreshCw className={`h-3.5 w-3.5 mr-1 ${googleLoading ? "animate-spin" : ""}`} />
+                Sync
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       {loading ? (
         <div className="text-center py-8 text-muted-foreground">Loading…</div>
       ) : (
-        <div className="bg-card rounded-lg border overflow-hidden">
-          <div className="grid grid-cols-7">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
-              <div key={d} className="text-xs font-medium text-muted-foreground text-center py-2 border-b">{d}</div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7">
-            {days.map((day, i) => {
-              if (day === null) return <div key={i} className="min-h-[100px] border-b border-r bg-muted/30" />;
-              const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-              const dayTasks = tasks.filter(t => t.due_date === dateStr);
-              const dayMeetings = googleEvents.filter((event) => eventDate(event) === dateStr);
-              const isToday = dateStr === today;
-              return (
-                <div key={i} className="min-h-[100px] border-b border-r p-1 hover:bg-muted/30 transition-colors">
-                  <span className={`text-xs inline-flex items-center justify-center w-6 h-6 rounded-full ${isToday ? "bg-primary text-primary-foreground font-bold" : "text-foreground"}`}>
-                    {day}
-                  </span>
-                  <div className="mt-0.5 space-y-0.5">
-                    {dayMeetings.slice(0, 2).map((event) => (
-                      <button
-                        key={event.id}
-                        type="button"
-                        onClick={() => {
-                          const url = event.hangout_link || event.html_link;
-                          if (url) window.open(url, "_blank", "noopener,noreferrer");
-                        }}
-                        className="w-full text-left text-[10px] px-1.5 py-0.5 rounded truncate bg-sky-100 text-sky-900 border border-sky-200 hover:bg-sky-200"
-                        title={event.title}
-                      >
-                        <span className="inline-flex max-w-full items-center gap-1">
-                          {event.hangout_link ? <Video className="h-2.5 w-2.5 shrink-0" /> : <CalendarClock className="h-2.5 w-2.5 shrink-0" />}
-                          <span className="truncate">{eventTime(event)} {event.title}</span>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="bg-card rounded-2xl border border-border/80 overflow-hidden shadow-sm">
+            <div className="grid grid-cols-7">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
+                <div key={d} className="text-xs font-semibold text-muted-foreground text-center py-2 border-b">{d}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {days.map((day, i) => {
+                if (day === null) return <div key={i} className="min-h-[108px] border-b border-r bg-muted/30" />;
+                const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                const dayTasks = tasks.filter(t => t.due_date === dateStr);
+                const dayMeetings = googleEvents.filter((event) => eventDate(event) === dateStr);
+                const isToday = dateStr === today;
+                const isSelected = dateStr === selectedDate;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setSelectedDate(dateStr)}
+                    className={`min-h-[108px] border-b border-r p-1.5 text-left transition-colors ${isSelected ? "bg-accent/60" : "hover:bg-muted/40"}`}
+                    aria-pressed={isSelected}
+                    aria-label={`${dateStr}, ${dayTasks.length} tasks`}
+                  >
+                    <span className={`text-xs inline-flex items-center justify-center w-7 h-7 rounded-full ${isToday ? "bg-primary text-primary-foreground font-bold" : "text-foreground"}`}>
+                      {day}
+                    </span>
+                    <span className="mt-1 flex gap-1" aria-hidden>
+                      {dayTasks.slice(0, 3).map((task) => (
+                        <span key={task.id} className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: priorityColors[task.priority] || priorityColors.medium }} />
+                      ))}
+                      {dayMeetings.length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />}
+                    </span>
+                    <div className="mt-1 space-y-0.5">
+                      {dayTasks.slice(0, 2).map(t => (
+                        <span
+                          key={t.id}
+                          className="block w-full text-left text-[10px] px-1.5 py-0.5 rounded truncate text-primary-foreground"
+                          style={{ backgroundColor: priorityColors[t.priority] || priorityColors.medium }}
+                        >
+                          {t.title}
                         </span>
-                      </button>
-                    ))}
-                    {dayTasks.slice(0, 3).map(t => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => setOpenTask(t)}
-                        className="w-full text-left text-[10px] px-1.5 py-0.5 rounded truncate text-primary-foreground min-h-6"
-                        style={{ backgroundColor: priorityColors[t.priority] || priorityColors.medium }}
-                        title={`Open ${t.title}`}
-                      >
-                        {t.title}
-                      </button>
-                    ))}
-                    {dayMeetings.length + dayTasks.length > 5 && (
-                      <p className="text-[10px] text-muted-foreground px-1">
-                        +{dayMeetings.length + dayTasks.length - 5} more
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                      ))}
+                      {dayMeetings.length + dayTasks.length > 2 && (
+                        <span className="block text-[10px] text-muted-foreground px-1">
+                          +{dayMeetings.length + Math.max(dayTasks.length - 2, 0)} more
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          <aside className="bg-card rounded-2xl border border-border/80 p-4 shadow-sm h-fit">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Selected day</p>
+            <h2 className="mt-1 text-base font-semibold">{formatDateIST(selectedDate)}</h2>
+            <div className="mt-3 space-y-2">
+              {tasks.filter((task) => task.due_date === selectedDate).length === 0 && googleEvents.filter((event) => eventDate(event) === selectedDate).length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nothing due on this day.</p>
+              ) : null}
+              {googleEvents.filter((event) => eventDate(event) === selectedDate).map((event) => (
+                <button
+                  key={event.id}
+                  type="button"
+                  onClick={() => {
+                    const url = event.hangout_link || event.html_link;
+                    if (url) window.open(url, "_blank", "noopener,noreferrer");
+                  }}
+                  className="w-full min-h-11 text-left text-sm px-3 py-2 rounded-xl border bg-sky-50 text-sky-950 hover:bg-sky-100"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    {event.hangout_link ? <Video className="h-3.5 w-3.5" /> : <CalendarClock className="h-3.5 w-3.5" />}
+                    {eventTime(event)} {event.title}
+                  </span>
+                </button>
+              ))}
+              {tasks.filter((task) => task.due_date === selectedDate).map((task) => (
+                <button
+                  key={task.id}
+                  type="button"
+                  onClick={() => setOpenTask(task)}
+                  className="w-full min-h-11 text-left text-sm px-3 py-2 rounded-xl text-primary-foreground"
+                  style={{ backgroundColor: priorityColors[task.priority] || priorityColors.medium }}
+                >
+                  {task.title}
+                </button>
+              ))}
+            </div>
+          </aside>
         </div>
       )}
       {openTask && (
