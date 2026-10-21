@@ -13,6 +13,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/PageHeader";
+import { todayIST } from "@/lib/time";
+import { goalDaysLeft, goalDeadlineLabel, goalPercent } from "@/lib/goalProgress";
 
 interface Goal {
   id: string;
@@ -161,7 +163,7 @@ const GoalsPage = () => {
         title="Goals"
         description="Track progress against a target and a deadline."
         actions={canCreate ? (
-          <Button size="sm" onClick={openCreate}>
+          <Button size="sm" className="h-11" onClick={openCreate}>
             <Plus className="h-4 w-4 mr-1" />Create Goal
           </Button>
         ) : undefined}
@@ -183,7 +185,7 @@ const GoalsPage = () => {
             {goals.length === 0 ? "No goals yet" : "No goals match your search"}
           </p>
           {goals.length === 0 && canCreate && (
-            <Button size="sm" onClick={openCreate}>
+            <Button size="sm" className="h-11" onClick={openCreate}>
               <Plus className="h-4 w-4 mr-1" />Create your first goal
             </Button>
           )}
@@ -191,13 +193,13 @@ const GoalsPage = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filtered.map((goal) => {
-            const target = goal.target_value || 1;
-            const pct = Math.round((goal.current_value / target) * 100);
-            const barColor = pct >= 80 ? "bg-success" : pct >= 50 ? "bg-primary" : pct >= 30 ? "bg-warning" : "bg-destructive";
+            const pct = goalPercent(goal.current_value, goal.target_value);
+            const barWidth = pct === null ? 0 : Math.min(Math.max(pct, 0), 100);
+            const barColor = pct === null
+              ? "bg-muted-foreground/30"
+              : pct >= 80 ? "bg-success" : pct >= 50 ? "bg-primary" : pct >= 30 ? "bg-warning" : "bg-destructive";
             const cfg = statusConfig[goal.status] || statusConfig.on_track;
-            const daysLeft = goal.deadline
-              ? Math.ceil((new Date(goal.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-              : null;
+            const daysLeft = goalDaysLeft(goal.deadline, todayIST());
             return (
               <div key={goal.id} className="bg-card rounded-2xl border border-border/80 p-4 shadow-sm">
                 <div className="flex items-start justify-between mb-2">
@@ -236,18 +238,18 @@ const GoalsPage = () => {
 
                 <div className="mt-3">
                   <div className="h-2 bg-muted rounded-full">
-                    <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.min(Math.max(pct, 0), 100)}%` }} />
+                    <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${barWidth}%` }} />
                   </div>
                   <div className="flex items-center justify-between mt-1.5">
                     <span className="text-xs font-mono-num text-foreground">{goal.current_value} {goal.unit}</span>
-                    <span className="text-xs font-semibold font-mono-num text-foreground">{Math.min(Math.max(pct, 0), 999)}%</span>
+                    <span className="text-xs font-semibold font-mono-num text-foreground">{pct === null ? "—" : `${Math.min(Math.max(pct, 0), 999)}%`}</span>
                     <span className="text-xs text-muted-foreground font-mono-num">/ {goal.target_value} {goal.unit}</span>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between mt-3 pt-3 border-t">
-                  <span className={`text-xs ${daysLeft === null ? "text-muted-foreground" : daysLeft < 0 ? "text-destructive font-medium" : daysLeft < 7 ? "text-warning" : "text-muted-foreground"}`}>
-                    {daysLeft === null ? "No deadline" : daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d remaining`}
+                  <span className={`text-xs ${daysLeft === null ? "text-muted-foreground" : daysLeft < 0 ? "text-destructive font-medium" : daysLeft < 7 ? "text-warning font-medium" : "text-muted-foreground"}`}>
+                    {goalDeadlineLabel(daysLeft)}
                   </span>
                   {canEditGoal(goal) && goal.status !== "achieved" && (
                     <Button variant="outline" size="sm" className="h-11" onClick={() => openEdit(goal)}>
