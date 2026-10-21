@@ -254,13 +254,14 @@ export default function ProjectDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap shrink-0">
-              <Button variant="outline" size="sm" onClick={() => setEditProjectOpen(true)}>
+              <Button variant="outline" size="sm" className="h-11" onClick={() => setEditProjectOpen(true)}>
                 <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
               </Button>
               {project.status === "active" && (
                 <Button
                   variant="outline"
                   size="sm"
+                  className="h-11"
                   onClick={async () => {
                     try {
                       await archive(project.id);
@@ -276,6 +277,7 @@ export default function ProjectDetailPage() {
               )}
               <Button
                 size="sm"
+                className="h-11"
                 onClick={() => {
                   setCreateStatus("todo");
                   setShowCreate(true);
@@ -374,7 +376,7 @@ export default function ProjectDetailPage() {
                               key={task.id}
                               type="button"
                               onClick={() => setEditingTask(task)}
-                              className="w-full px-4 py-2.5 flex items-center gap-3 text-left hover:bg-muted/40"
+                              className="w-full min-h-11 px-4 py-2.5 flex items-center gap-3 text-left hover:bg-muted/40"
                             >
                               <span
                                 className="w-2 h-2 rounded-full shrink-0"
@@ -412,13 +414,13 @@ export default function ProjectDetailPage() {
         ) : view === "calendar" ? (
           <div className="bg-background rounded-xl border overflow-auto flex-1 min-h-0">
             <div className="flex items-center justify-between px-3 py-2 border-b">
-              <Button variant="ghost" size="icon" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))} aria-label="Previous month">
+              <Button variant="ghost" size="icon" className="h-11 w-11" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))} aria-label="Previous month">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <p className="text-[13px] font-semibold leading-tight">
                 {month.toLocaleString("en-IN", { month: "long", year: "numeric" })}
               </p>
-              <Button variant="ghost" size="icon" onClick={() => setMonth(new Date(year, monthIndex + 1, 1))} aria-label="Next month">
+              <Button variant="ghost" size="icon" className="h-11 w-11" onClick={() => setMonth(new Date(year, monthIndex + 1, 1))} aria-label="Next month">
                 <ChevronLeft className="h-4 w-4 rotate-180" />
               </Button>
             </div>
@@ -442,7 +444,7 @@ export default function ProjectDetailPage() {
                           key={t.id}
                           type="button"
                           onClick={() => setEditingTask(t)}
-                          className="block w-full text-left text-[11px] truncate rounded px-1 py-0.5 hover:bg-muted"
+                          className="flex min-h-11 w-full items-center text-left text-xs truncate rounded-md px-2 hover:bg-muted"
                           style={{ borderLeft: `2px solid ${PRIORITY_COLORS[t.priority] || PRIORITY_COLORS.medium}` }}
                         >
                           {t.title}
@@ -465,14 +467,14 @@ export default function ProjectDetailPage() {
                 <p className="text-[13px] leading-[1.45] text-muted-foreground mt-1">
                   Raise a multi-stage process for this project.
                 </p>
-                <Button className="mt-4" size="sm" onClick={() => navigate(`/workflows?project=${project.id}&raise=1`)}>
+                <Button className="mt-4 h-11" size="sm" onClick={() => navigate(`/workflows?project=${project.id}&raise=1`)}>
                   <GitBranch className="h-3.5 w-3.5 mr-1.5" />Raise workflow
                 </Button>
               </div>
             ) : (
               <div className="space-y-2">
                 <div className="flex justify-end">
-                  <Button size="sm" onClick={() => navigate(`/workflows?project=${project.id}&raise=1`)}>
+                  <Button size="sm" className="h-11" onClick={() => navigate(`/workflows?project=${project.id}&raise=1`)}>
                     <GitBranch className="h-3.5 w-3.5 mr-1.5" />Raise workflow
                   </Button>
                 </div>
@@ -481,7 +483,7 @@ export default function ProjectDetailPage() {
                     <button
                       key={wf.id}
                       type="button"
-                      className="w-full px-4 py-3 text-left hover:bg-muted/40"
+                      className="w-full min-h-11 px-4 py-3 text-left hover:bg-muted/40"
                       onClick={() => navigate(`/workflows?project=${project.id}&wf=${wf.id}`)}
                     >
                       <p className="text-[13px] font-medium leading-snug">{wf.title}</p>

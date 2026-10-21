@@ -156,7 +156,7 @@ export default function ProjectsPage() {
                     navigate(`/projects/${project.id}`);
                   }
                 }}
-                className="text-left bg-card rounded-2xl border border-border/80 overflow-hidden shadow-sm hover:shadow-md transition-shadow group cursor-pointer"
+                className="text-left bg-card rounded-2xl border border-border/80 overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer"
               >
                 <div className="h-1.5" style={{ backgroundColor: project.color }} />
                 <div className="p-4">
@@ -180,8 +180,9 @@ export default function ProjectsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 opacity-70 sm:opacity-0 sm:group-hover:opacity-100"
+                          className="h-11 w-11"
                           onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
                           aria-label={`Project actions for ${project.name}`}
                         >
                           <MoreHorizontal className="h-4 w-4" />
