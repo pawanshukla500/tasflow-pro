@@ -88,16 +88,18 @@ const DepartmentsPage = () => {
     setFormLoading(true);
     try {
       if (editDept) {
-        await supabase.from("departments").update({ name: formName, description: formDesc, color: formColor }).eq("id", editDept.id);
+        const { error } = await supabase.from("departments").update({ name: formName, description: formDesc, color: formColor }).eq("id", editDept.id);
+        if (error) throw error;
         toast({ title: "Department updated" });
       } else {
         const orgId = user?.organization?.id ?? (user?.profile as { organization_id?: string })?.organization_id;
-        await supabase.from("departments").insert({
+        const { error } = await supabase.from("departments").insert({
           name: formName,
           description: formDesc,
           color: formColor,
           organization_id: orgId || null,
         });
+        if (error) throw error;
         toast({ title: "Department created", description: "You can now add HOD and Team Members in Team." });
       }
       setShowModal(false);
@@ -144,7 +146,7 @@ const DepartmentsPage = () => {
         }
         actions={
           accessScope.canManageDepartments ? (
-            <Button size="sm" onClick={() => { resetForm(); setShowModal(true); }}>
+            <Button size="sm" className="h-11" onClick={() => { resetForm(); setShowModal(true); }}>
               <Plus className="h-4 w-4 mr-1" />Add Department
             </Button>
           ) : undefined
@@ -154,6 +156,16 @@ const DepartmentsPage = () => {
 
       {loading ? (
         <div className="text-center text-muted-foreground py-8">Loading…</div>
+      ) : departments.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border/80 bg-card px-6 py-12 text-center">
+          <p className="text-sm font-medium text-foreground">No departments yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">Create a department, then open its team from the card.</p>
+          {accessScope.canManageDepartments && (
+            <Button className="mt-4 h-11" onClick={() => { resetForm(); setShowModal(true); }}>
+              <Plus className="h-4 w-4 mr-1" />Add Department
+            </Button>
+          )}
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {departments.map((dept) => (
@@ -211,17 +223,25 @@ const DepartmentsPage = () => {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Department Name *</Label>
-              <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. Operations" />
+              <Input className="h-11" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. Operations" />
             </div>
             <div className="space-y-2">
               <Label>Description</Label>
-              <Input value={formDesc} onChange={(e) => setFormDesc(e.target.value)} placeholder="What this department does" />
+              <Input className="h-11" value={formDesc} onChange={(e) => setFormDesc(e.target.value)} placeholder="What this department does" />
             </div>
             <div className="space-y-2">
               <Label>Color</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {colorPresets.map((c) => (
-                  <button key={c} className={`w-7 h-7 rounded-full border-2 transition-all ${formColor === c ? "border-foreground scale-110" : "border-transparent"}`} style={{ backgroundColor: c }} onClick={() => setFormColor(c)} />
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={`Use color ${c}`}
+                    aria-pressed={formColor === c}
+                    className={`h-11 w-11 rounded-full border-2 transition-all ${formColor === c ? "border-foreground" : "border-transparent"}`}
+                    style={{ backgroundColor: c }}
+                    onClick={() => setFormColor(c)}
+                  />
                 ))}
               </div>
             </div>
