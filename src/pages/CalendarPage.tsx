@@ -3,7 +3,7 @@ import { CalendarClock, ChevronLeft, ChevronRight, RefreshCw, Video } from "luci
 import { Button } from "@/components/ui/button";
 import { useTasks, type TaskRow } from "@/hooks/useTasks";
 import EditTaskModal from "@/components/EditTaskModal";
-import { todayIST, formatDateIST } from "@/lib/time";
+import { todayIST, formatDateIST, partsIST } from "@/lib/time";
 import {
   calendarRangeForMonth,
   getGoogleConnection,
@@ -21,23 +21,31 @@ const priorityColors: Record<string, string> = {
   low: "hsl(var(--success))",
 };
 
+function istMonth(now = new Date()) {
+  const parts = partsIST(now);
+  return { year: parts.year, month: parts.month - 1 };
+}
+
 const CalendarPage = () => {
   const { tasks, loading, fetchTasks } = useTasks();
   const [openTask, setOpenTask] = useState<TaskRow | null>(null);
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [cursor, setCursor] = useState(istMonth);
   const [googleConnected, setGoogleConnected] = useState(false);
   const [googleEvents, setGoogleEvents] = useState<GoogleCalendarEvent[]>([]);
   const [googleLoading, setGoogleLoading] = useState(false);
   const today = todayIST();
   const [selectedDate, setSelectedDate] = useState(today);
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
+  const { year, month } = cursor;
+  const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const firstDay = new Date(`${monthKey}-01T12:00:00+05:30`).getUTCDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  const prev = () => setCurrentDate(new Date(year, month - 1, 1));
-  const next = () => setCurrentDate(new Date(year, month + 1, 1));
-  const goToday = () => setCurrentDate(new Date());
+  const prev = () => setCursor(({ year: y, month: m }) => (m === 0 ? { year: y - 1, month: 11 } : { year: y, month: m - 1 }));
+  const next = () => setCursor(({ year: y, month: m }) => (m === 11 ? { year: y + 1, month: 0 } : { year: y, month: m + 1 }));
+  const goToday = () => {
+    setCursor(istMonth());
+    setSelectedDate(todayIST());
+  };
 
   const loadGoogleEvents = useCallback(async (syncFirst = false) => {
     setGoogleLoading(true);
@@ -49,7 +57,7 @@ const CalendarPage = () => {
         return;
       }
       if (syncFirst) {
-        await syncGoogleCalendar(calendarRangeForMonth(currentDate));
+        await syncGoogleCalendar(calendarRangeForMonth(new Date(`${monthKey}-15T12:00:00+05:30`)));
       }
       setGoogleEvents(await listGoogleCalendarEvents());
     } catch (err) {
@@ -57,7 +65,7 @@ const CalendarPage = () => {
     } finally {
       setGoogleLoading(false);
     }
-  }, [currentDate]);
+  }, [monthKey]);
 
   useEffect(() => {
     loadGoogleEvents(true);
@@ -85,7 +93,7 @@ const CalendarPage = () => {
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="text-sm font-semibold text-foreground min-w-[9rem] text-center">
-              {formatDateIST(currentDate, { month: "long", year: "numeric" })}
+              {formatDateIST(`${monthKey}-01`, { month: "long", year: "numeric" })}
             </span>
             <Button variant="outline" size="icon" className="h-11 w-11" onClick={next} aria-label="Next month">
               <ChevronRight className="h-4 w-4" />
