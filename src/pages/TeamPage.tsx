@@ -17,7 +17,7 @@ import { useAuth, AppRole } from "@/contexts/AuthContext";
 import { useAccessScope } from "@/hooks/useAccessScope";
 import { ScopeBanner } from "@/components/ScopeBanner";
 import { ROLE_OPTIONS } from "@/lib/roleLabels";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/edgeFunctions";
 import { sendPasswordResetEmail } from "@/lib/passwordReset";
@@ -93,6 +93,7 @@ const TeamPage = () => {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [deptFilter, setDeptFilter] = useState<string>("all");
+  const [searchParams] = useSearchParams();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editMember, setEditMember] = useState<ProfileWithRole | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -141,6 +142,11 @@ const TeamPage = () => {
   useEffect(() => {
     if (user) fetchData();
   }, [user?.id, accessScope.tier]);
+
+  useEffect(() => {
+    const dept = searchParams.get("dept");
+    if (dept) setDeptFilter(dept);
+  }, [searchParams]);
 
   const filtered = members.filter((m) => {
     if (search && !m.name.toLowerCase().includes(search.toLowerCase()) && !m.email.toLowerCase().includes(search.toLowerCase())) return false;
@@ -442,20 +448,11 @@ const TeamPage = () => {
   }
 
   return (
-    <div className="relative p-4 md:p-6 max-w-6xl mx-auto page-enter space-y-5">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 -top-2 h-40 opacity-80"
-        style={{
-          background:
-            "radial-gradient(ellipse 70% 80% at 0% 0%, hsl(var(--primary) / 0.08), transparent 55%), radial-gradient(ellipse 45% 60% at 100% 0%, hsl(142 71% 45% / 0.05), transparent 50%)",
-        }}
-      />
-
+    <div className="p-4 md:p-6 max-w-6xl mx-auto page-enter space-y-5">
       <ScopeBanner scope={accessScope} departmentNames={departments.map((d) => d.name)} />
 
       <PageHeader
-        className="relative mb-0"
+        className="mb-0"
         title="Team"
         description={
           accessScope.hasFullAccess
@@ -505,7 +502,7 @@ const TeamPage = () => {
         <div className="relative flex-1 min-w-0">
           <Search className="h-4 w-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            className="pl-8 h-9 text-sm bg-background"
+            className="pl-9 h-11 text-sm bg-background"
             placeholder="Search members…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -578,13 +575,13 @@ const TeamPage = () => {
                       >
                         {getInitials(m.name)}
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate leading-tight">{m.name}</p>
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">{m.email}</p>
-                        {m.position && (
-                          <p className="text-[11px] text-muted-foreground/80 truncate mt-0.5 md:hidden">{m.position}</p>
-                        )}
-                      </div>
+                        <button type="button" className="text-left min-w-0" onClick={() => openEdit(m)}>
+                          <p className="text-sm font-semibold text-foreground truncate leading-tight hover:text-primary">{m.name}</p>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">{m.email}</p>
+                          {m.position && (
+                            <p className="text-[11px] text-muted-foreground/80 truncate mt-0.5 md:hidden">{m.position}</p>
+                          )}
+                        </button>
                     </div>
                   </TableCell>
                   <TableCell className="py-2.5 hidden md:table-cell">
@@ -616,7 +613,7 @@ const TeamPage = () => {
                       <div className="flex items-center gap-2 min-w-[5.5rem]">
                         <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                           <div
-                            className={cn("h-full rounded-full transition-[width] duration-300", performanceBarClass(m.performance_score))}
+                            className={cn("h-full rounded-full bar-grow", performanceBarClass(m.performance_score))}
                             style={{ width: `${Math.max(0, Math.min(100, m.performance_score))}%` }}
                           />
                         </div>
@@ -645,7 +642,7 @@ const TeamPage = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 cursor-pointer opacity-70 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                          className="h-11 w-11 cursor-pointer"
                         >
                           <MoreHorizontal className="h-4 w-4" />
                           <span className="sr-only">Open actions</span>
