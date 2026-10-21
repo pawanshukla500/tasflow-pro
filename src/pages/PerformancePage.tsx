@@ -267,10 +267,10 @@ const PerformancePage = () => {
       <ScopeBanner scope={accessScope} />
 
       <Tabs defaultValue={canSeeOthers ? "analytics" : "kra"}>
-        <TabsList>
-          <TabsTrigger value="analytics"><BarChart3 className="h-3.5 w-3.5 mr-1.5" />Score & Analytics</TabsTrigger>
-          <TabsTrigger value="kra"><Target className="h-3.5 w-3.5 mr-1.5" />KRAs ({visibleKras.length})</TabsTrigger>
-          <TabsTrigger value="kpi"><TrendingUp className="h-3.5 w-3.5 mr-1.5" />KPIs ({visibleKpis.length})</TabsTrigger>
+        <TabsList className="h-11 rounded-xl bg-muted/70 p-1">
+          <TabsTrigger value="analytics" className="rounded-lg"><BarChart3 className="h-3.5 w-3.5 mr-1.5" />Score & Analytics</TabsTrigger>
+          <TabsTrigger value="kra" className="rounded-lg"><Target className="h-3.5 w-3.5 mr-1.5" />KRAs ({visibleKras.length})</TabsTrigger>
+          <TabsTrigger value="kpi" className="rounded-lg"><TrendingUp className="h-3.5 w-3.5 mr-1.5" />KPIs ({visibleKpis.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="analytics" className="space-y-4 mt-4">
@@ -339,10 +339,15 @@ const PerformancePage = () => {
                     {scopedMetrics.map((m) => {
                       const member = allProfiles.find((p) => p.id === m.user_id);
                       return (
-                        <div key={m.user_id} className="border rounded-lg p-3">
+                        <button
+                          key={m.user_id}
+                          type="button"
+                          onClick={() => setScope(m.user_id)}
+                          className="border border-border/80 rounded-2xl p-3 text-left hover:bg-muted/40"
+                        >
                           <p className="text-sm font-medium mb-2">{member?.name || "Unknown"}</p>
                           <PerformanceBreakdown metrics={m} compact showReasons />
-                        </div>
+                        </button>
                       );
                     })}
                   </CardContent>
@@ -363,7 +368,7 @@ const PerformancePage = () => {
             const owner = members.find(m => m.id === k.user_id);
             const ownsThis = k.user_id === user?.id;
             return (
-              <div key={k.id} className="bg-card border rounded-lg p-4 hover:shadow-sm transition-shadow">
+              <div key={k.id} className="bg-card border border-border/80 rounded-2xl p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -381,7 +386,7 @@ const PerformancePage = () => {
                     )}
                   </div>
                   {ownsThis && (
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={() => deleteKra(k.id)}>
+                    <Button variant="ghost" size="icon" className="h-11 w-11 text-destructive shrink-0" onClick={() => deleteKra(k.id)} aria-label={`Delete ${k.title}`}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
@@ -404,7 +409,7 @@ const PerformancePage = () => {
             const ownsThis = k.user_id === user?.id;
             const linkedKra = kras.find(x => x.id === k.kra_id);
             return (
-              <div key={k.id} className="bg-card border rounded-lg p-4 hover:shadow-sm transition-shadow">
+              <div key={k.id} className="bg-card border border-border/80 rounded-2xl p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
