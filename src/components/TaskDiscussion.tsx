@@ -17,7 +17,6 @@ import {
   safeHttpUrl,
   mentionQueryAt,
   segmentBody,
-  threadComments,
   validateDiscussionFile,
   type DiscussionComment,
   type DiscussionParticipant,
@@ -37,12 +36,32 @@ interface Props {
   controller?: TaskDiscussionController;
 }
 
-function stamp(iso: string): string {
-  const fullDay = { day: "numeric" as const, month: "short" as const, year: "numeric" as const };
-  const day = formatDateIST(iso, fullDay);
-  const today = formatDateIST(new Date(), fullDay);
-  const time = formatTimeIST(iso);
-  return day === today ? time : `${formatDateIST(iso, { day: "numeric", month: "short" })}, ${time}`;
+const NAME_COLORS = [
+  "text-teal-800 dark:text-teal-300",
+  "text-amber-800 dark:text-amber-300",
+  "text-violet-800 dark:text-violet-300",
+  "text-rose-800 dark:text-rose-300",
+  "text-sky-800 dark:text-sky-300",
+  "text-emerald-800 dark:text-emerald-300",
+];
+
+function nameColor(name: string): string {
+  let hash = 0;
+  for (const char of name) hash = (hash + char.charCodeAt(0)) % NAME_COLORS.length;
+  return NAME_COLORS[hash];
+}
+
+function dayKey(iso: string): string {
+  return formatDateIST(iso, { day: "numeric", month: "short", year: "numeric" });
+}
+
+function dayLabel(iso: string): string {
+  const key = dayKey(iso);
+  return key === dayKey(new Date().toISOString()) ? "Today" : key;
+}
+
+function plainSnippet(body: string): string {
+  return body.replace(/@\[([^\]]+)\]\([^)]+\)/g, "@$1").replace(/\s+/g, " ").trim();
 }
 
 function initials(name: string): string {
@@ -65,13 +84,16 @@ function MessageBody({ body }: { body: string }) {
   );
 }
 
-function AttachmentList({ comment }: { comment: DiscussionComment }) {
+function AttachmentList({ comment, mine }: { comment: DiscussionComment; mine: boolean }) {
   if (comment.attachments.length === 0) return null;
   return (
-    <ul className="mt-2 space-y-1">
+    <ul className="mt-1.5 space-y-1">
       {comment.attachments.map((file) => {
         const href = safeHttpUrl(file.fileUrl);
-        const className = "flex items-center gap-2 rounded-md border bg-background/80 px-2.5 py-1.5 text-sm";
+        const className = cn(
+          "flex min-h-11 items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm",
+          mine ? "bg-background/70" : "bg-muted/70",
+        );
         const inner = (
           <>
             <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
@@ -124,7 +146,11 @@ export function TaskDiscussionView({
   const listId = useId();
   const inputId = useId();
 
-  const thread = useMemo(() => threadComments(comments), [comments]);
+  const ordered = useMemo(
+    () => [...comments].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+    [comments],
+  );
+  const byId = useMemo(() => new Map(comments.map((comment) => [comment.id, comment])), [comments]);
   const mention = mentionQueryAt(draft, cursor);
   const mentionChoices = useMemo(
     () => (mention && mode === "full" && !editing ? filterParticipants(participants, mention.query) : []),
@@ -265,51 +291,73 @@ export function TaskDiscussionView({
     focusInput();
   };
 
-  const renderMessage = (comment: DiscussionComment, nested = false) => {
+  const renderMessage = (comment: DiscussionComment) => {
     const mine = comment.userId === currentUserId;
     const activity = isActivityComment(comment.commentType);
     const modifiable = canModifyComment(comment, currentUserId) && mode === "full";
+    const parent = comment.parentId ? byId.get(comment.parentId) : undefined;
 
     if (activity) {
       return (
-        <div key={comment.id} className="rounded-md bg-muted/40 px-2.5 py-2">
-          <p className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{comment.authorName}</span>{" "}
-            {activityLabel(comment.commentType)}
-            <time className="ml-2" dateTime={comment.createdAt} title={formatDateTimeIST(comment.createdAt)}>
-              {stamp(comment.createdAt)}
-            </time>
-          </p>
-          {comment.body && <div className="mt-1"><MessageBody body={comment.body} /></div>}
+        <div key={comment.id} className="flex justify-center px-6">
+          <div className="max-w-[92%] rounded-lg bg-card/90 px-3 py-1.5 text-center shadow-sm">
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{comment.authorName}</span>{" "}
+              {activityLabel(comment.commentType)}
+              <time className="ml-1.5" dateTime={comment.createdAt} title={formatDateTimeIST(comment.createdAt)}>
+                {formatTimeIST(comment.createdAt)}
+              </time>
+            </p>
+            {comment.body && <div className="mt-0.5 text-left"><MessageBody body={comment.body} /></div>}
+          </div>
         </div>
       );
     }
 
     return (
-      <article key={comment.id} className={cn("flex gap-2.5 rounded-2xl border border-border/70 bg-card px-3 py-2.5", mine && "border-primary/20 bg-accent/50", nested && "mt-2")}>
-        <Avatar className="h-8 w-8">
-          {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt="" />}
-          <AvatarFallback className="text-[10px]">{initials(comment.authorName)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span className="text-sm font-medium text-foreground">{mine ? `${comment.authorName} (you)` : comment.authorName}</span>
-            {comment.commentType === "note" && (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Note</span>
+      <article key={comment.id} className={cn("flex gap-1.5", mine ? "justify-end" : "items-start justify-start")}>
+        {!mine && (
+          <Avatar className="mt-1 h-8 w-8 shrink-0">
+            {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt="" />}
+            <AvatarFallback className="text-[10px]">{initials(comment.authorName)}</AvatarFallback>
+          </Avatar>
+        )}
+        <div className={cn("flex min-w-0 max-w-[85%] flex-col", mine ? "items-end" : "items-start")}>
+          <div
+            className={cn(
+              "px-2.5 pb-1 pt-1.5 shadow-sm",
+              mine
+                ? "rounded-2xl rounded-br-md bg-primary/15"
+                : "rounded-2xl rounded-bl-md bg-card",
             )}
-            {comment.editedAt && <span className="text-[10px] text-muted-foreground">Edited</span>}
-            <time
-              className="ml-auto text-[11px] text-muted-foreground"
-              dateTime={comment.createdAt}
-              title={formatDateTimeIST(comment.createdAt)}
-            >
-              {stamp(comment.createdAt)}
-            </time>
+          >
+            {!mine && (
+              <p className={cn("px-0.5 text-[13px] font-semibold leading-tight", nameColor(comment.authorName))}>
+                {comment.authorName}
+              </p>
+            )}
+            {parent && (
+              <div className="mb-1 rounded-md border-l-4 border-primary/70 bg-foreground/5 px-2 py-1">
+                <p className={cn("text-xs font-semibold", nameColor(parent.authorName))}>{parent.authorName}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {plainSnippet(parent.body) || activityLabel(parent.commentType)}
+                </p>
+              </div>
+            )}
+            {comment.commentType === "note" && (
+              <p className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Note</p>
+            )}
+            <MessageBody body={comment.body} />
+            <AttachmentList comment={comment} mine={mine} />
+            <p className="mt-0.5 flex items-center justify-end gap-1 px-0.5 text-[10px] text-muted-foreground">
+              {comment.editedAt && <span>Edited</span>}
+              <time dateTime={comment.createdAt} title={formatDateTimeIST(comment.createdAt)}>
+                {formatTimeIST(comment.createdAt)}
+              </time>
+            </p>
           </div>
-          <MessageBody body={comment.body} />
-          <AttachmentList comment={comment} />
-          <div className="mt-1 flex flex-wrap gap-1">
-            {mode === "full" && !nested && (
+          <div className="mt-0.5 flex flex-wrap gap-0.5">
+            {mode === "full" && (
               <Button type="button" variant="ghost" size="sm" className="h-11 px-2 text-xs" disabled={drafting} onClick={() => startReply(comment)}>
                 <Reply className="mr-1 h-3.5 w-3.5" aria-hidden />
                 Reply
@@ -371,7 +419,7 @@ export function TaskDiscussionView({
 
       <div
         ref={listRef}
-        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-3"
+        className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-muted/40 px-2.5 py-3 [background-image:radial-gradient(hsl(var(--foreground)/0.05)_1px,transparent_1px)] [background-size:16px_16px]"
         onScroll={() => {
           const el = listRef.current;
           if (!el) return;
@@ -392,23 +440,26 @@ export function TaskDiscussionView({
             </Button>
           </div>
         )}
-        {!loading && !error && thread.length === 0 && (
+        {!loading && !error && ordered.length === 0 && (
           <div className="flex flex-1 items-center justify-center px-4 py-8">
             <p className="max-w-[16rem] text-center text-sm leading-relaxed text-muted-foreground">
               No messages yet. Reply, mention a teammate, or attach a file. The thread stays on this task.
             </p>
           </div>
         )}
-        {thread.map((item) => (
-          <div key={item.comment.id} className="space-y-1">
-            {renderMessage(item.comment)}
-            {item.replies.length > 0 && (
-              <div className="ml-6 space-y-2 border-l pl-3">
-                {item.replies.map((reply) => renderMessage(reply, true))}
-              </div>
-            )}
-          </div>
-        ))}
+        {ordered.map((comment, index) => {
+          const showDay = index === 0 || dayKey(comment.createdAt) !== dayKey(ordered[index - 1].createdAt);
+          return (
+            <div key={comment.id} className="space-y-2">
+              {showDay && (
+                <p className="mx-auto w-fit rounded-lg bg-card/90 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
+                  {dayLabel(comment.createdAt)}
+                </p>
+              )}
+              {renderMessage(comment)}
+            </div>
+          );
+        })}
       </div>
 
       {mode === "legacy" && (
@@ -425,9 +476,14 @@ export function TaskDiscussionView({
         }}
       >
         {(replyTo || editing) && (
-          <div className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs">
-            <span className="truncate">
-              {editing ? "Editing your message" : `Replying to ${replyTo?.authorName}`}
+          <div className="flex items-stretch gap-2 rounded-lg border-l-4 border-primary bg-muted/60 px-2.5 py-1.5 text-xs">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold text-foreground">
+                {editing ? "Editing your message" : `Replying to ${replyTo?.authorName}`}
+              </span>
+              {!editing && replyTo && (
+                <span className="block truncate text-muted-foreground">{plainSnippet(replyTo.body) || "Message"}</span>
+              )}
             </span>
             <Button
               type="button"
@@ -517,7 +573,7 @@ export function TaskDiscussionView({
             </p>
           </div>
         )}
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-1.5 rounded-[1.6rem] border bg-card px-1.5 py-1">
           {mode === "full" && !editing && (
             <>
               <Button
@@ -551,7 +607,7 @@ export function TaskDiscussionView({
             aria-expanded={mentionOpen}
             aria-controls={mentionOpen ? listId : undefined}
             aria-activedescendant={mentionOpen && mentionChoices[mentionIndex] ? mentionChoices[mentionIndex].id : undefined}
-            className="min-h-11 flex-1 resize-none"
+            className="min-h-11 flex-1 resize-none border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
             disabled={drafting || sending || !currentUserId}
             onChange={(event) => onDraftChange(event.target.value, event.target.selectionStart ?? event.target.value.length)}
             onSelect={(event) => setCursor(event.currentTarget.selectionStart ?? draft.length)}
@@ -584,7 +640,7 @@ export function TaskDiscussionView({
               }
             }}
           />
-          <Button type="submit" className="h-11 shrink-0" disabled={drafting || sending || !currentUserId || (!draft.trim() && files.length === 0 && !editing)}>
+          <Button type="submit" size="icon" className="h-11 w-11 shrink-0 rounded-full" disabled={drafting || sending || !currentUserId || (!draft.trim() && files.length === 0 && !editing)}>
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             <span className="sr-only">{editing ? "Save message" : "Send message"}</span>
           </Button>
