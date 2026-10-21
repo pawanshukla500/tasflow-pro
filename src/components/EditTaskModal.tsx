@@ -55,6 +55,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
   const statusOptions = allowedStatusesForUser(task, user?.id, isAdminOrMD, managedDepartments || [], { isHR });
 
   const [title, setTitle] = useState(task.title);
+  const [pane, setPane] = useState<"details" | "discussion">("details");
   const [description, setDescription] = useState(task.description || "");
   const [priority, setPriority] = useState<Priority>((task.priority as Priority) || "medium");
   const [status, setStatus] = useState(task.status);
@@ -336,8 +337,28 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
             <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" onClick={onClose} aria-label="Close"><X className="h-4 w-4" /></Button>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(18.5rem,24rem)] lg:overflow-hidden">
-          <div className="space-y-4 p-4 lg:min-h-0 lg:overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(18.5rem,24rem)]">
+            <div className="flex gap-1 border-b bg-card px-4 py-2 lg:hidden" role="tablist" aria-label="Task sections">
+              {([
+                ["details", "Details"],
+                ["discussion", "Discussion"],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={pane === id}
+                  onClick={() => setPane(id)}
+                  className={cn(
+                    "min-h-11 flex-1 rounded-lg px-3 text-sm font-semibold",
+                    pane === id ? "bg-muted text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          <div className={cn("min-h-0 flex-1 space-y-4 overflow-y-auto p-4", pane === "discussion" && "hidden lg:block")}>
             {task.requires_review && (
               <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
                 <ShieldCheck className="h-4 w-4 shrink-0" />
@@ -713,7 +734,10 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
               <TaskAttachments taskId={task.id} />
             </div>
           </div>
-            <div className="flex min-h-[28rem] max-h-[32rem] flex-col border-t bg-muted/20 lg:max-h-none lg:min-h-0 lg:border-l lg:border-t-0">
+            <div className={cn(
+              "min-h-0 flex-1 flex-col bg-muted/20 lg:flex lg:border-l",
+              pane === "details" ? "hidden" : "flex",
+            )}>
               <TaskDiscussion
                 taskId={task.id}
                 currentUserId={user?.id ?? null}
