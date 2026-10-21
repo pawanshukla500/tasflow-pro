@@ -294,18 +294,9 @@ const Dashboard = () => {
     .sort((a, b) => (a.due_date || "9999-12-31").localeCompare(b.due_date || "9999-12-31"));
 
   return (
-    <div className="relative p-4 md:p-6 lg:p-8 max-w-6xl mx-auto page-enter">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 -top-4 h-48 opacity-90"
-        style={{
-          background:
-            "radial-gradient(ellipse 65% 80% at 0% 0%, hsl(var(--primary) / 0.1), transparent 55%), radial-gradient(ellipse 40% 50% at 100% 0%, hsl(var(--warning) / 0.06), transparent 50%)",
-        }}
-      />
-
+    <div className="p-4 md:p-6 lg:p-8 max-w-6xl mx-auto page-enter">
       <PageHeader
-        className="relative mb-5"
+        className="mb-5"
         title={`Hello, ${firstName}`}
         description={formatDateIST(new Date(), { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         actions={
@@ -322,7 +313,7 @@ const Dashboard = () => {
         }
       />
 
-      <div className="relative space-y-5">
+      <div className="space-y-5">
         <ScopeBanner scope={accessScope} departmentNames={deptNames} />
 
         {motivation && (
@@ -336,8 +327,8 @@ const Dashboard = () => {
         )}
 
         {/* Scope filter toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 rounded-xl border bg-card/90 px-3 py-2.5 shadow-[0_1px_0_hsl(var(--border)/0.5)]">
-          <div className="flex flex-wrap items-center gap-1 bg-muted/60 rounded-lg p-1 w-fit">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 rounded-2xl border border-border/80 bg-card px-3 py-2.5 shadow-sm">
+          <div className="flex flex-wrap items-center gap-1 bg-muted/70 rounded-xl p-1 w-fit" role="tablist" aria-label="Home scope">
             {([
               { id: "all", label: accessScope.hasFullAccess ? "All Tasks" : "Team Tasks" },
               ...(accessScope.isManager && accessScope.departmentIds?.length
@@ -350,10 +341,12 @@ const Dashboard = () => {
                 key={opt.id}
                 type="button"
                 onClick={() => setScope(opt.id)}
+                role="tab"
+                aria-selected={scope === opt.id}
                 className={cn(
-                  "cursor-pointer px-3 py-1.5 rounded-md text-xs font-medium transition-colors duration-150",
+                  "cursor-pointer min-h-11 px-3 rounded-lg text-xs font-semibold transition-colors duration-150",
                   scope === opt.id
-                    ? "bg-card text-foreground shadow-sm ring-1 ring-border/70"
+                    ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -389,6 +382,7 @@ const Dashboard = () => {
               caption={kpi.caption}
               icon={kpi.icon}
               tone={kpi.tone}
+              onClick={() => navigate("/my-tasks")}
               trendSlot={
                 kpi.trend ? (
                   <TrendChip current={kpi.trend.current} previous={kpi.trend.previous} />
@@ -571,11 +565,11 @@ const Dashboard = () => {
                   const isOverdue = task.due_date && task.due_date < today;
                   const isDueToday = task.due_date === today;
                   return (
-                    <div key={task.id} className="flex items-center gap-3 px-2.5 py-2 rounded-lg hover:bg-muted/40 transition-colors duration-150">
+                    <button key={task.id} type="button" onClick={() => setEditingTask(task)} className="flex w-full items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-muted/50 transition-colors duration-150 text-left min-h-11">
                       <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: priorityColors[task.priority] || priorityColors.medium }} />
-                      <button type="button" className="flex-1 min-h-11 text-left text-sm text-foreground truncate hover:text-primary" onClick={() => setEditingTask(task)}>
+                      <span className="flex-1 text-sm text-foreground truncate">
                         {task.title}
-                      </button>
+                      </span>
                       <Badge variant="outline" className="text-[10px] shrink-0 hidden sm:inline-flex border-0 px-2" style={{ color: statusColors[task.status], background: `${statusColors[task.status]}14` }}>
                         {statusLabels[task.status] || task.status}
                       </Badge>
@@ -595,7 +589,7 @@ const Dashboard = () => {
                           </div>
                         ))}
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
                 {ongoing.length > 8 && (
@@ -720,11 +714,11 @@ const Dashboard = () => {
           ) : (
             <div className="space-y-0.5">
               {tasks.slice(0, 8).map(task => (
-                <div key={task.id} className="flex items-center gap-3 px-2.5 py-2 rounded-lg hover:bg-muted/40 transition-colors duration-150 group">
+                <button key={task.id} type="button" onClick={() => setEditingTask(task)} className="flex w-full items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-muted/50 transition-colors duration-150 text-left min-h-11">
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: priorityColors[task.priority] || priorityColors.medium }} />
-                  <button type="button" className="flex-1 min-h-11 text-left text-sm text-foreground truncate group-hover:text-primary transition-colors" onClick={() => setEditingTask(task)}>
+                  <span className="flex-1 text-sm text-foreground truncate">
                     {task.title}
-                  </button>
+                  </span>
                   <Badge variant="outline" className="text-[10px] shrink-0 border-0 px-2" style={{ color: statusColors[task.status], background: `${statusColors[task.status]}14` }}>
                     {statusLabels[task.status] || task.status}
                   </Badge>
@@ -743,7 +737,7 @@ const Dashboard = () => {
                       </div>
                     ))}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
