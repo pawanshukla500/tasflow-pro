@@ -196,17 +196,17 @@ export function ScratchNotesPanel({ compact = false }: { compact?: boolean }) {
             <div key={n.id} className="card-premium p-3 group">
               <p className="text-sm text-foreground whitespace-pre-wrap">{n.polished_content || n.content}</p>
               <div className="flex items-center justify-between mt-2 gap-2">
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {formatDateIST(n.updated_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                   {" · "}
                   <span className="font-medium text-foreground">{noteTimeLeft(n.expires_at).label}</span>
                 </span>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Polish with AI" onClick={() => polishNote(n)} disabled={polishingId === n.id}>
-                    {polishingId === n.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                <div className="flex shrink-0 gap-1">
+                  <Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Polish note" title="Polish with AI" onClick={() => polishNote(n)} disabled={polishingId === n.id}>
+                    {polishingId === n.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteNote(n.id)}>
-                    <Trash2 className="h-3.5 w-3.5" />
+                  <Button variant="ghost" size="icon" className="h-11 w-11 text-destructive" aria-label="Delete note" onClick={() => deleteNote(n.id)}>
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
