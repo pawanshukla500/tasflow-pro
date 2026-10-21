@@ -124,7 +124,7 @@ const MyTasks = () => {
     if (!focus || loading) return;
     setCollapsedSections((prev) => prev.filter((id) => id !== focus));
     const timer = window.setTimeout(() => {
-      document.getElementById(`my-tasks-${focus}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById(`my-tasks-${focus}`)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
     }, 50);
     return () => window.clearTimeout(timer);
   }, [searchParams, loading]);

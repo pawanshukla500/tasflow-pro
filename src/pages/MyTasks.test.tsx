@@ -115,6 +115,22 @@ describe("MyTasks page", () => {
     expect(screen.getByRole("button", { name: /Load more/ })).toBeInTheDocument();
   });
 
+  it("expands the section opened from Home", async () => {
+    currentTasks = [
+      task({ id: "done", title: "Filed the report", status: "done", due_date: "2026-09-01" }),
+    ];
+    currentTotal = 1;
+    currentHasMore = false;
+    render(
+      <MemoryRouter initialEntries={["/my-tasks?focus=completed"]}>
+        <MyTasks />
+      </MemoryRouter>,
+    );
+    const section = await screen.findByRole("button", { name: /Completed/ });
+    expect(section).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Filed the report")).toBeInTheDocument();
+  });
+
   it("shows a compact empty state with a create CTA", async () => {
     currentTasks = [];
     currentTotal = 0;
