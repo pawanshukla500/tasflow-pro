@@ -750,6 +750,7 @@ export type Database = {
           polished_content: string | null
           created_at: string
           updated_at: string
+          expires_at: string
         }
         Insert: {
           id?: string
@@ -758,6 +759,7 @@ export type Database = {
           polished_content?: string | null
           created_at?: string
           updated_at?: string
+          expires_at?: string
         }
         Update: {
           id?: string
@@ -766,6 +768,7 @@ export type Database = {
           polished_content?: string | null
           created_at?: string
           updated_at?: string
+          expires_at?: string
         }
         Relationships: []
       }

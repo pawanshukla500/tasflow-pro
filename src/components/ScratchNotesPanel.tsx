@@ -8,6 +8,7 @@ import { invokeEdgeFunction } from "@/lib/edgeFunctions";
 import { extractPolishedText } from "@/lib/polishText";
 import { useToast } from "@/hooks/use-toast";
 import { formatDateIST } from "@/lib/time";
+import { noteTimeLeft } from "@/lib/noteLifetime";
 
 interface ScratchNote {
   id: string;
@@ -15,6 +16,7 @@ interface ScratchNote {
   polished_content: string | null;
   created_at: string;
   updated_at: string;
+  expires_at: string;
 }
 
 function formatDbError(err: unknown): string {
@@ -43,11 +45,18 @@ export function ScratchNotesPanel({ compact = false }: { compact?: boolean }) {
     if (!user) return;
     setLoading(true);
     setLoadError(null);
+    const nowIso = new Date().toISOString();
+    await supabase
+      .from("user_scratch_notes")
+      .delete()
+      .eq("user_id", user.id)
+      .lt("expires_at", nowIso);
     const { data, error } = await supabase
       .from("user_scratch_notes")
-      .select("id, content, polished_content, created_at, updated_at")
+      .select("id, content, polished_content, created_at, updated_at, expires_at")
       .eq("user_id", user.id)
-      .order("updated_at", { ascending: false })
+      .gt("expires_at", nowIso)
+      .order("expires_at", { ascending: true })
       .limit(compact ? 5 : 50);
     if (error) {
       setLoadError(formatDbError(error));
@@ -160,7 +169,7 @@ export function ScratchNotesPanel({ compact = false }: { compact?: boolean }) {
         </div>
       )}
       <p className="text-xs text-muted-foreground">
-        Private to you — only your notes appear here. Use Polish to fix grammar with AI.
+        Only your notes appear here. Each one lasts 7 days, then it is removed.
       </p>
       {loadError && (
         <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
@@ -193,6 +202,8 @@ export function ScratchNotesPanel({ compact = false }: { compact?: boolean }) {
               <div className="flex items-center justify-between mt-2 gap-2">
                 <span className="text-[10px] text-muted-foreground">
                   {formatDateIST(n.updated_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  {" · "}
+                  <span className="font-medium text-foreground">{noteTimeLeft(n.expires_at).label}</span>
                 </span>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Button variant="ghost" size="icon" className="h-7 w-7" title="Polish with AI" onClick={() => polishNote(n)} disabled={polishingId === n.id}>
