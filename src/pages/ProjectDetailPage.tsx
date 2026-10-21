@@ -54,8 +54,7 @@ const VIEW_LABELS: Record<ProjectView, string> = {
 };
 
 const TAB_CLASS =
-  "rounded-none border-b-2 border-transparent bg-transparent px-3 pb-2 pt-1.5 text-[13px] font-medium text-muted-foreground shadow-none gap-1.5 " +
-  "data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none";
+  "min-h-11 rounded-lg px-3 text-[13px] font-semibold text-muted-foreground shadow-none gap-1.5 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm";
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -288,8 +287,8 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        <Tabs value={view} onValueChange={(v) => setView(v as ProjectView)} className="px-4 md:px-6">
-          <TabsList className="h-auto w-full justify-start bg-transparent p-0 rounded-none gap-0">
+        <Tabs value={view} onValueChange={(v) => setView(v as ProjectView)} className="px-4 md:px-6 pb-3">
+          <TabsList className="h-auto w-full justify-start gap-1 rounded-xl bg-muted/70 p-1">
             <TabsTrigger value="board" className={TAB_CLASS}>
               <LayoutGrid className="h-3.5 w-3.5" />Board
             </TabsTrigger>
