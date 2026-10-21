@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   Search, MoreHorizontal, Download, Plus, Trash2, Edit, Phone, KeyRound,
   Users, Building2, UserCog, CircleDot,
@@ -92,8 +92,7 @@ const TeamPage = () => {
   const [departments, setDepartments] = useState<DeptOption[]>([]);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
-  const [deptFilter, setDeptFilter] = useState<string>("all");
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editMember, setEditMember] = useState<ProfileWithRole | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -143,10 +142,13 @@ const TeamPage = () => {
     if (user) fetchData();
   }, [user?.id, accessScope.tier]);
 
-  useEffect(() => {
-    const dept = searchParams.get("dept");
-    if (dept) setDeptFilter(dept);
-  }, [searchParams]);
+  const deptFilter = searchParams.get("dept") || "all";
+  const setDeptFilter = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (!value || value === "all") next.delete("dept");
+    else next.set("dept", value);
+    setSearchParams(next, { replace: true });
+  };
 
   const filtered = members.filter((m) => {
     if (search && !m.name.toLowerCase().includes(search.toLowerCase()) && !m.email.toLowerCase().includes(search.toLowerCase())) return false;
@@ -155,12 +157,12 @@ const TeamPage = () => {
     return true;
   });
 
-  const kpis = useMemo(() => [
-    { label: "Total", value: members.length, tone: "text-foreground", icon: Users },
-    { label: "Active", value: members.filter((m) => m.active).length, tone: "text-success", icon: CircleDot },
-    { label: "Managers", value: members.filter((m) => m.roles.includes("department_manager")).length, tone: "text-primary", icon: UserCog },
+  const kpis = [
+    { label: "Total", value: filtered.length, tone: "text-foreground", icon: Users },
+    { label: "Active", value: filtered.filter((m) => m.active).length, tone: "text-success", icon: CircleDot },
+    { label: "Managers", value: filtered.filter((m) => m.roles.includes("department_manager")).length, tone: "text-primary", icon: UserCog },
     { label: "Departments", value: departments.length, tone: "text-foreground", icon: Building2 },
-  ], [members, departments.length]);
+  ];
 
   const handleExportCSV = () => {
     const headers = ["Name", "Email", "Role", "Department", "Mobile", "Active"];
@@ -510,7 +512,7 @@ const TeamPage = () => {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="w-full sm:w-[160px] h-9 text-sm cursor-pointer">
+            <SelectTrigger className="w-full sm:w-[160px] h-11 text-sm cursor-pointer">
               <SelectValue placeholder="All Roles" />
             </SelectTrigger>
             <SelectContent>
@@ -523,7 +525,7 @@ const TeamPage = () => {
             </SelectContent>
           </Select>
           <Select value={deptFilter} onValueChange={setDeptFilter}>
-            <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm cursor-pointer">
+            <SelectTrigger className="w-full sm:w-[180px] h-11 text-sm cursor-pointer">
               <SelectValue placeholder="All Departments" />
             </SelectTrigger>
             <SelectContent>
@@ -575,7 +577,7 @@ const TeamPage = () => {
                       >
                         {getInitials(m.name)}
                       </div>
-                        <button type="button" className="text-left min-w-0" onClick={() => openEdit(m)}>
+                        <button type="button" className="min-h-11 text-left min-w-0" onClick={() => openEdit(m)} aria-label={`Edit ${m.name}`}>
                           <p className="text-sm font-semibold text-foreground truncate leading-tight hover:text-primary">{m.name}</p>
                           <p className="text-xs text-muted-foreground truncate mt-0.5">{m.email}</p>
                           {m.position && (
@@ -613,6 +615,7 @@ const TeamPage = () => {
                       <div className="flex items-center gap-2 min-w-[5.5rem]">
                         <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                           <div
+                            key={m.performance_score}
                             className={cn("h-full rounded-full bar-grow", performanceBarClass(m.performance_score))}
                             style={{ width: `${Math.max(0, Math.min(100, m.performance_score))}%` }}
                           />
@@ -645,7 +648,7 @@ const TeamPage = () => {
                           className="h-11 w-11 cursor-pointer"
                         >
                           <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Open actions</span>
+                          <span className="sr-only">Actions for {m.name}</span>
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
