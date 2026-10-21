@@ -229,7 +229,7 @@ const Board = () => {
 
       {accessScope.tier === "member" && myPerformance && (
         <div className="card-premium overflow-hidden animate-rise">
-          <div className="h-1 w-full bg-gradient-to-r from-primary/40 via-primary to-primary/40" />
+          <div className="h-1 w-full bg-primary" />
           <div className="px-4 py-3">
             <PerformanceBreakdown metrics={myPerformance} compact showReasons />
           </div>
@@ -399,7 +399,7 @@ const Board = () => {
                       onDragStart={(e) => handleDragStart(e, task)}
                       onDragEnd={handleDragEnd}
                       className={cn(
-                        "rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm group relative",
+                        "rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm relative",
                         allowed.length > 0 ? "cursor-grab active:cursor-grabbing" : "cursor-default",
                         isDragging && "opacity-40",
                       )}
@@ -417,9 +417,9 @@ const Board = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 shrink-0 -mt-0.5 -mr-1 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 cursor-pointer"
+                              className="h-11 w-11 shrink-0"
                               onClick={(e) => e.stopPropagation()}
-                              aria-label="Task actions"
+                              aria-label={`Actions for ${task.title}`}
                             >
                               <MoreHorizontal className="h-3.5 w-3.5" />
                             </Button>
@@ -499,10 +499,16 @@ const Board = () => {
                           )}
                         </div>
                         {(task.comment_count ?? 0) > 0 && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground" title="Discussion messages">
-                            <MessageSquare className="h-3 w-3" aria-hidden />
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 min-h-11 px-2 rounded-lg text-xs text-muted-foreground hover:bg-muted"
+                            title="Discussion messages"
+                            aria-label={`Open discussion for ${task.title}`}
+                            onClick={() => setEditingTask(task)}
+                          >
+                            <MessageSquare className="h-4 w-4" aria-hidden />
                             <span className="font-mono-num">{task.comment_count}</span>
-                          </span>
+                          </button>
                         )}
                         {task.due_date && (
                           <div
