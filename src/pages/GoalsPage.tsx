@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/PageHeader";
 
 interface Goal {
   id: string;
@@ -155,20 +156,21 @@ const GoalsPage = () => {
   );
 
   return (
-    <div className="p-6 max-w-5xl space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-foreground">Goals</h1>
-        {canCreate && (
+    <div className="p-4 md:p-6 max-w-5xl space-y-4 page-enter">
+      <PageHeader
+        title="Goals"
+        description="Track progress against a target and a deadline."
+        actions={canCreate ? (
           <Button size="sm" onClick={openCreate}>
             <Plus className="h-4 w-4 mr-1" />Create Goal
           </Button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       <div className="flex items-center gap-2">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="h-4 w-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-8 h-8 text-sm" placeholder="Search goals…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="relative flex-1 max-w-sm">
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input className="pl-9 h-11" placeholder="Search goals…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
       </div>
 
@@ -197,7 +199,7 @@ const GoalsPage = () => {
               ? Math.ceil((new Date(goal.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
               : null;
             return (
-              <div key={goal.id} className="bg-card rounded-lg border p-4 hover:shadow-md transition-shadow">
+              <div key={goal.id} className="bg-card rounded-2xl border border-border/80 p-4 shadow-sm">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-semibold text-foreground">{goal.title}</h3>
@@ -211,7 +213,7 @@ const GoalsPage = () => {
                     {canEditGoal(goal) && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button className="h-6 w-6 inline-flex items-center justify-center rounded hover:bg-muted">
+                          <button className="h-11 w-11 inline-flex items-center justify-center rounded-lg hover:bg-muted" aria-label={`Actions for ${goal.title}`}>
                             <MoreHorizontal className="h-4 w-4" />
                           </button>
                         </DropdownMenuTrigger>
@@ -238,6 +240,7 @@ const GoalsPage = () => {
                   </div>
                   <div className="flex items-center justify-between mt-1.5">
                     <span className="text-xs font-mono-num text-foreground">{goal.current_value} {goal.unit}</span>
+                    <span className="text-xs font-semibold font-mono-num text-foreground">{Math.min(Math.max(pct, 0), 999)}%</span>
                     <span className="text-xs text-muted-foreground font-mono-num">/ {goal.target_value} {goal.unit}</span>
                   </div>
                 </div>
@@ -247,7 +250,7 @@ const GoalsPage = () => {
                     {daysLeft === null ? "No deadline" : daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d remaining`}
                   </span>
                   {canEditGoal(goal) && goal.status !== "achieved" && (
-                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openEdit(goal)}>
+                    <Button variant="outline" size="sm" className="h-11" onClick={() => openEdit(goal)}>
                       Update
                     </Button>
                   )}
