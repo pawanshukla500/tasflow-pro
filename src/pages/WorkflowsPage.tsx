@@ -580,9 +580,8 @@ const WorkflowsPage = () => {
     });
   };
 
-  const workflowsForTab = activeTab === "workflows"
-    ? visibleWorkflows.filter((w) => statusFilter === "all" || w.status === statusFilter)
-    : visibleWorkflows;
+  const statusScoped = visibleWorkflows.filter((w) => statusFilter === "all" || w.status === statusFilter);
+  const workflowsForTab = activeTab === "workflows" ? statusScoped : visibleWorkflows;
 
   useEffect(() => {
     if (loading || deepLinkHandled.current) return;
@@ -595,6 +594,8 @@ const WorkflowsPage = () => {
 
     deepLinkHandled.current = true;
     setActiveTab("workflows");
+    if (wf.status === "completed") setStatusFilter("completed");
+    else if (wf.status !== "active") setStatusFilter("all");
     setExpandedWf(wf.id);
 
     const stageParam = params.get("stage");
@@ -622,27 +623,18 @@ const WorkflowsPage = () => {
     || currentOpenWorkflow?.raised_by === user?.id
   ) && ["in_progress", "blocked"].includes(currentOpenStage.status);
 
-  // Employees and managers both use scoped workflow visibility above.
-  const activeCount = visibleWorkflows.filter((w) => w.status === "active").length;
   const tabs = canManageTemplates
     ? ([
-        { id: "workflows" as const, label: "Active", count: activeCount, icon: GitBranch },
+        { id: "workflows" as const, label: "Workflows", count: statusScoped.length, icon: GitBranch },
         { id: "health" as const, label: "Health", count: null, icon: Activity },
         { id: "templates" as const, label: "Templates", count: templates.length, icon: LayoutTemplate },
       ])
-    : ([{ id: "workflows" as const, label: "Active", count: activeCount, icon: GitBranch }]);
+    : ([{ id: "workflows" as const, label: "Workflows", count: statusScoped.length, icon: GitBranch }]);
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5">
-      <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card">
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 70% 80% at 0% 0%, hsl(var(--primary) / 0.14), transparent 55%), radial-gradient(ellipse 45% 60% at 100% 10%, hsl(142 71% 45% / 0.08), transparent 50%)",
-          }}
-        />
-        <div className="relative p-5 md:p-6">
+      <div className="rounded-2xl border border-border/70 bg-card">
+        <div className="p-5 md:p-6">
           <PageHeader
             className="mb-0"
             title="Workflows"
@@ -652,7 +644,7 @@ const WorkflowsPage = () => {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="bg-background/80"
+                  className="bg-background/80 h-11"
                   onClick={() => {
                     if (templates.length === 0) {
                       if (canManageTemplates) {
@@ -670,7 +662,7 @@ const WorkflowsPage = () => {
                   <Play className="h-4 w-4 mr-1.5" />New workflow
                 </Button>
                 {canManageTemplates && (
-                  <Button size="sm" onClick={openCreateTemplate}>
+                  <Button size="sm" className="h-11" onClick={openCreateTemplate}>
                     <Plus className="h-4 w-4 mr-1.5" />Create template
                   </Button>
                 )}
@@ -690,7 +682,7 @@ const WorkflowsPage = () => {
               type="button"
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-all",
+                "inline-flex items-center gap-1.5 min-h-11 rounded-lg px-3.5 text-sm font-medium transition-all",
                 active
                   ? "bg-background text-foreground shadow-sm border border-border/60"
                   : "text-muted-foreground hover:text-foreground",
@@ -732,7 +724,7 @@ const WorkflowsPage = () => {
                 Templates are reusable blueprints — define stages once, then raise workflows anytime.
               </p>
               {canManageTemplates && (
-                <Button className="mt-4" onClick={openCreateTemplate}>
+                <Button className="mt-4 h-11" onClick={openCreateTemplate}>
                   <Plus className="h-4 w-4 mr-1" />Create template
                 </Button>
               )}
@@ -752,7 +744,7 @@ const WorkflowsPage = () => {
                       {canManageTemplates && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={`Actions for ${wf.name}`}><MoreHorizontal className="h-4 w-4" /></Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openEditTemplate(wf)}><Edit className="h-3.5 w-3.5 mr-2" />Edit</DropdownMenuItem>
@@ -806,11 +798,11 @@ const WorkflowsPage = () => {
                   value={wfSearch}
                   onChange={(e) => setWfSearch(e.target.value)}
                   placeholder="Search by tracking number (WF-…), title or raiser…"
-                  className="pl-8 h-9 text-sm"
+                  className="pl-8 h-11 text-sm"
                 />
               </div>
               <Select value={filterProjectId} onValueChange={setFilterProjectId}>
-                <SelectTrigger className="h-9 text-xs sm:w-52">
+                <SelectTrigger className="h-11 text-sm sm:w-52">
                   <SelectValue placeholder="All projects" />
                 </SelectTrigger>
                 <SelectContent>
@@ -855,6 +847,7 @@ const WorkflowsPage = () => {
                     return (
                       <button
                         key={stage.id}
+                        type="button"
                         onClick={() => { setStatusFilter("active"); setExpandedWf(wf.id); setWfSearch(""); }}
                         className="min-h-11 text-[11px] px-2.5 rounded-lg bg-background border hover:bg-muted transition-colors"
                         title={`${wf.title} · ${stage.name}`}
@@ -877,11 +870,15 @@ const WorkflowsPage = () => {
               <p className="text-muted-foreground">
                 {wfSearch
                   ? "No workflows match your search."
-                  : "No active workflows yet. Raise one from a template to track a multi-stage process."}
+                  : statusFilter === "completed"
+                    ? "No completed workflows."
+                    : statusFilter === "all"
+                      ? "No workflows yet. Raise one from a template to track a multi-stage process."
+                      : "No active workflows yet. Raise one from a template to track a multi-stage process."}
               </p>
-              {!wfSearch && (
+              {!wfSearch && statusFilter !== "completed" && (
                 <Button
-                  className="mt-4"
+                  className="mt-4 h-11"
                   onClick={() => {
                     if (templates.length === 0) {
                       if (canManageTemplates) {
@@ -912,7 +909,7 @@ const WorkflowsPage = () => {
                       <button
                         type="button"
                         onClick={() => setExpandedWf(expanded ? null : wf.id)}
-                        className="flex items-center gap-4 flex-1 min-w-0 text-left"
+                        className="flex items-center gap-4 flex-1 min-w-0 min-h-11 text-left"
                       >
                         {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
                         <div className="flex-1 min-w-0">
@@ -972,9 +969,9 @@ const WorkflowsPage = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          className="h-11 w-11 text-destructive hover:text-destructive hover:bg-destructive/10"
                           onClick={(e) => { e.stopPropagation(); setDeleteWorkflowId(wf.id); }}
-                          title="Delete workflow"
+                          aria-label={`Delete ${wf.title}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -1019,7 +1016,7 @@ const WorkflowsPage = () => {
                                   </div>
                                 </div>
                                 {s.status !== "completed" && (
-                                  <Button size="sm" variant={s.status === "in_progress" ? "default" : "outline"}
+                                  <Button size="sm" className="h-11" variant={s.status === "in_progress" ? "default" : "outline"}
                                     disabled={s.status === "pending"}
                                     onClick={() => openStage(s)}>
                                     {s.status === "in_progress" ? "Action" : "Waiting"}
@@ -1340,7 +1337,7 @@ const WorkflowsPage = () => {
                     <div key={i} className="flex items-center gap-2 text-xs border rounded p-2">
                       <Paperclip className="h-3 w-3 text-muted-foreground" />
                       <a href={safeExternalUrl(a.url) || undefined} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex-1 truncate">{a.label}</a>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setStageAttachments((p) => p.filter((_, idx) => idx !== i))}>
+                      <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={`Remove ${a.label}`} onClick={() => setStageAttachments((p) => p.filter((_, idx) => idx !== i))}>
                         <X className="h-3 w-3" />
                       </Button>
                     </div>
