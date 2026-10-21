@@ -5,7 +5,7 @@ const NotesPage = () => (
   <div className="p-4 md:p-6">
     <PageHeader
       title="Quick Notes"
-      description="Short-term ideas and planning — polish rough English with one click"
+      description="Private to you. Each note shows how long it has left and is removed after 7 days."
     />
     <ScratchNotesPanel />
   </div>
