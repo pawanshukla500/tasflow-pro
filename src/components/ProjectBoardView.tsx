@@ -145,7 +145,7 @@ export function ProjectBoardView({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-11 w-11"
                   aria-label={`Add task to ${col.label}`}
                   onClick={() => onCreateInStatus(col.status)}
                 >
@@ -167,7 +167,7 @@ export function ProjectBoardView({
                     onDragEnd={handleDragEnd}
                     onClick={() => onOpenTask(task)}
                     className={cn(
-                      "rounded-lg border bg-background p-2.5 w-full text-left hover:bg-muted/40",
+                      "rounded-lg border bg-background p-2.5 w-full min-h-11 text-left hover:bg-muted/40",
                       allowed.length > 0 ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                       isDragging && "opacity-40",
                     )}
