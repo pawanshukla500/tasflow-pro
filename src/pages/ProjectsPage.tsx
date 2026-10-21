@@ -156,7 +156,7 @@ export default function ProjectsPage() {
                     navigate(`/projects/${project.id}`);
                   }
                 }}
-                className="text-left bg-card rounded-2xl border overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all group cursor-pointer"
+                className="text-left bg-card rounded-2xl border border-border/80 overflow-hidden shadow-sm hover:shadow-md transition-shadow group cursor-pointer"
               >
                 <div className="h-1.5" style={{ backgroundColor: project.color }} />
                 <div className="p-4">
