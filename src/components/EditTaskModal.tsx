@@ -713,7 +713,7 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
               <TaskAttachments taskId={task.id} />
             </div>
           </div>
-            <div className="flex min-h-[28rem] max-h-[32rem] flex-col border-t lg:max-h-none lg:min-h-0 lg:border-l lg:border-t-0">
+            <div className="flex min-h-[28rem] max-h-[32rem] flex-col border-t bg-muted/20 lg:max-h-none lg:min-h-0 lg:border-l lg:border-t-0">
               <TaskDiscussion
                 taskId={task.id}
                 currentUserId={user?.id ?? null}

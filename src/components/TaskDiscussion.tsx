@@ -286,7 +286,7 @@ export function TaskDiscussionView({
     }
 
     return (
-      <article key={comment.id} className={cn("flex gap-2.5", nested && "mt-2")}>
+      <article key={comment.id} className={cn("flex gap-2.5 rounded-2xl border border-border/70 bg-card px-3 py-2.5", mine && "border-primary/20 bg-accent/50", nested && "mt-2")}>
         <Avatar className="h-8 w-8">
           {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt="" />}
           <AvatarFallback className="text-[10px]">{initials(comment.authorName)}</AvatarFallback>
@@ -352,7 +352,7 @@ export function TaskDiscussionView({
   };
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-muted/30" aria-label="Task discussion">
+    <section className="flex h-full min-h-0 flex-col bg-muted/20" aria-label="Task discussion">
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2.5">
         <div className="min-w-0">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">

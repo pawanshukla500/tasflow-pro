@@ -45,7 +45,7 @@ import {
 const ImportTasksModal = lazy(() => import("@/components/ImportTasksModal"));
 
 const TAB_CLASS =
-  "rounded-none border-b-2 bg-transparent px-3 pb-2 pt-1.5 text-[13px] font-medium shadow-none inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer";
+  "min-h-11 rounded-lg px-3 text-[13px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer";
 
 const priorityColors: Record<string, string> = {
   critical: "hsl(var(--destructive))",
@@ -539,7 +539,7 @@ const MyTasks = () => {
         <div
           role="tablist"
           aria-label="Task views"
-          className="flex items-center gap-0 overflow-x-auto px-4 md:px-6 max-w-5xl mx-auto"
+          className="mx-auto mb-3 flex w-full max-w-5xl items-center gap-1 overflow-x-auto rounded-xl bg-muted/70 p-1 px-4 md:px-6"
         >
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -553,7 +553,7 @@ const MyTasks = () => {
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
                   TAB_CLASS,
-                  isActive ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+                  isActive ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Icon className="h-3.5 w-3.5" aria-hidden />
@@ -590,7 +590,7 @@ const MyTasks = () => {
               return (
                 <section
                   key={section.id}
-                  className={cn("bg-background rounded-xl border overflow-hidden border-l-4", section.accent)}
+                  className="bg-card rounded-2xl border border-border/80 overflow-hidden shadow-sm"
                 >
                   <button
                     type="button"
