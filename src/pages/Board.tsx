@@ -224,16 +224,7 @@ const Board = () => {
   }
 
   return (
-    <div className="relative p-4 md:p-6 space-y-4 h-full flex flex-col page-enter overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10"
-        style={{
-          background:
-            "radial-gradient(ellipse 70% 55% at 0% 0%, hsl(var(--primary) / 0.09), transparent 55%), radial-gradient(ellipse 40% 50% at 100% 0%, hsl(var(--success) / 0.05), transparent 50%)",
-        }}
-      />
-
+    <div className="p-4 md:p-6 space-y-4 h-full flex flex-col page-enter overflow-hidden">
       <ScopeBanner scope={accessScope} />
 
       {accessScope.tier === "member" && myPerformance && (
@@ -246,7 +237,7 @@ const Board = () => {
       )}
 
       <PageHeader
-        className="relative mb-0"
+        className="mb-0"
         title="Board"
         description={
           accessScope.tier === "member"
@@ -286,13 +277,13 @@ const Board = () => {
       />
 
       {isLeadership && accessScope.hasFullAccess && (
-        <div className="relative flex flex-col sm:flex-row gap-2.5 items-start sm:items-center rounded-xl border bg-card/80 backdrop-blur-sm px-3 py-2.5 shadow-[0_1px_0_hsl(var(--border)/0.6)] animate-rise [animation-delay:60ms]">
+        <div className="flex flex-col sm:flex-row gap-2.5 items-start sm:items-center rounded-2xl border border-border/80 bg-card px-3 py-2.5 shadow-sm">
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as BoardViewMode)}>
-            <TabsList className="h-9 bg-muted/70">
-              <TabsTrigger value="user" className="text-xs gap-1.5 cursor-pointer data-[state=active]:shadow-sm">
+            <TabsList className="h-11 rounded-xl bg-muted/70 p-1">
+              <TabsTrigger value="user" className="min-h-9 rounded-lg text-xs gap-1.5 cursor-pointer data-[state=active]:shadow-sm">
                 <User className="h-3.5 w-3.5" />User-wise
               </TabsTrigger>
-              <TabsTrigger value="department" className="text-xs gap-1.5 cursor-pointer data-[state=active]:shadow-sm">
+              <TabsTrigger value="department" className="min-h-9 rounded-lg text-xs gap-1.5 cursor-pointer data-[state=active]:shadow-sm">
                 <Building2 className="h-3.5 w-3.5" />Department
               </TabsTrigger>
             </TabsList>
@@ -352,10 +343,10 @@ const Board = () => {
             <div
               key={col.status}
               className={cn(
-                "w-[280px] md:w-[300px] shrink-0 flex flex-col rounded-2xl border transition-all duration-200 overflow-hidden",
+                "w-[280px] md:w-[300px] shrink-0 flex flex-col rounded-2xl border transition-colors duration-200 overflow-hidden",
                 isOver
-                  ? "bg-primary/[0.06] border-primary/35 ring-2 ring-primary/20 ring-inset shadow-md"
-                  : "bg-card/70 border-border/70 backdrop-blur-sm",
+                  ? "bg-primary/[0.06] border-primary ring-2 ring-primary/30"
+                  : "bg-muted/40 border-border/80",
               )}
               onDragOver={(e) => { e.preventDefault(); setDragOverCol(col.status); }}
               onDragLeave={(e) => {
@@ -366,8 +357,8 @@ const Board = () => {
               }}
               onDrop={(e) => handleDrop(e, col.status)}
             >
-              <div className={cn("relative bg-gradient-to-b", col.tint)}>
-                <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl", col.rail)} aria-hidden />
+              <div className="relative bg-card border-b border-border/70">
+                <div className={cn("absolute left-0 top-0 bottom-0 w-1", col.rail)} aria-hidden />
                 <div className="flex items-center gap-2 pl-4 pr-2 py-3">
                   <div className="icon-chip !w-7 !h-7 !rounded-lg">
                     <ColIcon className="h-3.5 w-3.5" aria-hidden />
@@ -381,7 +372,7 @@ const Board = () => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 cursor-pointer hover:bg-background/80"
+                    className="h-11 w-11 cursor-pointer"
                     aria-label={`Add task to ${col.label}`}
                     onClick={() => { setCreateStatus(col.status); setShowCreate(true); }}
                   >
@@ -390,7 +381,12 @@ const Board = () => {
                 </div>
               </div>
 
-              <div className="flex-1 space-y-2 overflow-y-auto px-2.5 pb-2.5 scroll-smooth min-h-[120px]">
+              <div className="flex-1 space-y-2 overflow-y-auto p-2.5 scroll-smooth min-h-[120px]">
+                {isOver && colTasks.length > 0 && (
+                  <p className="rounded-xl border border-dashed border-primary bg-primary/5 px-3 py-2 text-center text-xs font-medium text-primary">
+                    Drop to move here
+                  </p>
+                )}
                 {colTasks.map((task) => {
                   const isDragging = draggedTaskId === task.id;
                   const isOverdue = task.due_date && task.due_date < today && task.status !== "done";
@@ -403,10 +399,9 @@ const Board = () => {
                       onDragStart={(e) => handleDragStart(e, task)}
                       onDragEnd={handleDragEnd}
                       className={cn(
-                        "card-premium p-3.5 group relative",
+                        "rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm group relative",
                         allowed.length > 0 ? "cursor-grab active:cursor-grabbing" : "cursor-default",
-                        isDragging && "opacity-40 scale-[0.97]",
-                        "hover-lift",
+                        isDragging && "opacity-40",
                       )}
                     >
                       <div className="flex items-start gap-2 mb-1.5">
