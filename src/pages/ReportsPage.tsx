@@ -11,6 +11,7 @@ import { ScopeBanner } from "@/components/ScopeBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { toast } from "sonner";
 import { formatDateIST } from "@/lib/time";
+import { reportCsv, type ReportTab } from "@/lib/reportExport";
 import { usePerformance } from "@/hooks/usePerformance";
 import { useUserRolesMap } from "@/hooks/useUserRolesMap";
 import { filterPerformanceLeaderboardProfiles } from "@/lib/performanceVisibility";
@@ -33,7 +34,7 @@ const ReportsPage = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [stageRows, setStageRows] = useState<StageRow[]>([]);
-  const [activeTab, setActiveTab] = useState("Overview");
+  const [activeTab, setActiveTab] = useState<ReportTab>("Overview");
 
   const rolesByUserId = useUserRolesMap();
   const scopedProfiles = useMemo(() => filterProfiles(profiles), [profiles, filterProfiles]);
@@ -82,7 +83,7 @@ const ReportsPage = () => {
   const priorityData = [
     { name: "Critical", value: tasks.filter(t => t.priority === "critical").length, color: "hsl(0,72%,51%)" },
     { name: "High", value: tasks.filter(t => t.priority === "high").length, color: "hsl(38,92%,50%)" },
-    { name: "Medium", value: tasks.filter(t => t.priority === "medium").length, color: "hsl(239,84%,67%)" },
+    { name: "Medium", value: tasks.filter(t => t.priority === "medium").length, color: "hsl(var(--primary))" },
     { name: "Low", value: tasks.filter(t => t.priority === "low").length, color: "hsl(142,71%,45%)" },
   ];
 
@@ -143,18 +144,25 @@ const ReportsPage = () => {
   const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 
   const handleExport = () => {
-    let csv = "";
-    if (activeTab === "Overview" || activeTab === "Tasks") {
-      csv = [
-        ["Title", "Status", "Priority", "Due Date", "Department"].join(","),
-        ...tasks.map(t => [`"${t.title}"`, t.status, t.priority, t.due_date || "", t.department_name || ""].join(","))
-      ].join("\n");
-    } else {
-      csv = [
-        ["Name", "Position", "Score"].join(","),
-        ...leaderboardProfiles.map(p => [`"${p.name}"`, p.position || "", p.performance_score].join(","))
-      ].join("\n");
-    }
+    const csv = reportCsv(activeTab, {
+      tasks: tasks.map((task) => ({
+        title: task.title,
+        status: task.status,
+        priority: task.priority,
+        due_date: task.due_date,
+        department_name: task.department_name,
+      })),
+      departments: deptData,
+      stages: stageAnalytics,
+      people: rankedProfiles.map((person) => {
+        const metrics = perfMetrics.find((row) => row.user_id === person.id);
+        return {
+          name: person.name,
+          position: person.position,
+          score: metrics?.has_sufficient_data ? metrics.performance_score : null,
+        };
+      }),
+    });
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = `report-${activeTab.toLowerCase()}.csv`; a.click();
@@ -168,7 +176,7 @@ const ReportsPage = () => {
         title="Reports"
         description={accessScope.hasFullAccess ? "Organization-wide analytics" : "Department team & task performance"}
         actions={
-          <Button variant="outline" size="sm" onClick={handleExport}><Download className="h-3.5 w-3.5 mr-1" />Export</Button>
+          <Button variant="outline" size="sm" className="h-11" onClick={handleExport}><Download className="h-3.5 w-3.5 mr-1" />Export</Button>
         }
       />
       <ScopeBanner scope={accessScope} departmentNames={deptNames} />
@@ -180,7 +188,7 @@ const ReportsPage = () => {
             type="button"
             role="tab"
             aria-selected={activeTab === tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => setActiveTab(tab as ReportTab)}
             className={`min-h-11 px-3 rounded-lg text-sm font-semibold transition-colors ${activeTab === tab ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
           >
             {tab}
