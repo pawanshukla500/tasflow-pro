@@ -1,9 +1,9 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Loader2, MessageSquare, Paperclip, Reply, Send, Sparkles, SquarePen, Trash2, X } from "lucide-react";
+import { Loader2, MessageSquare, Paperclip, Reply, Sparkles, SquarePen, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import GradientChatInput from "@/components/ui/gradient-chat-input";
 import { useTaskDiscussion, type TaskDiscussionController } from "@/hooks/useTaskDiscussion";
 import {
   DISCUSSION_FILE_ACCEPT,
@@ -325,10 +325,10 @@ export function TaskDiscussionView({
         <div className={cn("flex min-w-0 max-w-[85%] flex-col", mine ? "items-end" : "items-start")}>
           <div
             className={cn(
-              "px-2.5 pb-1 pt-1.5 shadow-sm",
+              "px-2.5 pb-1 pt-1.5 shadow-[0_10px_20px_-8px_rgba(0,0,0,0.18)]",
               mine
-                ? "rounded-2xl rounded-br-md bg-primary/15"
-                : "rounded-2xl rounded-bl-md bg-card",
+                ? "rounded-[14px_14px_6px_14px] border border-primary/20 bg-primary/10"
+                : "rounded-[14px_14px_14px_6px] border border-border bg-card",
             )}
           >
             {!mine && (
@@ -561,11 +561,11 @@ export function TaskDiscussionView({
               type="button"
               variant="outline"
               size="sm"
-              className="h-11"
+              className="h-8 rounded-full px-2.5 text-xs"
               disabled={drafting || sending || !currentUserId}
               onClick={() => void fillDraft()}
             >
-              {drafting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+              {drafting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Sparkles className="mr-1 h-3 w-3" />}
               Draft update
             </Button>
             <p className="text-[10px] leading-snug text-muted-foreground">
@@ -573,78 +573,64 @@ export function TaskDiscussionView({
             </p>
           </div>
         )}
-        <div className="flex items-end gap-1.5 rounded-[1.6rem] border bg-card px-1.5 py-1">
-          {mode === "full" && !editing && (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-11 w-11 shrink-0"
-                aria-label="Attach files"
-                onClick={() => fileRef.current?.click()}
-                disabled={drafting || sending}
-              >
-                <Paperclip className="h-4 w-4" />
-              </Button>
-              <input
-                ref={fileRef}
-                type="file"
-                multiple
-                accept={DISCUSSION_FILE_ACCEPT}
-                className="hidden"
-                onChange={(event) => addFiles(event.target.files)}
-              />
-            </>
-          )}
-          <Textarea
-            ref={inputRef}
-            id={inputId}
-            value={draft}
-            rows={2}
-            placeholder={mode === "full" ? "Message the people on this task. Use @ to mention." : "Write a message"}
-            aria-label="Message"
-            aria-expanded={mentionOpen}
-            aria-controls={mentionOpen ? listId : undefined}
-            aria-activedescendant={mentionOpen && mentionChoices[mentionIndex] ? mentionChoices[mentionIndex].id : undefined}
-            className="min-h-11 flex-1 resize-none border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
-            disabled={drafting || sending || !currentUserId}
-            onChange={(event) => onDraftChange(event.target.value, event.target.selectionStart ?? event.target.value.length)}
-            onSelect={(event) => setCursor(event.currentTarget.selectionStart ?? draft.length)}
-            onKeyDown={(event) => {
-              if (mentionOpen && mentionChoices.length > 0 && event.key === "ArrowDown") {
-                event.preventDefault();
-                setMentionIndex((index) => (index + 1) % mentionChoices.length);
-                return;
-              }
-              if (mentionOpen && mentionChoices.length > 0 && event.key === "ArrowUp") {
-                event.preventDefault();
-                setMentionIndex((index) => (index - 1 + mentionChoices.length) % mentionChoices.length);
-                return;
-              }
-              if (mentionOpen && event.key === "Escape") {
-                event.preventDefault();
-                const at = mention?.start ?? cursor;
-                const next = draft.slice(0, at) + draft.slice(cursor);
-                onDraftChange(next, at);
-                return;
-              }
-              if (mentionOpen && mentionChoices.length > 0 && event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                chooseMention(mentionChoices[mentionIndex] || mentionChoices[0]);
-                return;
-              }
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                void submit();
-              }
-            }}
+        {mode === "full" && !editing && (
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            accept={DISCUSSION_FILE_ACCEPT}
+            className="hidden"
+            onChange={(event) => addFiles(event.target.files)}
           />
-          <Button type="submit" size="icon" className="h-11 w-11 shrink-0 rounded-full" disabled={drafting || sending || !currentUserId || (!draft.trim() && files.length === 0 && !editing)}>
-            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            <span className="sr-only">{editing ? "Save message" : "Send message"}</span>
-          </Button>
-        </div>
+        )}
+        <GradientChatInput
+          className="max-w-none"
+          value={draft}
+          multiline
+          sound={false}
+          autoReply={null}
+          placeholder={mode === "full" ? "Message the people on this task. Use @ to mention." : "Write a message"}
+          disabled={drafting || sending || !currentUserId}
+          sending={sending}
+          canSend={Boolean(draft.trim() || files.length > 0 || editing)}
+          inputRef={inputRef}
+          inputId={inputId}
+          aria-expanded={mentionOpen}
+          aria-controls={mentionOpen ? listId : undefined}
+          aria-activedescendant={mentionOpen && mentionChoices[mentionIndex] ? mentionChoices[mentionIndex].id : undefined}
+          onValueChange={onDraftChange}
+          onInputSelect={(event) => setCursor(event.currentTarget.selectionStart ?? draft.length)}
+          onAttach={mode === "full" && !editing ? () => fileRef.current?.click() : undefined}
+          onSend={() => void submit()}
+          onInputKeyDown={(event) => {
+            if (mentionOpen && mentionChoices.length > 0 && event.key === "ArrowDown") {
+              event.preventDefault();
+              setMentionIndex((index) => (index + 1) % mentionChoices.length);
+              return;
+            }
+            if (mentionOpen && mentionChoices.length > 0 && event.key === "ArrowUp") {
+              event.preventDefault();
+              setMentionIndex((index) => (index - 1 + mentionChoices.length) % mentionChoices.length);
+              return;
+            }
+            if (mentionOpen && event.key === "Escape") {
+              event.preventDefault();
+              const at = mention?.start ?? cursor;
+              const next = draft.slice(0, at) + draft.slice(cursor);
+              onDraftChange(next, at);
+              return;
+            }
+            if (mentionOpen && mentionChoices.length > 0 && event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              chooseMention(mentionChoices[mentionIndex] || mentionChoices[0]);
+              return;
+            }
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void submit();
+            }
+          }}
+        />
       </form>
     </section>
   );
