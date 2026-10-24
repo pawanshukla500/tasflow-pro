@@ -390,22 +390,22 @@ const EditTaskModal = ({ task, onClose, onSaved }: EditTaskModalProps) => {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-11"
+                      className="h-8 rounded-full px-2.5 text-xs"
                       disabled={aiBusy !== null}
                       onClick={() => void runAssist("description")}
                     >
-                      {aiBusy === "description" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                      {aiBusy === "description" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Sparkles className="mr-1 h-3 w-3" />}
                       Improve
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-11"
+                      className="h-8 rounded-full px-2.5 text-xs"
                       disabled={aiBusy !== null}
                       onClick={() => void runAssist("subtasks")}
                     >
-                      {aiBusy === "subtasks" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                      {aiBusy === "subtasks" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Sparkles className="mr-1 h-3 w-3" />}
                       Suggest subtasks
                     </Button>
                   </div>

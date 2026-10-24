@@ -34,9 +34,11 @@ function message(partial: Partial<DiscussionComment> = {}): DiscussionComment {
 function Harness({
   initial = [message()],
   onSend,
+  onEdit,
 }: {
   initial?: DiscussionComment[];
   onSend?: TaskDiscussionController["send"];
+  onEdit?: TaskDiscussionController["edit"];
 }) {
   const [comments, setComments] = useState(initial);
   const controller: TaskDiscussionController = {
@@ -68,11 +70,11 @@ function Harness({
         }),
       ]);
     }),
-    edit: async (id, body) => {
+    edit: onEdit || (async (id, body) => {
       setComments((prev) => prev.map((comment) => (
         comment.id === id ? { ...comment, body, editedAt: "2026-10-20T10:05:00Z" } : comment
       )));
-    },
+    }),
     remove: async (id) => {
       setComments((prev) => prev.filter((comment) => comment.id !== id && comment.parentId !== id));
     },
@@ -140,6 +142,27 @@ describe("TaskDiscussion", () => {
     fireEvent.change(field, { target: { value: "A real reply", selectionStart: "A real reply".length } });
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
     expect(sent).toEqual([{ body: "A real reply", parentId: "m1" }]);
+  });
+
+  it("leaves an emptied edit in place when Enter is pressed", () => {
+    const edited: string[] = [];
+    render(
+      <Harness
+        initial={[message({ id: "mine", userId: me, authorName: "Pawan", body: "My draft note" })]}
+        onEdit={async (_id, body) => {
+          edited.push(body);
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const field = screen.getByRole("textbox", { name: "Message" });
+    fireEvent.change(field, { target: { value: "   ", selectionStart: 3 } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    expect(edited).toEqual([]);
+    expect(screen.getByText("Editing your message")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
   });
 
   it("rejects an unsupported attachment before send", () => {
