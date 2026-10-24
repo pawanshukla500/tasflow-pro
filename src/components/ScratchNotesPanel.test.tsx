@@ -3,10 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { ScratchNotesPanel } from "@/components/ScratchNotesPanel";
 
 const deletedIds: string[] = [];
+const auth = vi.hoisted(() => ({ user: { id: "u1" } }));
 
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({ user: { id: "u1" } }),
+  useAuth: () => auth,
 }));
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {

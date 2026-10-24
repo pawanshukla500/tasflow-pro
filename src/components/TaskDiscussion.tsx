@@ -218,6 +218,7 @@ export function TaskDiscussionView({
   const submit = async () => {
     try {
       if (editing) {
+        if (!draft.trim()) return;
         await edit(editing.id, draft);
         setEditing(null);
         setDraft("");
@@ -592,7 +593,7 @@ export function TaskDiscussionView({
           placeholder={mode === "full" ? "Message the people on this task. Use @ to mention." : "Write a message"}
           disabled={drafting || sending || !currentUserId}
           sending={sending}
-          canSend={Boolean(draft.trim() || files.length > 0 || editing)}
+          canSend={Boolean(draft.trim() || (files.length > 0 && !editing))}
           inputRef={inputRef}
           inputId={inputId}
           aria-expanded={mentionOpen}
@@ -627,7 +628,7 @@ export function TaskDiscussionView({
             }
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
-              void submit();
+              if (draft.trim() || (files.length > 0 && !editing)) void submit();
             }
           }}
         />
